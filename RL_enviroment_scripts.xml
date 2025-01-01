@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Context Name="RLEnvironment">
+    <InvokeInstance >
+        <ContextType>RLEnvironment</ContextType>
+        <!-- This creates an invisible container that allows our script to run -->
+        <Container ID="RLContainer" Hidden="1"/>
+    </InvokeInstance>
+</Context>

@@ -1,0 +1,41 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Mod id="72ced5a1-93e1-4642-9edf-4edd59217e70" version="1">
+  <Properties>
+    <Name>RLv1enviroment</Name>
+    <Description>This is a brief description of the mod.</Description>
+    <Created>1735670210</Created>
+    <Teaser>This is a brief description of the mod.</Teaser>
+    <Authors>Johan</Authors>
+    <CompatibleVersions>1.2,2.0</CompatibleVersions>
+  </Properties>
+  
+  <Dependencies>
+    <Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="Expansion: Gathering Storm" />
+  </Dependencies>
+
+  <InGameActions>
+    <!-- Import the files first -->
+    <ImportFiles id="RLv1_Files">
+      <File>civobvRL.lua</File>
+      <File>civactionsRL.lua</File>
+      <File>Rl_enviroment_scripts.lua</File>
+      <File>Rl_enviroment_scripts.xml</File>
+    </ImportFiles>
+    
+    <!-- Then add the UI interface -->
+    <AddUserInterfaces id="RLv1_UI">
+      <Properties>
+        <Context>InGame</Context>
+      </Properties>
+      <File>Rl_enviroment_scripts.xml</File>
+    </AddUserInterfaces>
+  </InGameActions>
+
+  <Files>
+    <File>civactionsRL.lua</File>
+    <File>civobvRL.lua</File>
+    <File>Rl_enviroment_scripts.lua</File>
+    <File>Rl_enviroment_scripts.xml</File>
+    <File>RL_Environment_Text.xml</File>
+  </Files>
+</Mod>

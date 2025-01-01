@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<GameData>
+	<LocalizedText>
+		<Row Tag="LOC_RLV1_NAME" Language="en_US">
+			<Text>Civilization VI RL Environment v1</Text>
+		</Row>
+		<Row Tag="LOC_RLV1_DESCRIPTION" Language="en_US">
+			<Text>A reinforcement learning environment for Civilization VI that enables training AI agents.</Text>
+		</Row>
+		<Row Tag="LOC_RLV1_TEASER" Language="en_US">
+			<Text>Create and train AI agents in Civilization VI</Text>
+		</Row>
+	</LocalizedText>
+</GameData>
