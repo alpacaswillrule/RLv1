@@ -243,22 +243,25 @@ function GetPossibleActions()
   
   print("GetPossibleActions: Checking civics...")
   -- CIVICS
-  if playerCulture:IsResearchComplete() then
+  -- Check if no civic is currently being researched
+  if not playerCulture:GetProgressingCivic() then
     for civic in GameInfo.Civics() do
-      if playerCulture:IsCivicUnlocked(civic.Hash) and not playerCulture:HasCivic(civic.Hash) then
-		print("GetPossibleActions: Adding possible civic: " .. tostring(civic.CivicType))
-        table.insert(possibleActions.ChooseCivic, civic.CivicType);
+      -- Check if the civic can be researched
+      if playerCulture:CanProgress(civic.Hash) and not playerCulture:HasCivic(civic.Hash) then
+        print("GetPossibleActions: Adding possible civic: " .. tostring(civic.CivicType))
+        table.insert(possibleActions.ChooseCivic, civic.CivicType)
       end
     end
   end
 
   print("GetPossibleActions: Checking technologies...")
   -- TECHNOLOGIES
-  if playerTechs:IsResearchComplete() then
+  -- Check if no technology is currently being researched
+  if not playerTechs:GetResearchingTech() then
     for tech in GameInfo.Technologies() do
-      if playerTechs:CanResearch(tech.Hash) then
-	    print("GetPossibleActions: Adding possible tech: " .. tostring(tech.TechnologyType))
-        table.insert(possibleActions.ChooseTech, tech.TechnologyType);
+      if playerTechs:CanResearch(tech.Hash) and not playerTechs:HasTech(tech.Hash) then
+        print("GetPossibleActions: Adding possible tech: " .. tostring(tech.TechnologyType))
+        table.insert(possibleActions.ChooseTech, tech.TechnologyType)
       end
     end
   end
@@ -272,43 +275,70 @@ function GetPossibleActions()
     end
   end
 
+
   print("GetPossibleActions: Checking encampment ranged attacks...")
-  -- ENCAMPMENT RANGED ATTACK
-  for district in player:GetDistricts():Members() do
-    if district:IsEncampment() and CityManager.CanStartCommand(district, CityCommandTypes.RANGE_ATTACK) then
-	  print("GetPossibleActions: Adding encampment ranged attack for district ID: " .. tostring(district:GetID()))
-      table.insert(possibleActions.EncampmentRangedAttack, district:GetID());
+-- ENCAMPMENT RANGED ATTACK
+for district in player:GetDistricts():Members() do
+    -- Get the actual district object using the ID
+    local districtObj = player:GetDistricts():FindID(district)
+    
+    if districtObj then
+        local districtTypeId = districtObj:GetType()
+        local districtInfo = GameInfo.Districts[districtTypeId]
+        
+        -- Check if we got valid district info and it's an encampment
+        if districtInfo and districtInfo.DistrictType == "DISTRICT_ENCAMPMENT" then
+            if CityManager.CanStartCommand(districtObj, CityCommandTypes.RANGE_ATTACK) then
+                print("GetPossibleActions: Adding encampment ranged attack for district ID: " .. tostring(district))
+                table.insert(possibleActions.EncampmentRangedAttack, district)
+            end
+        end
     end
-  end
+end
+
+  print("Finished checking districts")
 
   print("GetPossibleActions: Checking envoy actions...")
-    -- SEND ENVOY
-  local influence = player:GetInfluence();
+  -- SEND ENVOY
+  local influence = player:GetInfluence()
   if influence:CanGiveInfluence() then
-    for cityState in GameInfo.MinorCivs() do
-      if influence:CanGiveTokensToPlayer(cityState.Index) then
-	    print("GetPossibleActions: Adding send envoy action for city-state: " .. tostring(cityState.MinorCivType))
-        table.insert(possibleActions.SendEnvoy, cityState.MinorCivType);
+      -- Get all players and filter for minor civs (city states)
+      for _, cityState in ipairs(PlayerManager.GetAlive()) do
+          local cityStatePlayer = Players[cityState]
+          -- Check if this is a city state
+          if cityStatePlayer and cityStatePlayer:IsCityState() then
+              if influence:CanGiveTokensToPlayer(cityState) then
+                  print("GetPossibleActions: Adding send envoy action for city-state ID: " .. tostring(cityState))
+                  table.insert(possibleActions.SendEnvoy, cityState)
+              end
+          end
       end
-    end
   end
 
   print("GetPossibleActions: Checking make peace actions...")
   -- MAKE PEACE WITH CITY-STATE
-  for cityState in GameInfo.MinorCivs() do
-    if player:GetDiplomacy():CanMakePeaceWith(cityState.Index) then
-	  print("GetPossibleActions: Adding make peace action for city-state: " .. tostring(cityState.MinorCivType))
-      table.insert(possibleActions.MakePeace, cityState.MinorCivType);
-    end
+  for _, cityState in ipairs(PlayerManager.GetAlive()) do
+      local cityStatePlayer = Players[cityState]
+      -- Check if this is a city state
+      if cityStatePlayer and cityStatePlayer:IsCityState() then
+          if player:GetDiplomacy():CanMakePeaceWith(cityState) then
+              print("GetPossibleActions: Adding make peace action for city-state ID: " .. tostring(cityState))
+              table.insert(possibleActions.MakePeace, cityState)
+          end
+      end
   end
-
+  
   print("GetPossibleActions: Checking levy military actions...")
   -- LEVY MILITARY
-  for cityState in GameInfo.MinorCivs() do
-    if player:GetInfluence():CanLevyMilitary(cityState.Index) then
-	  print("GetPossibleActions: Adding levy military action for city-state: " .. tostring(cityState.MinorCivType))
-      table.insert(possibleActions.LevyMilitary, cityState.MinorCivType);
-    end
+  for _, cityState in ipairs(PlayerManager.GetAlive()) do
+      local cityStatePlayer = Players[cityState]
+      -- Check if this is a city state
+      if cityStatePlayer and cityStatePlayer:IsCityState() then
+          if player:GetInfluence():CanLevyMilitary(cityState) then
+              print("GetPossibleActions: Adding levy military action for city-state ID: " .. tostring(cityState))
+              table.insert(possibleActions.LevyMilitary, cityState)
+          end
+      end
   end
 
   print("GetPossibleActions: Checking Great People actions...")
@@ -525,6 +555,72 @@ end
   print("GetPossibleActions: Action collection complete.")
   return possibleActions;
 end -- Close GetPossibleActions function
+
+-- Helper functions for unit actions
+function GetAvailablePromotions(unit)
+    if not unit then return nil end
+    local promotions = {}
+    for row in GameInfo.UnitPromotions() do
+        if unit:CanPromote() and UnitManager.CanPromoteUnit(unit, row.Index) then
+            table.insert(promotions, {
+                PromotionType = row.UnitPromotionType,
+                Name = row.Name
+            })
+        end
+    end
+    return #promotions > 0 and promotions or nil
+end
+
+function UnitRangeAttack(unit, plotIndex)
+    if not unit or not plotIndex then return false end
+    return UnitManager.CanStartCommand(unit, UnitCommandTypes.RANGE_ATTACK, nil, {
+        [UnitOperationTypes.PARAM_X] = Map.GetPlotByIndex(plotIndex):GetX(),
+        [UnitOperationTypes.PARAM_Y] = Map.GetPlotByIndex(plotIndex):GetY()
+    })
+end
+
+function UnitAirAttack(unit, plotIndex)
+    if not unit or not plotIndex then return false end
+    return UnitManager.CanStartCommand(unit, UnitCommandTypes.AIR_ATTACK, nil, {
+        [UnitOperationTypes.PARAM_X] = Map.GetPlotByIndex(plotIndex):GetX(),
+        [UnitOperationTypes.PARAM_Y] = Map.GetPlotByIndex(plotIndex):GetY()
+    })
+end
+
+function UnitRebase(unit, plotIndex)
+    if not unit or not plotIndex then return false end
+    return UnitManager.CanStartCommand(unit, UnitCommandTypes.REBASE, nil, {
+        [UnitOperationTypes.PARAM_X] = Map.GetPlotByIndex(plotIndex):GetX(),
+        [UnitOperationTypes.PARAM_Y] = Map.GetPlotByIndex(plotIndex):GetY()
+    })
+end
+
+function UnitWMDStrike(unit, plotIndex, wmdType)
+    if not unit or not plotIndex or not wmdType then return false end
+    return UnitManager.CanStartCommand(unit, UnitCommandTypes.WMD_STRIKE, nil, {
+        [UnitOperationTypes.PARAM_WMD_TYPE] = wmdType,
+        [UnitOperationTypes.PARAM_X] = Map.GetPlotByIndex(plotIndex):GetX(),
+        [UnitOperationTypes.PARAM_Y] = Map.GetPlotByIndex(plotIndex):GetY()
+    })
+end
+
+function QueueUnitPath(unit, plotIndex)
+    if not unit or not plotIndex then return false end
+    local plot = Map.GetPlotByIndex(plotIndex)
+    return UnitManager.CanStartOperation(unit, UnitOperationTypes.MOVE_TO, nil, {
+        [UnitOperationTypes.PARAM_X] = plot:GetX(),
+        [UnitOperationTypes.PARAM_Y] = plot:GetY()
+    })
+end
+
+function RequestBuildImprovement(unit, improvementHash)
+    if not unit or not improvementHash then return false end
+    local plot = Map.GetPlot(unit:GetX(), unit:GetY())
+    if not plot then return false end
+    return UnitManager.CanStartOperation(unit, UnitOperationTypes.BUILD_IMPROVEMENT, nil, {
+        [UnitOperationTypes.PARAM_IMPROVEMENT_TYPE] = improvementHash
+    })
+end
 
 --to indicate successful load
 return True
