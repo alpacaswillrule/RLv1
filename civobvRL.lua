@@ -363,157 +363,164 @@ end
     end
   end
 
-    -- UNIT ACTIONS
-  print("GetPossibleActions: Checking unit actions...")
-  for unit in player:GetUnits():Members() do
-      local unitID = unit:GetID()
-      print("GetPossibleActions: Checking actions for unit ID: " .. tostring(unitID))
-      -- Select Unit
-      table.insert(possibleActions.SelectUnit, unitID)
-
-    -- Movement (check for each valid plot around the unit)
-    print("GetPossibleActions: Checking movement for unit ID: " .. tostring(unitID))
-    if unit:IsReadyToMove() then
-      local unitPlot = Map.GetPlot(unit:GetX(), unit:GetY());
-      local neighboringPlots = Map.GetPlotsWithinRange(unitPlot, unit:GetMovesRemaining(), true);
-      for _, plot in ipairs(neighboringPlots) do
-          if plot:GetZOC() == -1 or plot:GetZOC() == playerID then
-		    print("GetPossibleActions: Adding move action for unit ID: " .. tostring(unitID) .. " to plot: " .. tostring(plot:GetX()) .. ", " .. tostring(plot:GetY()))
-            table.insert(possibleActions.MoveUnit, {unitID, plot:GetX(), plot:GetY()});
+ -- Helper function to get all possible actions for a single unit
+-- Helper function to get all possible actions for a single unit
+function GetPossibleUnitActions(unitID, player)
+  local unit = player:GetUnits():FindID(unitID)
+  if not unit then return nil end
+  
+  local actions = {}
+  local plotX = unit:GetX()
+  local plotY = unit:GetY()
+  
+  -- Check movement possibilities
+  if unit:IsReadyToMove() then
+      local movementRange = {}
+      local range = unit:GetMovesRemaining()
+      
+      -- Get plots within range manually
+      for dx = -range, range do
+          for dy = -range, range do
+              local newX = plotX + dx
+              local newY = plotY + dy
+              if Map.IsPlot(newX, newY) then
+                  local targetPlot = Map.GetPlot(newX, newY)
+                  if targetPlot then
+                      -- Check if unit can move to this plot
+                      local tParameters = {}
+                      tParameters[UnitOperationTypes.PARAM_X] = newX
+                      tParameters[UnitOperationTypes.PARAM_Y] = newY
+                      if UnitManager.CanStartOperation(unit, UnitOperationTypes.MOVE_TO, nil, tParameters) then
+                          table.insert(movementRange, {
+                              UnitID = unitID,
+                              X = newX,
+                              Y = newY
+                          })
+                      end
+                  end
+              end
           end
       end
-    end
-
-    -- Ranged Attack
-    print("GetPossibleActions: Checking ranged attack for unit ID: " .. tostring(unitID))
-    if unit:GetRangedCombat() > 0 then
-      local unitPlot = Map.GetPlot(unit:GetX(), unit:GetY());
-      local attackablePlots = Map.GetPlotsWithinRange(unitPlot, unit:GetRange(), true);
-      for _, plot in ipairs(attackablePlots) do
-          if UnitRangeAttack(unit, plot:GetIndex()) then
-		    print("GetPossibleActions: Adding ranged attack for unit ID: " .. tostring(unitID) .. " to plot: " .. tostring(plot:GetX()) .. ", " .. tostring(plot:GetY()))
-            table.insert(possibleActions.UnitRangedAttack, {unitID, plot:GetX(), plot:GetY()});
-          end
+      if #movementRange > 0 then
+          actions.MoveUnit = movementRange
       end
-    end
-
-    -- Air Attack
-    print("GetPossibleActions: Checking air attack for unit ID: " .. tostring(unitID))
-    if unit:IsAir() then
-        local unitPlot = Map.GetPlot(unit:GetX(), unit:GetY());
-        local attackablePlots = Map.GetPlotsWithinRange(unitPlot, unit:GetRange(), true);
-        for _, plot in ipairs(attackablePlots) do
-            if UnitAirAttack(unit, plot:GetIndex()) then
-			  print("GetPossibleActions: Adding air attack for unit ID: " .. tostring(unitID) .. " to plot: " .. tostring(plot:GetX()) .. ", " .. tostring(plot:GetY()))
-                table.insert(possibleActions.UnitAirAttack, {unitID, plot:GetX(), plot:GetY()});
-            end
-        end
-    end
-
-    -- Form Unit (Corps/Army)
-    print("GetPossibleActions: Checking form unit for unit ID: " .. tostring(unitID))
-    if unit:IsMilitary() then
-      for otherUnit in player:GetUnits():Members() do
-        if otherUnit:GetID() ~= unitID and otherUnit:IsMilitary() and otherUnit:GetDomain() == unit:GetDomain() and otherUnit:GetX() == unit:GetX() and otherUnit:GetY() == unit:GetY() then
-		  print("GetPossibleActions: Adding form unit action for unit ID: " .. tostring(unitID) .. " with unit ID: " .. tostring(otherUnit:GetID()))
-          table.insert(possibleActions.FormUnit, {unitID, otherUnit:GetID(), "CORPS"});
-          table.insert(possibleActions.FormUnit, {unitID, otherUnit:GetID(), "ARMY"});
-        end
-      end
-    end
-
-    -- Rebase
-    print("GetPossibleActions: Checking rebase for unit ID: " .. tostring(unitID))
-    if unit:CanRebase() then
-        local unitPlot = Map.GetPlot(unit:GetX(), unit:GetY());
-        local rebasePlots = Map.GetPlotsWithinRange(unitPlot, unit:GetRange(), false);
-        for _, plot in ipairs(rebasePlots) do
-            if UnitRebase(unit, plot:GetIndex()) then
-			  print("GetPossibleActions: Adding rebase action for unit ID: " .. tostring(unitID) .. " to plot: " .. tostring(plot:GetX()) .. ", " .. tostring(plot:GetY()))
-                table.insert(possibleActions.RebaseUnit, {unitID, plot:GetX(), plot:GetY()});
-            end
-        end
-    end
-
-    -- WMD Strike
-    print("GetPossibleActions: Checking WMD strike for unit ID: " .. tostring(unitID))
-    if unit:GetWMDStrikeRange() > 0 then
-        local unitPlot = Map.GetPlot(unit:GetX(), unit:GetY());
-        local strikePlots = Map.GetPlotsWithinRange(unitPlot, unit:GetWMDStrikeRange(), true);
-        for _, plot in ipairs(strikePlots) do
-            for wmdType in GameInfo.UnitWmdTypes() do
-                if UnitWMDStrike(unit, plot:GetIndex(), wmdType.Hash) then
-				  print("GetPossibleActions: Adding WMD strike for unit ID: " .. tostring(unitID) .. " to plot: " .. tostring(plot:GetX()) .. ", " .. tostring(plot:GetY()) .. " with WMD type: " .. tostring(wmdType.Hash))
-                    table.insert(possibleActions.WMDStrike, {unitID, plot:GetX(), plot:GetY(), wmdType.Hash});
-                end
-            end
-        end
-    end
-
-    -- Queue Unit Path
-    print("GetPossibleActions: Checking queue unit path for unit ID: " .. tostring(unitID))
-    local unitPlot = Map.GetPlot(unit:GetX(), unit:GetY());
-    local pathPlots = Map.GetPlotsWithinRange(unitPlot, 5, true); -- Search within 5 tiles
-    for _, plot in ipairs(pathPlots) do
-        if QueueUnitPath(unit, plot:GetIndex()) then
-		  print("GetPossibleActions: Adding queue unit path for unit ID: " .. tostring(unitID) .. " to plot: " .. tostring(plot:GetX()) .. ", " .. tostring(plot:GetY()))
-            table.insert(possibleActions.QueueUnitPath, {unitID, plot:GetX(), plot:GetY()});
-        end
-    end
-
-    -- Build Improvement
-    print("GetPossibleActions: Checking build improvement for unit ID: " .. tostring(unitID))
-    if unit:IsBuilder() then
-      for improvement in GameInfo.Improvements() do
-        if RequestBuildImprovement(unit, improvement.Hash) then
-		  print("GetPossibleActions: Adding build improvement for unit ID: " .. tostring(unitID) .. " with improvement: " .. tostring(improvement.ImprovementType))
-          table.insert(possibleActions.BuildImprovement, {unitID, improvement.ImprovementType});
-        end
-      end
-    end
-
-    -- Enter Formation
-    print("GetPossibleActions: Checking enter formation for unit ID: " .. tostring(unitID))
-    if unit:CanEnterFormation() then
-      for otherUnit in player:GetUnits():Members() do
-          if otherUnit:GetID() ~= unitID and otherUnit:CanBeEnteredBy(unit) and otherUnit:GetX() == unit:GetX() and otherUnit:GetY() == unit:GetY() then
-		    print("GetPossibleActions: Adding enter formation for unit ID: " .. tostring(unitID) .. " with unit ID: " .. tostring(otherUnit:GetID()))
-            table.insert(possibleActions.EnterFormation, {unitID, otherUnit:GetID()});
-          end
-      end
-    end
-
-    -- Found City
-    print("GetPossibleActions: Checking found city for unit ID: " .. tostring(unitID))
-    if unit:CanFoundCity(unit:GetX(), unit:GetY()) then
-	  print("GetPossibleActions: Adding found city for unit ID: " .. tostring(unitID))
-      table.insert(possibleActions.FoundCity, unitID);
-    end
-
-    -- Promote Unit
-    print("GetPossibleActions: Checking promote unit for unit ID: " .. tostring(unitID))
-    local promotions = GetAvailablePromotions(unit);
-    if promotions then
-      for _, promotion in ipairs(promotions) do
-	    print("GetPossibleActions: Adding promote unit for unit ID: " .. tostring(unitID) .. " with promotion: " .. tostring(promotion.PromotionType))
-        table.insert(possibleActions.PromoteUnit, {unitID, promotion.PromotionType});
-      end
-    end
-
-    -- Delete Unit
-    print("GetPossibleActions: Checking delete unit for unit ID: " .. tostring(unitID))
-    if UnitManager.CanStartCommand(unit, UnitCommandTypes.DELETE, true) then
-	  print("GetPossibleActions: Adding delete unit for unit ID: " .. tostring(unitID))
-      table.insert(possibleActions.DeleteUnit, unitID);
-    end
-
-    -- Upgrade Unit
-    print("GetPossibleActions: Checking upgrade unit for unit ID: " .. tostring(unitID))
-    if UnitManager.CanStartCommand(unit, UnitCommandTypes.UPGRADE, true) then
-	  print("GetPossibleActions: Adding upgrade unit for unit ID: " .. tostring(unitID))
-      table.insert(possibleActions.UpgradeUnit, unitID);
-    end
   end
+
+  -- Check ranged attack capability
+  local rangedCombat = unit:GetRangedCombat()
+  if rangedCombat > 0 then
+      local rangeTargets = {}
+      local range = unit:GetRange()
+      for dx = -range, range do
+          for dy = -range, range do
+              local newX = plotX + dx
+              local newY = plotY + dy
+              if Map.IsPlot(newX, newY) then
+                  local tParameters = {}
+                  tParameters[UnitOperationTypes.PARAM_X] = newX
+                  tParameters[UnitOperationTypes.PARAM_Y] = newY
+                  if UnitManager.CanStartOperation(unit, UnitOperationTypes.RANGE_ATTACK, nil, tParameters) then
+                      table.insert(rangeTargets, {
+                          UnitID = unitID,
+                          X = newX,
+                          Y = newY
+                      })
+                  end
+              end
+          end
+      end
+      if #rangeTargets > 0 then
+          actions.UnitRangedAttack = rangeTargets
+      end
+  end
+
+  -- Always add the SelectUnit action
+  actions.SelectUnit = { { UnitID = unitID } }
+
+  -- Check if unit can found a city
+  if unit:GetUnitType() == GameInfo.Units["UNIT_SETTLER"].Index then
+      if UnitManager.CanStartOperation(unit, UnitOperationTypes.FOUND_CITY, nil) then
+          actions.FoundCity = { { UnitID = unitID } }
+      end
+  end
+
+-- Check if unit can be promoted
+if unit:GetExperience() and unit:GetExperience():GetLevel() > 0 then
+  local availablePromotions = {}
+  -- Only need 4 arguments: unit, actionHash, testOnly(true), isFirstCheck(true)
+  local bCanStart, tResults = UnitManager.CanStartCommand(
+      unit,
+      UnitCommandTypes.PROMOTE,
+      true,
+      true
+  );
+
+  if bCanStart and tResults and tResults[UnitCommandResults.PROMOTIONS] then
+      for _, promotion in ipairs(tResults[UnitCommandResults.PROMOTIONS]) do
+          table.insert(availablePromotions, {
+              UnitID = unitID,
+              PromotionType = promotion.Hash
+          })
+      end
+  end
+  if #availablePromotions > 0 then
+      actions.PromoteUnit = availablePromotions
+  end
+end
+
+  -- Check if unit can be upgraded
+  if UnitManager.CanStartCommand(unit, UnitCommandTypes.UPGRADE) then
+      actions.UpgradeUnit = { { UnitID = unitID } }
+  end
+
+  -- Unit can always be deleted
+  actions.DeleteUnit = { { UnitID = unitID } }
+
+  return actions
+end
+
+-- Main function to integrate with the observation system
+function GetAllUnitActions(player)
+  local unitActions = {
+      MoveUnit = {},
+      SelectUnit = {},
+      UnitRangedAttack = {},
+      FoundCity = {},
+      PromoteUnit = {},
+      DeleteUnit = {},
+      UpgradeUnit = {}
+  }
+
+  -- Iterate through all units
+  for unit in player:GetUnits():Members() do
+      -- unit is already the ID
+      local unitID = unit
+      print("GetPossibleActions: Processing unit ID: " .. tostring(unitID))
+      local possibleActions = GetPossibleUnitActions(unitID, player)
+      if possibleActions then
+          -- Merge actions into the main actions table
+          for actionType, actions in pairs(possibleActions) do
+              if unitActions[actionType] then
+                  for _, action in ipairs(actions) do
+                      table.insert(unitActions[actionType], action)
+                  end
+              end
+          end
+      end
+  end
+
+  return unitActions
+end
+
+--CHECKING ALL ACTIONS THAT ARE POSSIBLE
+print("GetPossibleActions: Checking unit actions...")
+local unitActions = GetAllUnitActions(player)
+for actionType, actions in pairs(unitActions) do
+    if #actions > 0 then
+        possibleActions[actionType] = actions
+        print("GetPossibleActions: Found " .. #actions .. " possible " .. actionType .. " actions")
+    end
+end
 
   -- CHANGE GOVERNMENT
   print("GetPossibleActions: Checking change government...")
