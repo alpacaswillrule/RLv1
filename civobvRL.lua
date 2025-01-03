@@ -535,24 +535,24 @@ end
 
 -- CHANGE POLICIES
 print("GetPossibleActions: Checking change policies...")
-if CanChangePolicies() then
-    local currentPolicies = {}
-    for slotIndex = 0, playerCulture:GetNumGovernmentSlots() - 1 do
-        local policyIndex = playerCulture:GetGovernmentPolicyInSlot(slotIndex)
-        if policyIndex then
-            local policy = GameInfo.Policies[policyIndex]
-            currentPolicies[slotIndex] = policy.PolicyType
-        end
-    end
-    for policy in GameInfo.Policies() do
-        local policyHash = policy.Hash
-        if playerCulture:IsPolicyUnlocked(policyHash) then
-            -- For each policy slot, check if we can add this policy
-            for slotIndex = 0, playerCulture:GetNumGovernmentSlots() - 1 do
-                -- Check if the policy can be placed in this slot
-                if playerCulture:CanSlotPolicy(policyHash, slotIndex) then
-                    print("GetPossibleActions: Adding change policy action for slot " .. tostring(slotIndex) .. " with policy: " .. tostring(policy.PolicyType))
-                    table.insert(possibleActions.ChangePolicies, {slotIndex, policy.PolicyType})
+local playerID = Game.GetLocalPlayer()
+local player = Players[playerID]
+if player then
+    local playerCulture = player:GetCulture()
+    if playerCulture and CanChangePolicies() then
+        -- Simple check for whether policies can be changed
+        if (playerCulture:CivicCompletedThisTurn() or playerCulture:GetNumPolicySlotsOpen() > 0) 
+            and Game.IsAllowStrategicCommands(playerID) 
+            and not playerCulture:PolicyChangeMade() then
+                
+            -- Get current policies to know what can be changed
+            for policyType in GameInfo.Policies() do
+                if playerCulture:CanSlotPolicy(policyType.Hash, 0) then  -- Check if we can slot this policy
+                    print("GetPossibleActions: Adding policy option: " .. tostring(policyType.PolicyType))
+                    table.insert(possibleActions.ChangePolicies, {
+                        SlotIndex = 0,  -- Just using slot 0 as an example
+                        PolicyType = policyType.PolicyType
+                    })
                 end
             end
         end
