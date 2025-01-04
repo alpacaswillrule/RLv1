@@ -881,6 +881,7 @@ end
 
 -- Requests a unit upgrade
 -- @param unit The unit to upgrade
+
 function RequestUnitUpgrade(unit)
   -- Basic validation first
   if not UnitManager.CanStartCommand(unit, UnitCommandTypes.UPGRADE, true) then
@@ -896,7 +897,7 @@ function RequestUnitUpgrade(unit)
   if player:GetTreasury():GetGoldBalance() < upgradeCost then
       print("Cannot afford unit upgrade. Cost: " .. upgradeCost);
       return false;
-  }
+  end  -- Changed from } to end
   
   -- Request the upgrade
   if UnitManager.CanStartCommand(unit, UnitCommandTypes.UPGRADE) then

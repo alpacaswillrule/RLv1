@@ -491,27 +491,93 @@ function GetAllUnitActions(player)
       UpgradeUnit = {}
   }
 
+  -- Debug print total number of units
+  local totalUnits = 0
+  local unitIDs = {}
+  print("=== BEGIN UNIT DISCOVERY ===")
+  for unit in player:GetUnits():Members() do
+      totalUnits = totalUnits + 1
+      table.insert(unitIDs, unit)
+      print(string.format("Found unit #%d with ID: %s", totalUnits, tostring(unit)))
+  end
+  print("Total units found: " .. totalUnits)
+  print("Unit IDs found: " .. table.concat(unitIDs, ", "))
+
   -- Iterate through all units
   for unit in player:GetUnits():Members() do
-      -- unit is already the ID
       local unitID = unit
-      print("GetPossibleActions: Processing unit ID: " .. tostring(unitID))
-      local possibleActions = GetPossibleUnitActions(unitID, player)
-      if possibleActions then
-          -- Merge actions into the main actions table
-          for actionType, actions in pairs(possibleActions) do
-              if unitActions[actionType] then
-                  for _, action in ipairs(actions) do
-                      table.insert(unitActions[actionType], action)
+      local unitObj = player:GetUnits():FindID(unitID)
+      if unitObj then
+          print(string.format("Successfully found unit object for ID %s", tostring(unitID)))
+          
+          local unitTypeName = GameInfo.Units[unitObj:GetType()].UnitType
+          print("Unit type: " .. unitTypeName)
+
+          local plotX = unitObj:GetX()
+          local plotY = unitObj:GetY()
+          print("Unit position: " .. plotX .. "," .. plotY)
+
+          local movesRemaining = unitObj:GetMovesRemaining()
+          print("Moves remaining: " .. movesRemaining)
+
+          -- Check movement possibilities
+          if movesRemaining > 0 then
+              local movementRange = {}
+              local range = math.floor(movesRemaining)
+              
+              for dx = -range, range do
+                  for dy = -range, range do
+                      local newX = plotX + dx
+                      local newY = plotY + dy
+                      if Map.IsPlot(newX, newY) then
+                          local targetPlot = Map.GetPlot(newX, newY)
+                          if targetPlot then
+                              local tParameters = {}
+                              tParameters[UnitOperationTypes.PARAM_X] = newX
+                              tParameters[UnitOperationTypes.PARAM_Y] = newY
+                              if UnitManager.CanStartOperation(unitObj, UnitOperationTypes.MOVE_TO, nil, tParameters) then
+                                  table.insert(movementRange, {
+                                      UnitID = unitID,
+                                      X = newX,
+                                      Y = newY
+                                  })
+                              end
+                          end
+                      end
                   end
               end
+              
+              if #movementRange > 0 then
+                  print("Found " .. #movementRange .. " possible move locations")
+                  unitActions.MoveUnit = movementRange
+              end
+          end
+
+          -- Check if unit is a settler
+          if unitTypeName == "UNIT_SETTLER" then
+              if UnitManager.CanStartOperation(unitObj, UnitOperationTypes.FOUND_CITY, nil) then
+                  print("Settler can found city")
+                  table.insert(unitActions.FoundCity, { UnitID = unitID })
+              end
+          end
+
+          -- Add delete action for all units
+          table.insert(unitActions.DeleteUnit, { UnitID = unitID })
+      else
+          print(string.format("Failed to find unit object for ID %s. Trying alternate lookup...", tostring(unitID)))
+          unitObj = Players[Game.GetLocalPlayer()]:GetUnits():FindID(unitID)
+          if unitObj then
+              print("Found unit using alternate lookup method")
+              -- Process unit with alternate lookup method
+              -- (Same processing code would go here)
+          else
+              print("Still could not find unit using alternate lookup")
           end
       end
   end
-
+  
   return unitActions
 end
-
 --CHECKING ALL ACTIONS THAT ARE POSSIBLE
 print("GetPossibleActions: Checking unit actions...")
 local unitActions = GetAllUnitActions(player)
