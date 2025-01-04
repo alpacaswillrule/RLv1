@@ -127,45 +127,56 @@ end
 
 -- Chooses a civic to research.
 -- @param civicName The name of the civic to research (e.g., "CIVIC_FOREIGN_TRADE").
-function ChooseCivic(civicName)
-  local playerID = Game.GetLocalPlayer();
-  local player = Players[playerID];
-  local playerCulture = player:GetCulture();
 
-  local civicHash = GameInfo.Civics[civicName].Hash;
-  
-  if not playerCulture:IsCivicUnlocked(civicHash) then
-    print("Civic " .. civicName .. " is not unlocked.");
-    return false;
+function ChooseCivic(civicData)
+  print("ChooseCivic: Attempting to research civic")
+  if civicData == nil then
+      print("ERROR: civicData is nil!")
+      return false
   end
-
-  local params = {};
-  params[PlayerOperations.PARAM_CIVIC_TYPE] = civicHash;
-  params[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE;
-  UI.RequestPlayerOperation(playerID, PlayerOperations.PROGRESS_CIVIC, params);
+  
+  print("CivicType: " .. tostring(civicData.CivicType))
+  print("Hash: " .. tostring(civicData.Hash))
+  
+  local playerID = Game.GetLocalPlayer()
+  local player = Players[playerID]
+  local playerCulture = player:GetCulture()
+  
+  -- Parameters should use the civic hash
+  local params = {}
+  params[PlayerOperations.PARAM_CIVIC_TYPE] = civicData.Hash
+  params[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE
+  
+  -- Request the research
+  print("Requesting civic research operation...")
+  UI.RequestPlayerOperation(playerID, PlayerOperations.PROGRESS_CIVIC, params)
+  
+  -- Play civic selection sound
+  UI.PlaySound("Confirm_Civic")
   return true
 end
 
 -- Chooses a technology to research.
 -- @param techName The name of the technology to research (e.g., "TECH_POTTERY").
-function ChooseTech(techName)
-  local playerID = Game.GetLocalPlayer();
-  local player = Players[playerID];
-  local playerTechs = player:GetTechs();
+function ChooseTech(techData)
+  print("ChooseTech: Attempting to research " .. techData.TechType)
+  local playerID = Game.GetLocalPlayer()
+  local player = Players[playerID]
+  local playerTechs = player:GetTechs()
 
-  local techHash = GameInfo.Technologies[techName].Hash;
+  -- Parameters should use the tech hash
+  local params = {}
+  params[PlayerOperations.PARAM_TECH_TYPE] = techData.Hash
+  params[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE
   
-  if not playerTechs:CanResearch(techHash) then
-    print("Cannot research tech " .. techName);
-    return false;
-  end
-
-  local params = {};
-  params[PlayerOperations.PARAM_TECH_TYPE] = techHash;
-  params[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE;
-  UI.RequestPlayerOperation(playerID, PlayerOperations.RESEARCH, params);
+  -- Request the research
+  UI.RequestPlayerOperation(playerID, PlayerOperations.RESEARCH, params)
+  
+  -- Play research selection sound
+  UI.PlaySound("Confirm_Tech")
   return true
 end
+
 
 -- Performs a city ranged attack.
 -- @param cityID The ID of the city performing the attack.
@@ -608,27 +619,35 @@ end
 
 -- Changes policy cards.
 -- @param policyChanges A table where keys are slot indices and values are policy names.
-function ChangePolicies(policyChanges)
-    if not CanChangePolicies() then
-        print("Cannot change policies at this time.");
-        return false;
-    end
+-- In ChangePolicies(), modify to handle indexed array parameters correctly:
+-- In civactionsRL.lua, modify the ChangePolicies function:
 
-    local clearList = {};
-    local addList = {};
+function ChangePolicies(params)
+  print("Attempting to change policies...");
+  
+  local playerID = Game.GetLocalPlayer();
+  if playerID == -1 then return false end
+  
+  local slotIndex = params.SlotIndex;
+  local policyHash = params.PolicyHash;
+  
+  print("Changing policy - Slot: " .. tostring(slotIndex) .. ", Policy: " .. params.PolicyType);
 
-    for slot, policyName in pairs(policyChanges) do
-        table.insert(clearList, slot);
-        addList[slot] = GameInfo.Policies[policyName].Hash;
-    end
+  -- Create lists for policy changes
+  local clearList = {slotIndex};  -- List of slots to clear
+  local addList = {};  -- New policies to add, keyed by slot index
+  addList[slotIndex] = policyHash;
 
-    local playerID = Game.GetLocalPlayer();
-    local player = Players[playerID];
-    local playerCulture = player:GetCulture();
-    playerCulture:RequestPolicyChanges(clearList, addList);
-    return true;
+  -- Get player culture object
+  local player = Players[playerID];
+  local playerCulture = player:GetCulture();
+
+  -- Request the policy changes
+  playerCulture:RequestPolicyChanges(clearList, addList);
+  
+  UI.PlaySound("Play_UI_Click");
+  return true;
 end
-
 -- Establishes a trade route between two cities.
 -- @param originCityID The ID of the origin city.
 -- @param destinationCityID The ID of the destination city.

@@ -140,84 +140,97 @@ function RLv1.OnTurnBegin()
         local numActionsToTake = math.random(1, math.min(3, totalActions))
         print("Will take " .. tostring(numActionsToTake) .. " actions this turn")
         
-        -- Take random actions
-        for i = 1, numActionsToTake do
-            -- Select random action type that has available actions
-            local validActionTypes = {};
-            for _, actionType in ipairs(actionTypes) do
-                -- Only add action types that have valid parameters
-                if type(possibleActions[actionType]) == "table" then
-                    if #possibleActions[actionType] > 0 then
-                        -- For actions that require parameters, verify they have them
-                        local hasValidParams = false;
-                        if actionType == "MoveUnit" then
-                            hasValidParams = possibleActions[actionType][1].UnitID and 
-                                           possibleActions[actionType][1].X and 
-                                           possibleActions[actionType][1].Y;
-                        elseif actionType == "SelectUnit" or actionType == "DeleteUnit" then
-                            hasValidParams = type(possibleActions[actionType][1].UnitID) == "number";
-                        elseif actionType == "PromoteUnit" then
-                            hasValidParams = possibleActions[actionType][1].UnitID and 
-                                           possibleActions[actionType][1].PromotionType;
-                        else
-                            hasValidParams = true; -- Other actions are assumed valid if they exist
-                        end
-                        
-                        if hasValidParams then
-                            table.insert(validActionTypes, actionType);
-                        end
-                    end
-                elseif possibleActions[actionType] == true then
-                    -- For boolean actions like EndTurn
+ -- Take random actions
+ for i = 1, numActionsToTake do
+    -- Select random action type that has available actions
+    local validActionTypes = {};
+    for _, actionType in ipairs(actionTypes) do
+        -- Only add action types that have valid parameters
+        if type(possibleActions[actionType]) == "table" then
+            if #possibleActions[actionType] > 0 then
+                -- For actions that require parameters, verify they have them
+                local hasValidParams = false;
+                if actionType == "MoveUnit" then
+                    hasValidParams = possibleActions[actionType][1].UnitID and 
+                                   possibleActions[actionType][1].X and 
+                                   possibleActions[actionType][1].Y;
+                elseif actionType == "SelectUnit" or actionType == "DeleteUnit" then
+                    hasValidParams = type(possibleActions[actionType][1].UnitID) == "number";
+                elseif actionType == "PromoteUnit" then
+                    hasValidParams = possibleActions[actionType][1].UnitID and 
+                                   possibleActions[actionType][1].PromotionType;
+                elseif actionType == "ChangePolicies" then
+                    -- Check for the new structure
+                    hasValidParams = possibleActions[actionType][1].SlotIndex and
+                                     possibleActions[actionType][1].PolicyType and
+                                     possibleActions[actionType][1].PolicyHash
+                else
+                    hasValidParams = true; -- Other actions are assumed valid if they exist
+                end
+                
+                if hasValidParams then
                     table.insert(validActionTypes, actionType);
                 end
             end
-            
-            if #validActionTypes > 0 then
-                local randomActionType = validActionTypes[math.random(#validActionTypes)];
-                print("Selected action type: " .. randomActionType);
-                
-                local actionParams = {};
-                if type(possibleActions[randomActionType]) == "table" then
-                    local actionsOfType = possibleActions[randomActionType];
-                    if #actionsOfType > 0 then
-                        local randomActionIndex = math.random(#actionsOfType);
-                        local randomAction = actionsOfType[randomActionIndex];
-                        
-                        if randomActionType == "MoveUnit" then
-                            actionParams = {randomAction.UnitID, randomAction.X, randomAction.Y};
-                        elseif randomActionType == "SelectUnit" or randomActionType == "DeleteUnit" then
-                            actionParams = {randomAction.UnitID};
-                        elseif randomActionType == "PromoteUnit" then
-                            actionParams = {randomAction.UnitID, randomAction.PromotionType};
-                        elseif randomActionType == "ChooseCivic" or randomActionType == "ChooseTech" then
-                            actionParams = {randomAction};
-                        elseif randomActionType == "ChangePolicies" then
-                            actionParams = {randomAction.SlotIndex, randomAction.PolicyType};
-                        else
-                            if type(randomAction) == "table" then
-                                for k, v in pairs(randomAction) do
-                                    table.insert(actionParams, v);
-                                end
-                            else
-                                actionParams = {randomAction};
-                            end
-                        end
-                        
-                        print("Executing random action: " .. randomActionType);
-                        print("With parameters:", table.concat(actionParams, ", "));
-                        
-                        RLv1.ExecuteAction(randomActionType, actionParams);
-                        
-                        -- Remove used action
-                        table.remove(actionsOfType, randomActionIndex);
-                    end
-                else
-                    -- Handle boolean actions like EndTurn
-                    RLv1.ExecuteAction(randomActionType, {});
-                end
-            end
+        elseif possibleActions[actionType] == true then
+            -- For boolean actions like EndTurn
+            table.insert(validActionTypes, actionType);
         end
+    end
+    
+    if #validActionTypes > 0 then
+        local randomActionType = validActionTypes[math.random(#validActionTypes)];
+        print("Selected action type: " .. randomActionType);
+        
+        local actionParams = {};
+        if type(possibleActions[randomActionType]) == "table" then
+            local actionsOfType = possibleActions[randomActionType];
+            if #actionsOfType > 0 then
+                local randomActionIndex = math.random(#actionsOfType);
+                local randomAction = actionsOfType[randomActionIndex];
+                
+                if randomActionType == "MoveUnit" then
+                    actionParams = {randomAction.UnitID, randomAction.X, randomAction.Y};
+                elseif randomActionType == "SelectUnit" or randomActionType == "DeleteUnit" then
+                    actionParams = {randomAction.UnitID};
+                elseif randomActionType == "PromoteUnit" then
+                    actionParams = {randomAction.UnitID, randomAction.PromotionType};
+                elseif randomActionType == "ChooseCivic" or randomActionType == "ChooseTech" then
+                    actionParams = {randomAction};
+                elseif randomActionType == "ChangePolicies" then
+                        -- Get a random policy change option
+                        local randomPolicyChange = actionsOfType[math.random(#actionsOfType)]
+                        
+                        -- Pass the full policy change data structure
+                        actionParams = {
+                            SlotIndex = randomPolicyChange.SlotIndex,
+                            PolicyType = randomPolicyChange.PolicyType,
+                            PolicyHash = randomPolicyChange.PolicyHash
+                        }
+                else
+                    if type(randomAction) == "table" then
+                        for k, v in pairs(randomAction) do
+                            table.insert(actionParams, v);
+                        end
+                    else
+                        actionParams = {randomAction};
+                    end
+                end
+                
+                print("Executing random action: " .. randomActionType);
+                print("With parameters:", table.concat(actionParams, ", "));
+                
+                RLv1.ExecuteAction(randomActionType, actionParams);
+                
+                -- Remove used action
+                table.remove(actionsOfType, randomActionIndex);
+            end
+        else
+            -- Handle boolean actions like EndTurn
+            RLv1.ExecuteAction(randomActionType, {});
+        end
+    end
+end
     end
     
     -- Always end turn after taking actions

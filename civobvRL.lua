@@ -241,30 +241,69 @@ function GetPossibleActions()
     EstablishTradeRoute = {}
   };
   
-  print("GetPossibleActions: Checking civics...")
-  -- CIVICS
-  -- Check if no civic is currently being researched
-  if not playerCulture:GetProgressingCivic() then
+
+-- In GetPossibleActions()
+print("GetPossibleActions: Checking civics...")
+-- CIVICS
+local playerID = Game.GetLocalPlayer()
+local player = Players[playerID]
+local playerCulture = player:GetCulture()
+local currentCivicID = playerCulture:GetProgressingCivic()
+
+-- If no civic is being researched (currentCivicID is -1) or if we can switch civics
+if currentCivicID == -1 then
+    print("No civic currently in progress, checking available civics...")
     for civic in GameInfo.Civics() do
-      -- Check if the civic can be researched
-      if playerCulture:CanProgress(civic.Hash) and not playerCulture:HasCivic(civic.Hash) then
-        print("GetPossibleActions: Adding possible civic: " .. tostring(civic.CivicType))
-        table.insert(possibleActions.ChooseCivic, civic.CivicType)
-      end
+        local civicIndex = civic.Index
+        -- Debug print civic info
+        print("Checking civic: " .. civic.CivicType .. " Index: " .. tostring(civicIndex))
+        
+        -- Check if the civic can be researched
+        if playerCulture:CanProgress(civicIndex) then
+            print("Can progress civic: " .. civic.CivicType)
+            if not playerCulture:HasCivic(civicIndex) then
+                print("Don't have civic yet, adding as possible choice: " .. civic.CivicType)
+                table.insert(possibleActions.ChooseCivic, {
+                    CivicType = civic.CivicType,
+                    Hash = civicIndex  -- Use Index instead of Hash for proper lookup
+                })
+                print("Added civic: " .. civic.CivicType .. " with index: " .. tostring(civicIndex))
+            end
+        end
     end
-  end
+    -- Debug print total available civics
+    print("Total available civics: " .. #possibleActions.ChooseCivic)
+end
 
   print("GetPossibleActions: Checking technologies...")
+
   -- TECHNOLOGIES
-  -- Check if no technology is currently being researched
-  if not playerTechs:GetResearchingTech() then
+-- Check if no technology is currently being researched
+-- In GetPossibleActions(), replace/modify the tech checking section:
+-- TECHNOLOGIES 
+local playerID = Game.GetLocalPlayer()
+local player = Players[playerID]
+local playerTechs = player:GetTechs()
+local currentTechID = playerTechs:GetResearchingTech()
+
+print("GetPossibleActions: Checking available techs...")
+print("Current research tech ID: " .. tostring(currentTechID))
+
+-- If no tech is being researched (currentTechID is -1) or if we can switch techs
+if currentTechID == -1 then
+    print("No tech currently being researched")
+    -- Check each available tech
     for tech in GameInfo.Technologies() do
-      if playerTechs:CanResearch(tech.Hash) and not playerTechs:HasTech(tech.Hash) then
-        print("GetPossibleActions: Adding possible tech: " .. tostring(tech.TechnologyType))
-        table.insert(possibleActions.ChooseTech, tech.TechnologyType)
-      end
+        local techIndex = tech.Index
+        if playerTechs:CanResearch(techIndex) then
+            print("GetPossibleActions: Adding possible tech: " .. tostring(tech.TechnologyType))
+            table.insert(possibleActions.ChooseTech, {
+                TechType = tech.TechnologyType,
+                Hash = GameInfo.Technologies[tech.TechnologyType].Hash
+            })
+        end
     end
-  end
+end
 
   print("GetPossibleActions: Checking city ranged attacks...")
     -- CITY RANGED ATTACK
@@ -491,93 +530,115 @@ function GetAllUnitActions(player)
       UpgradeUnit = {}
   }
 
-  -- Debug print total number of units
-  local totalUnits = 0
-  local unitIDs = {}
   print("=== BEGIN UNIT DISCOVERY ===")
-  for unit in player:GetUnits():Members() do
-      totalUnits = totalUnits + 1
-      table.insert(unitIDs, unit)
-      print(string.format("Found unit #%d with ID: %s", totalUnits, tostring(unit)))
+  
+  local pPlayerUnits:table = player:GetUnits();
+  local militaryUnits:table = {};
+  local civilianUnits:table = {};
+  
+  -- First sort units into categories
+  for i, pUnit in pPlayerUnits:Members() do
+      print("Found unit: " .. tostring(i))
+      local unitInfo:table = GameInfo.Units[pUnit:GetUnitType()];
+      print("Unit type: " .. unitInfo.UnitType)
+      
+      if pUnit:GetCombat() == 0 and pUnit:GetRangedCombat() == 0 then
+          -- if we have no attack strength we must be civilian
+          print("Adding to civilian units")
+          table.insert(civilianUnits, pUnit);
+      else
+          print("Adding to military units")
+          table.insert(militaryUnits, pUnit);
+      end
   end
-  print("Total units found: " .. totalUnits)
-  print("Unit IDs found: " .. table.concat(unitIDs, ", "))
 
-  -- Iterate through all units
-  for unit in player:GetUnits():Members() do
-      local unitID = unit
-      local unitObj = player:GetUnits():FindID(unitID)
-      if unitObj then
-          print(string.format("Successfully found unit object for ID %s", tostring(unitID)))
-          
-          local unitTypeName = GameInfo.Units[unitObj:GetType()].UnitType
-          print("Unit type: " .. unitTypeName)
+  -- Process military units
+  for _, pUnit in ipairs(militaryUnits) do
+      print("Processing military unit")
+      local unitInfo:table = GameInfo.Units[pUnit:GetUnitType()];
+      
+      -- Check movement
+      local movesRemaining = pUnit:GetMovesRemaining()
+      if movesRemaining > 0 then
+          local moves = GetValidMoveLocations(pUnit)
+          for _, move in ipairs(moves) do
+              table.insert(unitActions.MoveUnit, {
+                  UnitID = pUnit:GetID(),
+                  X = move.x,
+                  Y = move.y
+              })
+          end
+      end
+      
+      -- Add delete action
+      table.insert(unitActions.DeleteUnit, { UnitID = pUnit:GetID() })
+  end
 
-          local plotX = unitObj:GetX()
-          local plotY = unitObj:GetY()
-          print("Unit position: " .. plotX .. "," .. plotY)
+  -- Process civilian units
+  for _, pUnit in ipairs(civilianUnits) do
+      print("Processing civilian unit")
+      local unitInfo:table = GameInfo.Units[pUnit:GetUnitType()];
+      
+      -- Check if unit is a settler
+      if unitInfo.FoundCity then
+          print("Found settler!")
+          if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.FOUND_CITY, nil) then
+              print("Settler can found city")
+              table.insert(unitActions.FoundCity, { UnitID = pUnit:GetID() })
+          end
+      end
 
-          local movesRemaining = unitObj:GetMovesRemaining()
-          print("Moves remaining: " .. movesRemaining)
+      -- Check movement
+      local movesRemaining = pUnit:GetMovesRemaining()
+      if movesRemaining > 0 then
+          local moves = GetValidMoveLocations(pUnit)
+          for _, move in ipairs(moves) do
+              table.insert(unitActions.MoveUnit, {
+                  UnitID = pUnit:GetID(),
+                  X = move.x,
+                  Y = move.y
+              })
+          end
+      end
 
-          -- Check movement possibilities
-          if movesRemaining > 0 then
-              local movementRange = {}
-              local range = math.floor(movesRemaining)
-              
-              for dx = -range, range do
-                  for dy = -range, range do
-                      local newX = plotX + dx
-                      local newY = plotY + dy
-                      if Map.IsPlot(newX, newY) then
-                          local targetPlot = Map.GetPlot(newX, newY)
-                          if targetPlot then
-                              local tParameters = {}
-                              tParameters[UnitOperationTypes.PARAM_X] = newX
-                              tParameters[UnitOperationTypes.PARAM_Y] = newY
-                              if UnitManager.CanStartOperation(unitObj, UnitOperationTypes.MOVE_TO, nil, tParameters) then
-                                  table.insert(movementRange, {
-                                      UnitID = unitID,
-                                      X = newX,
-                                      Y = newY
-                                  })
-                              end
-                          end
-                      end
+      -- Add delete action
+      table.insert(unitActions.DeleteUnit, { UnitID = pUnit:GetID() })
+  end
+
+  return unitActions
+end
+
+-- Helper function to get valid move locations for a unit
+function GetValidMoveLocations(unit)
+  local validMoves = {}
+  local range = math.floor(unit:GetMovesRemaining())
+  local startX = unit:GetX()
+  local startY = unit:GetY()
+  
+  print(string.format("Checking moves from position %d,%d with range %d", startX, startY, range))
+  
+  for dx = -range, range do
+      for dy = -range, range do
+          local newX = startX + dx
+          local newY = startY + dy
+          if Map.IsPlot(newX, newY) then
+              local targetPlot = Map.GetPlot(newX, newY)
+              if targetPlot then
+                  local tParameters = {}
+                  tParameters[UnitOperationTypes.PARAM_X] = newX
+                  tParameters[UnitOperationTypes.PARAM_Y] = newY
+                  if UnitManager.CanStartOperation(unit, UnitOperationTypes.MOVE_TO, nil, tParameters) then
+                      table.insert(validMoves, {x = newX, y = newY})
                   end
               end
-              
-              if #movementRange > 0 then
-                  print("Found " .. #movementRange .. " possible move locations")
-                  unitActions.MoveUnit = movementRange
-              end
-          end
-
-          -- Check if unit is a settler
-          if unitTypeName == "UNIT_SETTLER" then
-              if UnitManager.CanStartOperation(unitObj, UnitOperationTypes.FOUND_CITY, nil) then
-                  print("Settler can found city")
-                  table.insert(unitActions.FoundCity, { UnitID = unitID })
-              end
-          end
-
-          -- Add delete action for all units
-          table.insert(unitActions.DeleteUnit, { UnitID = unitID })
-      else
-          print(string.format("Failed to find unit object for ID %s. Trying alternate lookup...", tostring(unitID)))
-          unitObj = Players[Game.GetLocalPlayer()]:GetUnits():FindID(unitID)
-          if unitObj then
-              print("Found unit using alternate lookup method")
-              -- Process unit with alternate lookup method
-              -- (Same processing code would go here)
-          else
-              print("Still could not find unit using alternate lookup")
           end
       end
   end
   
-  return unitActions
+  print("Found " .. #validMoves .. " valid move locations")
+  return validMoves
 end
+
 --CHECKING ALL ACTIONS THAT ARE POSSIBLE
 print("GetPossibleActions: Checking unit actions...")
 local unitActions = GetAllUnitActions(player)
@@ -600,34 +661,41 @@ end
   end
 
 -- CHANGE POLICIES
+-- CHANGE POLICIES
+-- CHANGE POLICIES
 print("GetPossibleActions: Checking change policies...")
-local playerID = Game.GetLocalPlayer()
-local player = Players[playerID]
-if player then
-    local playerCulture = player:GetCulture()
-    if playerCulture and CanChangePolicies() then
-        -- Simple check for whether policies can be changed
-        if (playerCulture:CivicCompletedThisTurn() or playerCulture:GetNumPolicySlotsOpen() > 0) 
-            and Game.IsAllowStrategicCommands(playerID) 
-            and not playerCulture:PolicyChangeMade() then
-                
-            -- Get current policies to know what can be changed
-            for policyType in GameInfo.Policies() do
-                if playerCulture:CanSlotPolicy(policyType.Hash, 0) then  -- Check if we can slot this policy
-                    print("GetPossibleActions: Adding policy option: " .. tostring(policyType.PolicyType))
-                    table.insert(possibleActions.ChangePolicies, {
-                        SlotIndex = 0,  -- Just using slot 0 as an example
-                        PolicyType = policyType.PolicyType
-                    })
-                end
-            end
-        end
+if playerCulture and CanChangePolicies() then
+  -- Get all policy slots
+  local numPolicySlots = playerCulture:GetNumPolicySlots()
+  local currentPolicies = {}  -- Keep track of currently slotted policies
+  
+  -- Build a list of currently slotted policies for efficient checking
+  for i = 0, numPolicySlots - 1 do
+    -- Changed this line from GetGovernmentPolicyInSlot to GetSlotPolicy
+    local policyIndex = playerCulture:GetSlotPolicy(i)
+    if policyIndex then
+      currentPolicies[policyIndex] = true
     end
+  end
+  
+  -- For each slot
+  for slotIndex = 0, numPolicySlots-1 do
+      local slotType = playerCulture:GetSlotType(slotIndex)
+      
+      -- For each policy
+      for policy in GameInfo.Policies() do
+          -- Check if the policy is not already slotted AND can be slotted in this slot
+          if not currentPolicies[policy.Hash] and playerCulture:CanSlotPolicy(policy.Hash, slotIndex) then
+            -- Add as possible action with properly structured data
+            table.insert(possibleActions.ChangePolicies, {
+                SlotIndex = slotIndex,
+                PolicyType = policy.PolicyType,
+                PolicyHash = policy.Hash
+            })
+          end
+      end
+  end
 end
-
-  print("GetPossibleActions: Action collection complete.")
-  return possibleActions;
-end -- Close GetPossibleActions function
 
 -- Helper functions for unit actions
 function GetAvailablePromotions(unit)
@@ -693,7 +761,9 @@ function RequestBuildImprovement(unit, improvementHash)
     return UnitManager.CanStartOperation(unit, UnitOperationTypes.BUILD_IMPROVEMENT, nil, {
         [UnitOperationTypes.PARAM_IMPROVEMENT_TYPE] = improvementHash
     })
-end
+  end -- End of the policies checking block
 
---to indicate successful load
-return True
+  -- Return the table of possible actions
+  return possibleActions;
+
+end  -- End of GetPossibleActions()
