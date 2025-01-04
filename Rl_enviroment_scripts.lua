@@ -77,6 +77,47 @@ function RLv1.OnTurnBegin()
     print("Getting possible actions for turn " .. tostring(m_currentGameTurn));
     local possibleActions = GetPossibleActions();
     
+    -- Print detailed action information
+    print("\n=== AVAILABLE ACTIONS FOR TURN " .. tostring(m_currentGameTurn) .. " ===");
+    
+    for actionType, actions in pairs(possibleActions) do
+        if type(actions) == "table" and #actions > 0 then
+            print("\nAction Type: " .. actionType);
+            print("Number of possible actions: " .. #actions);
+            print("Available Parameters:");
+            
+            -- Print specific details based on action type
+            for i, action in ipairs(actions) do
+                if actionType == "MoveUnit" then
+                    print(string.format("  %d. Unit ID: %s, Target Position: X=%s, Y=%s", 
+                        i, tostring(action.UnitID), tostring(action.X), tostring(action.Y)));
+                elseif actionType == "UnitRangedAttack" then
+                    print(string.format("  %d. Unit ID: %s, Target Position: X=%s, Y=%s", 
+                        i, tostring(action.UnitID), tostring(action.X), tostring(action.Y)));
+                elseif actionType == "PromoteUnit" then
+                    print(string.format("  %d. Unit ID: %s, Promotion: %s", 
+                        i, tostring(action.UnitID), tostring(action.PromotionType)));
+                elseif actionType == "ChooseCivic" or actionType == "ChooseTech" then
+                    print(string.format("  %d. %s", i, tostring(action)));
+                elseif actionType == "ChangePolicies" then
+                    print(string.format("  %d. Slot: %s, Policy: %s", 
+                        i, tostring(action.SlotIndex), tostring(action.PolicyType)));
+                else
+                    if type(action) == "table" then
+                        print(string.format("  %d. Parameters: %s", 
+                            i, table.concat(action, ", ")));
+                    else
+                        print(string.format("  %d. Parameter: %s", i, tostring(action)));
+                    end
+                end
+            end
+        elseif actions == true then
+            print("\nAction Type: " .. actionType);
+            print("Available (no parameters required)");
+        end
+    end
+    print("\n=== END OF AVAILABLE ACTIONS ===\n");
+    
     -- Count total number of possible actions
     local totalActions = 0;
     local actionTypes = {};
@@ -93,43 +134,85 @@ function RLv1.OnTurnBegin()
     local numActionsToTake = math.random(1, math.min(3, totalActions));
     print("Will take " .. tostring(numActionsToTake) .. " actions this turn");
     
-    -- Take random actions
-    for i = 1, numActionsToTake do
-        -- Select random action type that has available actions
-        local validActionTypes = {};
-        for _, actionType in ipairs(actionTypes) do
-            if type(possibleActions[actionType]) == "table" and #possibleActions[actionType] > 0 then
-                table.insert(validActionTypes, actionType);
-            end
-        end
-        
-        if #validActionTypes > 0 then
-            local randomActionType = validActionTypes[math.random(#validActionTypes)];
-            local actionsOfType = possibleActions[randomActionType];
-            
-            -- Select random action of this type
-            if #actionsOfType > 0 then
-                local randomActionParams = actionsOfType[math.random(#actionsOfType)];
-                print("Executing random action: " .. randomActionType);
-                
-                -- Ensure params is a table
-                if type(randomActionParams) ~= "table" then
-                    randomActionParams = {randomActionParams};
+-- Take random actions
+-- Take random actions
+for i = 1, numActionsToTake do
+    -- Select random action type that has available actions
+    local validActionTypes = {};
+    for _, actionType in ipairs(actionTypes) do
+        -- Only add action types that have valid parameters
+        if type(possibleActions[actionType]) == "table" then
+            if #possibleActions[actionType] > 0 then
+                -- For actions that require parameters, verify they have them
+                local hasValidParams = false;
+                if actionType == "MoveUnit" then
+                    hasValidParams = possibleActions[actionType][1].UnitID and 
+                                   possibleActions[actionType][1].X and 
+                                   possibleActions[actionType][1].Y;
+                elseif actionType == "SelectUnit" or actionType == "DeleteUnit" then
+                    hasValidParams = type(possibleActions[actionType][1].UnitID) == "number";
+                elseif actionType == "PromoteUnit" then
+                    hasValidParams = possibleActions[actionType][1].UnitID and 
+                                   possibleActions[actionType][1].PromotionType;
+                else
+                    hasValidParams = true; -- Other actions are assumed valid if they exist
                 end
                 
-                -- Execute the action
-                RLv1.ExecuteAction(randomActionType, randomActionParams);
-                
-                -- Remove the used action from possible actions to avoid repeating
-                for j = #actionsOfType, 1, -1 do
-                    if actionsOfType[j] == randomActionParams then
-                        table.remove(actionsOfType, j);
-                        break;
-                    end
+                if hasValidParams then
+                    table.insert(validActionTypes, actionType);
                 end
             end
+        elseif possibleActions[actionType] == true then
+            -- For boolean actions like EndTurn
+            table.insert(validActionTypes, actionType);
         end
     end
+    
+    if #validActionTypes > 0 then
+        local randomActionType = validActionTypes[math.random(#validActionTypes)];
+        print("Selected action type: " .. randomActionType);
+        
+        local actionParams = {};
+        if type(possibleActions[randomActionType]) == "table" then
+            local actionsOfType = possibleActions[randomActionType];
+            if #actionsOfType > 0 then
+                local randomActionIndex = math.random(#actionsOfType);
+                local randomAction = actionsOfType[randomActionIndex];
+                
+                if randomActionType == "MoveUnit" then
+                    actionParams = {randomAction.UnitID, randomAction.X, randomAction.Y};
+                elseif randomActionType == "SelectUnit" or randomActionType == "DeleteUnit" then
+                    actionParams = {randomAction.UnitID};
+                elseif randomActionType == "PromoteUnit" then
+                    actionParams = {randomAction.UnitID, randomAction.PromotionType};
+                elseif randomActionType == "ChooseCivic" or randomActionType == "ChooseTech" then
+                    actionParams = {randomAction};
+                elseif randomActionType == "ChangePolicies" then
+                    actionParams = {randomAction.SlotIndex, randomAction.PolicyType};
+                else
+                    if type(randomAction) == "table" then
+                        for k, v in pairs(randomAction) do
+                            table.insert(actionParams, v);
+                        end
+                    else
+                        actionParams = {randomAction};
+                    end
+                end
+                
+                print("Executing random action: " .. randomActionType);
+                print("With parameters:", table.concat(actionParams, ", "));
+                
+                RLv1.ExecuteAction(randomActionType, actionParams);
+                
+                -- Remove used action
+                table.remove(actionsOfType, randomActionIndex);
+            end
+        else
+            -- Handle boolean actions like EndTurn
+            RLv1.ExecuteAction(randomActionType, {});
+        end
+    end
+end
     
     -- Always end turn after taking actions
     print("Ending turn " .. tostring(m_currentGameTurn));
@@ -147,4 +230,3 @@ end
 Events.LoadGameViewStateDone.Add(OnLoadGameViewStateDone);
 
 print("RL Environment Script Registration Complete!");
-

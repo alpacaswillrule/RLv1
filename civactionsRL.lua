@@ -15,10 +15,37 @@ include( "SupportFunctions" );
 -- Action Execution
 -- ===========================================================================
 function RLv1.ExecuteAction(actionType, actionParams)
-    print("RLv1: Executing action: " .. tostring(actionType) .. " with params: ");
-    for i, param in ipairs(actionParams) do
-        print(tostring(i) .. ": " .. tostring(param));
+    print("\n=== EXECUTING ACTION ===");
+    print("Action Type: " .. tostring(actionType));
+    print("Parameters:");
+    
+    -- Format parameters based on action type
+    if actionType == "MoveUnit" then
+        print(string.format("  Unit ID: %s", tostring(actionParams[1])));
+        print(string.format("  Target Position: X=%s, Y=%s", tostring(actionParams[2]), tostring(actionParams[3])));
+    elseif actionType == "UnitRangedAttack" then
+        print(string.format("  Unit ID: %s", tostring(actionParams[1])));
+        print(string.format("  Target Position: X=%s, Y=%s", tostring(actionParams[2]), tostring(actionParams[3])));
+    elseif actionType == "PromoteUnit" then
+        print(string.format("  Unit ID: %s", tostring(actionParams[1])));
+        print(string.format("  Promotion: %s", tostring(actionParams[2])));
+    elseif actionType == "ChooseCivic" or actionType == "ChooseTech" then
+        print(string.format("  Selection: %s", tostring(actionParams[1])));
+    elseif actionType == "ChangePolicies" then
+        for slot, policy in pairs(actionParams) do
+            print(string.format("  Slot %s: %s", tostring(slot), tostring(policy)));
+        end
+    else
+        -- Generic parameter printing for other action types
+        for i, param in ipairs(actionParams) do
+            if type(param) == "table" then
+                print(string.format("  Parameter %d: %s", i, table.concat(param, ", ")));
+            else
+                print(string.format("  Parameter %d: %s", i, tostring(param)));
+            end
+        end
     end
+    print("=== END OF ACTION EXECUTION ===\n");
 
     if actionType == "EndTurn" then
         EndTurn();
@@ -317,15 +344,18 @@ function MoveUnit(unitID, plotX, plotY)
       return false
   end
 
-  if not UnitManager.CanStartOperation(unit, UnitOperationTypes.MOVE_TO, nil, {
-    [UnitOperationTypes.PARAM_X] = plotX,
-    [UnitOperationTypes.PARAM_Y] = plotY
-  }) then
-      print("Unit cannot move to specified plot.");
+  local tParameters = {};
+  tParameters[UnitOperationTypes.PARAM_X] = plotX;
+  tParameters[UnitOperationTypes.PARAM_Y] = plotY;
+
+  -- Check if unit can move to target plot
+  if UnitManager.CanStartOperation(unit, UnitOperationTypes.MOVE_TO, nil, tParameters) then
+      UnitManager.RequestOperation(unit, UnitOperationTypes.MOVE_TO, tParameters);
+      return true;
+  else
+      print("Unit cannot move to specified plot X:" .. tostring(plotX) .. " Y:" .. tostring(plotY));
       return false;
   end
-
-  return QueueUnitMovement(unit, plotX, plotY);
 end
 
 -- Selects a unit
@@ -347,64 +377,52 @@ end
 -- @param unitID The ID of the unit performing the attack.
 -- @param targetPlotX The X coordinate of the target plot.
 -- @param targetPlotY The Y coordinate of the target plot.
-function UnitRangedAttack(unitID, targetPlotX, targetPlotY)
-  local playerID = Game.GetLocalPlayer();
-  local player = Players[playerID];
-  local unit = player:GetUnits():FindID(unitID);
-  
-  if unit == nil then
-      print("Unit with ID " .. unitID .. " not found.");
-      return false;
-  end
-  
-  local targetPlot = Map.GetPlot(targetPlotX, targetPlotY);
+function UnitRangeAttack(unit, targetPlotID) 
+  local tParameters = {};
+  tParameters[UnitOperationTypes.PARAM_X] = Map.GetPlotByIndex(targetPlotID):GetX();
+  tParameters[UnitOperationTypes.PARAM_Y] = Map.GetPlotByIndex(targetPlotID):GetY();
 
-  if not targetPlot then
-      print("Invalid target plot coordinates.");
-      return false;
+  if UnitManager.CanStartOperation(unit, UnitOperationTypes.RANGE_ATTACK, nil, tParameters) then
+      UnitManager.RequestOperation(unit, UnitOperationTypes.RANGE_ATTACK, tParameters);
+      return true;
   end
-
-  return UnitRangeAttack(unit, targetPlot:GetIndex());
+  return false;
 end
 
 -- Performs a unit air attack on a target plot.
 -- @param unitID The ID of the unit performing the attack.
 -- @param targetPlotX The X coordinate of the target plot.
 -- @param targetPlotY The Y coordinate of the target plot.
-function UnitAirAttack(unitID, targetPlotX, targetPlotY)
-  local playerID = Game.GetLocalPlayer();
-  local player = Players[playerID];
-  local unit = player:GetUnits():FindID(unitID);
-    if unit == nil then
-      print("Unit with ID " .. unitID .. " not found.");
-      return false;
+function UnitAirAttack(unit, targetPlotID)
+  local tParameters = {};
+  tParameters[UnitOperationTypes.PARAM_X] = Map.GetPlotByIndex(targetPlotID):GetX();
+  tParameters[UnitOperationTypes.PARAM_Y] = Map.GetPlotByIndex(targetPlotID):GetY();
+
+  if UnitManager.CanStartOperation(unit, UnitOperationTypes.AIR_ATTACK, nil, tParameters) then
+      UnitManager.RequestOperation(unit, UnitOperationTypes.AIR_ATTACK, tParameters);
+      return true;
   end
-  local targetPlot = Map.GetPlot(targetPlotX, targetPlotY);
-    if not targetPlot then
-      print("Invalid target plot coordinates.");
-      return false;
-  end
-  return UnitAirAttack(unit, targetPlot:GetIndex());
+  return false;
 end
 
 -- Forms a unit into a corps or army.
 -- @param unitID The ID of the unit forming up.
 -- @param targetUnitID The ID of the unit to join.
 -- @param formationType "CORPS" or "ARMY".
-function FormUnitFormation(unitID, targetUnitID, formationType)
-  local playerID = Game.GetLocalPlayer();
-  local player = Players[playerID];
-  local unit = player:GetUnits():FindID(unitID);
-  local targetUnit = player:GetUnits():FindID(targetUnitID);
-    if unit == nil then
-      print("Unit with ID " .. unitID .. " not found.");
-      return false;
+-- Fix recursive call in FormUnitFormation
+function FormUnitFormation(unit, targetUnit, formationType)
+  local tParameters = {};
+  tParameters[UnitCommandTypes.PARAM_UNIT_PLAYER] = targetUnit:GetOwner();
+  tParameters[UnitCommandTypes.PARAM_UNIT_ID] = targetUnit:GetID();
+  
+  local operationType = (formationType == "CORPS") and 
+      UnitCommandTypes.FORM_CORPS or UnitCommandTypes.FORM_ARMY;
+  
+  if UnitManager.CanStartCommand(unit, operationType, tParameters) then
+      UnitManager.RequestCommand(unit, operationType, tParameters);
+      return true;
   end
-    if targetUnit == nil then
-      print("Unit with ID " .. targetUnitID .. " not found.");
-      return false;
-  end
-  return FormUnitFormation(unit, targetUnit, formationType);
+  return false;
 end
 
 -- Rebase a unit to a target plot.
@@ -531,15 +549,23 @@ end
 
 -- Deletes a unit (with confirmation).
 -- @param unitID The ID of the unit to delete.
+-- Deletes a unit (without confirmation).
+-- @param unitID The ID of the unit to delete.
 function DeleteUnit(unitID)
   local playerID = Game.GetLocalPlayer();
   local player = Players[playerID];
   local unit = player:GetUnits():FindID(unitID);
-    if unit == nil then
+  if unit == nil then
       print("Unit with ID " .. unitID .. " not found.");
       return false;
   end
-  return PromptDeleteUnit(unit);
+  
+  -- Directly request delete command instead of using prompt
+  if UnitManager.CanStartCommand(unit, UnitCommandTypes.DELETE) then
+      UnitManager.RequestCommand(unit, UnitCommandTypes.DELETE);
+      return true;
+  end
+  return false;
 end
 
 -- Upgrades a unit.
@@ -767,6 +793,118 @@ function CanChangePolicies()
         return true
     end
     return false
+end
+
+
+function QueueUnitPath(unit, targetPlotID)
+  local plot = Map.GetPlotByIndex(targetPlotID);
+  local tParameters = {};
+  tParameters[UnitOperationTypes.PARAM_X] = plot:GetX();
+  tParameters[UnitOperationTypes.PARAM_Y] = plot:GetY();
+  
+  if UnitManager.CanStartOperation(unit, UnitOperationTypes.MOVE_TO, nil, tParameters) then
+      UnitManager.RequestOperation(unit, UnitOperationTypes.MOVE_TO, tParameters);
+      return true;
+  end
+  return false;
+end
+
+
+-- Requests a unit to build an improvement
+-- @param unit The unit object
+-- @param improvementHash The hash of the improvement type
+function RequestBuildImprovement(unit, improvementHash)
+  local tParameters = {};
+  tParameters[UnitOperationTypes.PARAM_IMPROVEMENT_TYPE] = improvementHash;
+  tParameters[UnitOperationTypes.PARAM_X] = unit:GetX();
+  tParameters[UnitOperationTypes.PARAM_Y] = unit:GetY();
+  
+  if UnitManager.CanStartOperation(unit, UnitOperationTypes.BUILD_IMPROVEMENT, nil, tParameters) then
+      UnitManager.RequestOperation(unit, UnitOperationTypes.BUILD_IMPROVEMENT, tParameters);
+      return true;
+  end
+  print("Cannot build improvement at current location");
+  return false;
+end
+
+-- Requests a unit to enter formation with another unit
+-- @param unit The unit entering formation
+-- @param targetUnit The unit to form up with
+function RequestEnterFormation(unit, targetUnit)
+  local tParameters = {};
+  tParameters[UnitCommandTypes.PARAM_UNIT_PLAYER] = targetUnit:GetOwner();
+  tParameters[UnitCommandTypes.PARAM_UNIT_ID] = targetUnit:GetID();
+  
+  if UnitManager.CanStartCommand(unit, UnitCommandTypes.ENTER_FORMATION, nil, tParameters) then
+      UnitManager.RequestCommand(unit, UnitCommandTypes.ENTER_FORMATION, tParameters);
+      return true;
+  end
+  print("Cannot enter formation with target unit");
+  return false;
+end
+
+-- Requests a settler to found a city
+-- @param unit The settler unit
+function RequestFoundCity(unit)
+  if unit:GetUnitType() ~= GameInfo.Units["UNIT_SETTLER"].Index then
+      print("Unit must be a settler to found city");
+      return false;
+  end
+  
+  if UnitManager.CanStartOperation(unit, UnitOperationTypes.FOUND_CITY, nil) then
+      UnitManager.RequestOperation(unit, UnitOperationTypes.FOUND_CITY);
+      return true;
+  end
+  print("Cannot found city at current location");
+  return false;
+end
+
+-- Requests a unit promotion
+-- @param unit The unit to promote
+-- @param promotionHash The hash of the promotion type
+function RequestPromoteUnit(unit, promotionHash)
+  if not unit:GetExperience():CanPromote() then
+      print("Unit cannot be promoted");
+      return false;
+  end
+  
+  local tParameters = {};
+  tParameters[UnitCommandTypes.PARAM_PROMOTION_TYPE] = promotionHash;
+  
+  if UnitManager.CanStartCommand(unit, UnitCommandTypes.PROMOTE, nil, tParameters) then
+      UnitManager.RequestCommand(unit, UnitCommandTypes.PROMOTE, tParameters);
+      return true;
+  end
+  print("Cannot apply selected promotion to unit");
+  return false;
+end
+
+-- Requests a unit upgrade
+-- @param unit The unit to upgrade
+function RequestUnitUpgrade(unit)
+  -- Basic validation first
+  if not UnitManager.CanStartCommand(unit, UnitCommandTypes.UPGRADE, true) then
+      print("Unit cannot be upgraded");
+      return false;
+  end
+  
+  -- Get upgrade cost and check if player can afford it
+  local playerID = unit:GetOwner();
+  local player = Players[playerID];
+  local upgradeCost = unit:GetUpgradeCost();
+  
+  if player:GetTreasury():GetGoldBalance() < upgradeCost then
+      print("Cannot afford unit upgrade. Cost: " .. upgradeCost);
+      return false;
+  }
+  
+  -- Request the upgrade
+  if UnitManager.CanStartCommand(unit, UnitCommandTypes.UPGRADE) then
+      UnitManager.RequestCommand(unit, UnitCommandTypes.UPGRADE);
+      return true;
+  end
+  print("Cannot upgrade unit");
+  return false;
 end
 
 -- Add the functions from Civ6Common.lua here if you are not including the file directly.
