@@ -1,19 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Context Name="RLEnvironment">
-    <!-- Main container for entire UI element -->
-    <Container ID="RLContainer" Anchor="C,C" Offset="0,0" ConsumeMouse="1">
-        <!-- Button container with Civ VI styling -->
-        <Grid ID="RLButtonContainer" Size="200,50" Style="MainButton" Texture="Controls_ButtonControl.dds" SliceCorner="10,10" SliceSize="1,1" SliceTextureSize="24,24" ConsumeMouse="1" ZLevel="300">
+    <!-- Main container positioned to the side -->
+    <Container ID="RLContainer" Anchor="R,T" Offset="250,250" ConsumeMouse="1">
+        <!-- Button container with enhanced Civ VI styling -->
+        <Grid ID="RLButtonContainer" 
+              Size="180,40" 
+              Style="MainButton" 
+              Texture="Controls_ButtonControl.dds" 
+              SliceCorner="10,10" 
+              SliceSize="1,1" 
+              SliceTextureSize="24,24" 
+              ConsumeMouse="1" 
+              ZLevel="300">
+            
             <Button ID="ToggleRLButton" Size="parent,parent" ConsumeMouse="1">
-                <!-- Background styling -->
-                <Box Color="0,0,0,255" Size="parent,parent"/>
-                <!-- Text label with Civ VI font style -->
-                <Label ID="ToggleRLText" 
-                       Style="FontNormal18" 
-                       Color="255,255,255,255" 
-                       Anchor="C,C" 
-                       String="RL Agent: OFF"
-                       WrapWidth="160"/>
+                <!-- Gradient background for better visual appeal -->
+                <Box Color="20,27,34,240" Size="parent,parent"/>
+                
+                <!-- Text label with improved styling -->
+                <Stack Anchor="C,C" StackGrowth="Right" Padding="10">
+                    <Image ID="RLIcon" 
+                           Anchor="L,C" 
+                           Size="24,24" 
+                           Texture="Tech_ActionIcon" 
+                           Color="200,200,200,255"/>
+                    <Label ID="ToggleRLText" 
+                           Style="FontNormal16"
+                           Color="200,200,200,255"
+                           Anchor="L,C" 
+                           String="[ICON_Turn] RL Agent: OFF"
+                           WrapWidth="120"/>
+                </Stack>
+                
+                <!-- Hover effects -->
+                <AlphaAnim ID="ButtonHoverAlpha" 
+                          Anchor="C,C" 
+                          Size="parent,parent" 
+                          Begin="0.9" 
+                          End="1" 
+                          Speed="3" 
+                          Cycle="Once"/>
+                
+                <!-- Button frame -->
+                <Box ID="ButtonFrame" 
+                     Color="140,140,140,80" 
+                     Size="parent,parent" 
+                     BorderSize="1"/>
             </Button>
         </Grid>
     </Container>
