@@ -10,6 +10,28 @@ include("civactionsRL");
 
 print("RL Environment Script Loading JOHAN MAKER 2...");
 
+local m_isAgentEnabled = false; -- Default to disabled
+
+function RLv1.EnableAgent()
+    m_isAgentEnabled = true;
+    SendRLNotification("RL Agent enabled");
+end
+
+function RLv1.DisableAgent()
+    m_isAgentEnabled = false; 
+    SendRLNotification("RL Agent disabled");
+end
+
+function RLv1.ToggleAgent()
+    m_isAgentEnabled = not m_isAgentEnabled;
+    if m_isAgentEnabled then
+        SendRLNotification("RL Agent enabled");
+    else
+        SendRLNotification("RL Agent disabled");
+    end
+end
+
+-- Add at the top with other state variables
 -- Initialize state
 local m_isInitialized = false;
 local m_currentGameTurn = 0;
@@ -33,12 +55,55 @@ end
 -- Game initialization
 function OnLoadGameViewStateDone()
     print("RL OnLoadGameViewStateDone fired");
+    InitializeRL();  -- Initialize immediately when view is loaded
     Events.GameCoreEventPlaybackComplete.Add(OnGameCoreEventPlaybackComplete);
 end
 
 function OnGameCoreEventPlaybackComplete()
     print("RL OnGameCoreEventPlaybackComplete fired");
-    InitializeRL();
+    -- Check if UI needs to be reinitialized
+    if not Controls.RLButtonContainer then
+        print("RL: Button container not found, attempting to reinitialize...");
+        InitializeRL();
+    else
+        print("RL: Button container found, ensuring visibility");
+        Controls.RLButtonContainer:SetHide(false);
+        -- Force UI update
+        Controls.RLContainer:ChangeParent(ContextPtr);
+    end
+end
+
+function RLv1.ToggleAgent()
+    m_isAgentEnabled = not m_isAgentEnabled;
+    if Controls.ToggleRLText then
+        if m_isAgentEnabled then
+            Controls.ToggleRLText:SetText(Locale.ToUpper("RL Agent: ON"));
+            Controls.ToggleRLText:SetColor(UI.GetColorValue("COLOR_GREEN"));
+        else
+            Controls.ToggleRLText:SetText(Locale.ToUpper("RL Agent: OFF")); 
+            Controls.ToggleRLText:SetColor(UI.GetColorValue("COLOR_LIGHT_GRAY"));
+        end
+    end
+    
+    -- Send notification regardless of UI state
+    if m_isAgentEnabled then
+        SendRLNotification("RL Agent enabled");
+    else
+        SendRLNotification("RL Agent disabled");
+    end
+end
+
+function OnInputHandler(pInputStruct)
+    local uiMsg = pInputStruct:GetMessageType();
+    if uiMsg == KeyEvents.KeyUp then
+        -- Toggle agent with Ctrl+Shift+A
+        if pInputStruct:IsShiftDown() and pInputStruct:IsControlDown() 
+        and pInputStruct:GetKey() == Keys.A then
+            RLv1.ToggleAgent();
+            return true;
+        end
+    end
+    return false;
 end
 
 function InitializeRL()
@@ -47,6 +112,46 @@ function InitializeRL()
         print("RLv1.InitializeRL: Already initialized.");
         return; 
     end
+
+    -- Load the XML context first
+    print("RL: Loading XML context...");
+    local success = pcall(function()
+        ContextPtr:LoadNewContext("RLEnvironment");
+    end)
+    
+    if not success then
+        print("ERROR: Failed to load RLEnvironment context!");
+        return;
+    end
+    print("RL: XML context loaded successfully");
+    
+    -- Force immediate UI update and ensure context is active
+    ContextPtr:RequestRefresh();
+    ContextPtr:SetHide(false);
+    
+    -- Initialize UI elements after context is loaded
+    print("RL: Initializing UI elements...");
+    if Controls.ToggleRLButton then
+        Controls.ToggleRLText:SetText(Locale.ToUpper("RL Agent: OFF"));
+        Controls.ToggleRLButton:RegisterCallback(Mouse.eLClick, function()
+            RLv1.ToggleAgent();
+            UI.PlaySound("Play_UI_Click");
+        end);
+        Controls.ToggleRLButton:RegisterCallback(Mouse.eMouseEnter, function()
+            UI.PlaySound("Main_Menu_Mouse_Over");
+        end);
+
+        -- Show the button container
+        Controls.RLButtonContainer:SetHide(false);
+    else
+        print("WARNING: ToggleRLButton control not found! Available controls:");
+        for k,v in pairs(Controls) do
+            print("  - " .. tostring(k));
+        end
+    end
+
+    -- Set up input handler
+    ContextPtr:SetInputHandler(OnInputHandler, true);
 
     m_localPlayerID = Game.GetLocalPlayer();
     if (m_localPlayerID == -1) then
@@ -67,7 +172,7 @@ function InitializeRL()
 end
 
 function RLv1.OnTurnBegin()
-    if not m_isInitialized then return; end
+    if not m_isInitialized or not m_isAgentEnabled then return; end
     
     m_currentGameTurn = Game.GetCurrentGameTurn();
     SendRLNotification("Turn " .. tostring(m_currentGameTurn) .. " beginning");
@@ -239,11 +344,13 @@ end
 end
 
 function RLv1.OnTurnEnd()
-    if not m_isInitialized then return; end
+    if not m_isInitialized or not m_isAgentEnabled then return; end
     
     SendRLNotification("Turn " .. tostring(m_currentGameTurn) .. " completed");
     print("RL Turn " .. tostring(m_currentGameTurn) .. " End");
 end
+
+
 
 -- Register our load handler
 Events.LoadGameViewStateDone.Add(OnLoadGameViewStateDone);

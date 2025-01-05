@@ -1,8 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Context Name="RLEnvironment">
-    <InvokeInstance >
-        <ContextType>RLEnvironment</ContextType>
-        <!-- This creates an invisible container that allows our script to run -->
-        <Container ID="RLContainer" Hidden="1"/>
-    </InvokeInstance>
+    <!-- Main container for entire UI element -->
+    <Container ID="RLContainer" Anchor="C,C" Offset="0,0" ConsumeMouse="1">
+        <!-- Button container with Civ VI styling -->
+        <Grid ID="RLButtonContainer" Size="200,50" Style="MainButton" Texture="Controls_ButtonControl.dds" SliceCorner="10,10" SliceSize="1,1" SliceTextureSize="24,24" ConsumeMouse="1" ZLevel="300">
+            <Button ID="ToggleRLButton" Size="parent,parent" ConsumeMouse="1">
+                <!-- Background styling -->
+                <Box Color="0,0,0,255" Size="parent,parent"/>
+                <!-- Text label with Civ VI font style -->
+                <Label ID="ToggleRLText" 
+                       Style="FontNormal18" 
+                       Color="255,255,255,255" 
+                       Anchor="C,C" 
+                       String="RL Agent: OFF"
+                       WrapWidth="160"/>
+            </Button>
+        </Grid>
+    </Container>
 </Context>
