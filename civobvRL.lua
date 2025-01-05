@@ -238,9 +238,38 @@ function GetPossibleActions()
     UpgradeUnit = {},
     ChangeGovernment = {},
     ChangePolicies = {},
-    EstablishTradeRoute = {}
+    EstablishTradeRoute = {},
+    CityProduction = {},
+    PlaceDistrict = {}
   };
   
+
+  for row in GameInfo.Districts() do
+    if buildQueue:CanProduce(row.Hash, false, true) then
+        -- Get valid plots for this district
+        local validPlots = GetValidDistrictPlots(city, row.Hash)
+        
+        -- Only add as possible production if there are valid plots
+        if #validPlots > 0 then
+            table.insert(possibleProductions.Districts, {
+                CityID = cityID,
+                Type = "DISTRICT",
+                Hash = row.Hash,
+                Name = row.DistrictType,
+                Cost = buildQueue:GetDistrictCost(row.Index),
+                Turns = buildQueue:GetDistrictTurns(row.Index),
+                ValidPlots = validPlots -- Include valid placement locations
+            });
+            
+            -- Add placement options to PlaceDistrict actions
+            table.insert(possibleActions.PlaceDistrict, {
+                CityID = cityID,
+                DistrictHash = row.Hash,
+                ValidPlots = validPlots
+            });
+        end
+    end
+end
 
 -- In GetPossibleActions()
 print("GetPossibleActions: Checking civics...")
@@ -302,6 +331,88 @@ if currentTechID == -1 then
                 Hash = GameInfo.Technologies[tech.TechnologyType].Hash
             })
         end
+    end
+end
+-- Inside GetPossibleActions()
+print("GetPossibleActions: Checking city production options...")
+local player = Players[Game.GetLocalPlayer()];
+
+for city in player:GetCities():Members() do
+    local cityID = city:GetID();
+    local buildQueue = city:GetBuildQueue();
+    local possibleProductions = {
+        Units = {},
+        Buildings = {},
+        Districts = {},
+        Projects = {}
+    };
+
+    -- Check Units
+    for row in GameInfo.Units() do
+        if buildQueue:CanProduce(row.Hash, false, true) then
+            table.insert(possibleProductions.Units, {
+                CityID = cityID,
+                Type = "UNIT",
+                Hash = row.Hash,
+                Name = row.UnitType,
+                Cost = buildQueue:GetUnitCost(row.Index),
+                Turns = buildQueue:GetUnitTurns(row.Index)
+            });
+        end
+    end
+
+    -- Check Buildings
+    for row in GameInfo.Buildings() do
+        if buildQueue:CanProduce(row.Hash, false, true) then
+            table.insert(possibleProductions.Buildings, {
+                CityID = cityID,
+                Type = "BUILDING", 
+                Hash = row.Hash,
+                Name = row.BuildingType,
+                Cost = buildQueue:GetBuildingCost(row.Index),
+                Turns = buildQueue:GetBuildingTurns(row.Index)
+            });
+        end
+    end
+
+    -- Check Districts
+    for row in GameInfo.Districts() do
+        if buildQueue:CanProduce(row.Hash, false, true) then
+            table.insert(possibleProductions.Districts, {
+                CityID = cityID,
+                Type = "DISTRICT",
+                Hash = row.Hash,
+                Name = row.DistrictType,
+                Cost = buildQueue:GetDistrictCost(row.Index),
+                Turns = buildQueue:GetDistrictTurns(row.Index)
+            });
+        end
+    end
+
+    -- Check Projects
+    for row in GameInfo.Projects() do
+        if buildQueue:CanProduce(row.Hash, false, true) then
+            table.insert(possibleProductions.Projects, {
+                CityID = cityID,
+                Type = "PROJECT",
+                Hash = row.Hash,
+                Name = row.ProjectType,
+                Cost = buildQueue:GetProjectCost(row.Index),
+                Turns = buildQueue:GetProjectTurns(row.Index)
+            });
+        end
+    end
+
+    -- Add all production possibilities for this city
+    if #possibleProductions.Units > 0 or 
+       #possibleProductions.Buildings > 0 or 
+       #possibleProductions.Districts > 0 or 
+       #possibleProductions.Projects > 0 then
+        
+        table.insert(possibleActions.CityProduction, {
+            CityID = cityID,
+            Productions = possibleProductions
+        });
     end
 end
 

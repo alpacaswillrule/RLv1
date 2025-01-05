@@ -31,6 +31,16 @@ function RLv1.ExecuteAction(actionType, actionParams)
         print(string.format("  Promotion: %s", tostring(actionParams[2])));
     elseif actionType == "ChooseCivic" or actionType == "ChooseTech" then
         print(string.format("  Selection: %s", tostring(actionParams[1])));
+    elseif actionType == "CityProduction" then
+        local cityID = actionParams.CityID
+        local productionHash = actionParams.ProductionHash
+        StartCityProduction(cityID, productionHash)
+    elseif actionType == "PlaceDistrict" then
+        local cityID = actionParams.CityID
+        local districtHash = actionParams.DistrictHash 
+        local plotX = actionParams.PlotX
+        local plotY = actionParams.PlotY
+        PlaceDistrict(cityID, districtHash, plotX, plotY)
     elseif actionType == "ChangePolicies" then
         for slot, policy in pairs(actionParams) do
             print(string.format("  Slot %s: %s", tostring(slot), tostring(policy)));
@@ -122,6 +132,27 @@ function EndTurn(force)
     UI.RequestAction(ActionTypes.ACTION_ENDTURN, true);
   else
     UI.RequestAction(ActionTypes.ACTION_ENDTURN);
+  end
+end
+
+--sarts city production
+function StartCityProduction(cityID, productionHash, productionType)
+  local pCity = CityManager.GetCity(Game.GetLocalPlayer(), cityID)
+  if not pCity then return false end
+  
+  local tParameters = {}
+  tParameters[CityOperationTypes.PARAM_PROJECT_TYPE] = productionHash
+  tParameters[CityOperationTypes.PARAM_INSERT_MODE] = CityOperationTypes.VALUE_EXCLUSIVE
+  
+  -- Districts need placement after production is started
+  if productionType == "DISTRICT" then
+      -- Don't actually start production here - it will be started 
+      -- when placement is chosen via PlaceDistrict
+      return true
+  else
+      -- For non-district items, start production immediately
+      CityManager.RequestOperation(pCity, CityOperationTypes.BUILD, tParameters)
+      return true
   end
 end
 
@@ -648,6 +679,24 @@ function ChangePolicies(params)
   UI.PlaySound("Play_UI_Click");
   return true;
 end
+
+
+-- Add new function to place districts
+function PlaceDistrict(cityID, districtHash, plotX, plotY)
+  local pCity = CityManager.GetCity(Game.GetLocalPlayer(), cityID)
+  if not pCity then return false end
+  
+  local tParameters = {}
+  tParameters[CityOperationTypes.PARAM_X] = plotX
+  tParameters[CityOperationTypes.PARAM_Y] = plotY
+  tParameters[CityOperationTypes.PARAM_DISTRICT_TYPE] = districtHash
+  
+  if pCity:CanStartOperation(CityOperationTypes.BUILD_DISTRICT, tParameters) then
+      CityManager.RequestOperation(pCity, CityOperationTypes.BUILD_DISTRICT, tParameters)
+      return true
+  end
+  return false
+end
 -- Establishes a trade route between two cities.
 -- @param originCityID The ID of the origin city.
 -- @param destinationCityID The ID of the destination city.
@@ -814,6 +863,35 @@ function CanChangePolicies()
     return false
 end
 
+
+-- Helper function to get valid district plots for a city
+function GetValidDistrictPlots(city, districtHash)
+  local validPlots = {}
+  local plots = city:GetOwnedPlots()
+  
+  if plots then
+      for _, plot in ipairs(plots) do
+          -- Create plot purchase parameters
+          local tParameters = {}
+          tParameters[CityOperationTypes.PARAM_X] = plot:GetX()
+          tParameters[CityOperationTypes.PARAM_Y] = plot:GetY()
+          tParameters[CityOperationTypes.PARAM_DISTRICT_TYPE] = districtHash
+
+          -- Check if we can place district here
+          if city:CanStartOperation(CityOperationTypes.BUILD_DISTRICT, tParameters) then
+              table.insert(validPlots, {
+                  X = plot:GetX(),
+                  Y = plot:GetY(),
+                  Appeal = plot:GetAppeal(),
+                  TerrainType = plot:GetTerrainType(),
+                  DistrictHash = districtHash
+              })
+          end
+      end
+  end
+  
+  return validPlots
+end
 
 function QueueUnitPath(unit, targetPlotID)
   local plot = Map.GetPlotByIndex(targetPlotID);
