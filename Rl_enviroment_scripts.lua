@@ -2,14 +2,14 @@
 include("InstanceManager");
 include("SupportFunctions"); 
 include("Civ6Common");
-
+include("PopupDialog");
 RLv1 = {};
 -- Then our mod files
 include("civobvRL");
 include("civactionsRL");
 
 print("RL Environment Script Loading JOHAN MAKER 2...");
-
+local m_pendingPopupDismissals = {}
 local m_isAgentEnabled = false; -- Default to disabled
 
 function RLv1.ToggleAgent()
@@ -60,36 +60,31 @@ function OnLoadGameViewStateDone()
     Events.GameCoreEventPlaybackComplete.Add(OnGameCoreEventPlaybackComplete);
 end
 
-function OnGameCoreEventPlaybackComplete()
-        -- Add natural wonder popup handler
-        Events.NaturalWonderRevealed.Add(function(plotX:number, plotY:number, eFeature:number, isFirstToFind:boolean)
-            -- Get the popup context
-            local wonderPopupContext = ContextPtr:LookUpControl("/InGame/NaturalWonderPopup");
-            if wonderPopupContext then
-                -- Call the close function on the popup
-                local closeFunction = wonderPopupContext:LookUpControl("/InGame/NaturalWonderPopup/Close");
-                if closeFunction then
-                    closeFunction:CallHandler(Mouse.eLClick);
-                end
-            end
-        end);
-    
-        -- Also handle first contact popups
-        Events.DiplomacyMeetAnimation.Add(function(player1ID:number, player2ID:number)
-            -- Find and close the diplomacy popup if it exists
-            local diplo = ContextPtr:LookUpControl("/InGame/DiplomacyActionView");
-            if diplo and diplo.CloseFocusedState then
-                diplo.CloseFocusedState(true);
-            end
-        end);
-        Events.GameCoreEventPublishComplete.Add(function()
-            for popupType, _ in pairs(m_pendingPopupDismissals) do
-                RLv1.AutoDismissPopup(popupType);
-                m_pendingPopupDismissals[popupType] = nil;
-            end
-        end);
-    end 
 
+function OnGameCoreEventPlaybackComplete()
+    -- Add natural wonder popup handler
+    Events.NaturalWonderRevealed.Add(function(plotX, plotY, eFeature, isFirstToFind)
+        local wonderPopupContext = ContextPtr:LookUpControl("/InGame/NaturalWonderPopup")
+        if wonderPopupContext and wonderPopupContext.Close then
+            wonderPopupContext.Close()
+        end
+    end)
+
+    -- Handle diplomacy using DiplomacyStatement instead
+    Events.DiplomacyStatement.Add(function(fromPlayer, toPlayer, kVariants)
+        local diplo = ContextPtr:LookUpControl("/InGame/DiplomacyActionView")
+        if diplo and diplo.CloseDiplomacyActionView then
+            diplo.CloseDiplomacyActionView()
+        end
+    end)
+
+    Events.GameCoreEventPublishComplete.Add(function()
+        for popupType, _ in pairs(m_pendingPopupDismissals) do
+            m_PopupManager:ClosePopup(popupType)
+            m_pendingPopupDismissals[popupType] = nil
+        end
+    end)
+end
 
 
 function OnInputHandler(pInputStruct)
@@ -358,7 +353,6 @@ Events.LoadGameViewStateDone.Add(OnLoadGameViewStateDone);
 print("RL Environment Script Registration Complete!");
 
 -- POPUP MANAGER
--- Popup Manager for handling automated dismissal
 local m_PopupManager = {
     activePopups = {},
     popupQueue = {},
@@ -373,9 +367,10 @@ local POPUP_TYPES = {
     },
     DIPLOMACY = {
         context = "/InGame/DiplomacyActionView", 
-        closeFunction = "Close",
+        closeFunction = "CloseDiplomacyActionView", 
     }
 }
+
 
 function m_PopupManager:ClosePopup(popupType)
     local success = false
@@ -385,12 +380,20 @@ function m_PopupManager:ClosePopup(popupType)
         local success, error = pcall(function()
             local popupContext = ContextPtr:LookUpControl(popupInfo.context)
             if popupContext then
-                local closeFunction = popupContext[popupInfo.closeFunction]
-                if closeFunction then
-                    closeFunction()
-                    print("Successfully closed popup: " .. popupType)
-                    success = true
+                if popupType == "DIPLOMACY" then
+                    -- Special handling for diplomacy popups
+                    LuaEvents.DiplomacyActionView_ShowIngameUI();
+                    UI.PlaySound("Exit_Leader_Screen");
+                    UI.SetSoundStateValue("Game_Views", "Normal_View");
+                else
+                    -- Handle other popup types
+                    local closeFunction = popupContext[popupInfo.closeFunction]
+                    if closeFunction then
+                        closeFunction()
+                    end
                 end
+                print("Successfully closed popup: " .. popupType)
+                success = true
             end
         end)
         
@@ -399,7 +402,6 @@ function m_PopupManager:ClosePopup(popupType)
         end
     end
 
-    -- Clear from tracking regardless of success
     self.activePopups[popupType] = nil
     return success
 end
@@ -408,7 +410,6 @@ function m_PopupManager:ProcessPopupQueue()
     if self.isProcessing then return end
     
     self.isProcessing = true
-    -- Process all queued popups
     for popupType in pairs(self.popupQueue) do
         print("Processing popup dismissal: " .. popupType)
         self:ClosePopup(popupType)
@@ -416,6 +417,23 @@ function m_PopupManager:ProcessPopupQueue()
     end    
     self.isProcessing = false
 end
+
+function AddPendingPopupDismissal(popupType)
+    if not m_pendingPopupDismissals then
+        m_pendingPopupDismissals = {}
+    end
+    m_pendingPopupDismissals[popupType] = true
+end
+
+function m_PopupManager:QueuePopupDismissal(popupType)
+    if POPUP_TYPES[popupType] then
+        AddPendingPopupDismissal(popupType)
+        self.popupQueue[popupType] = true
+        self.activePopups[popupType] = true
+        print("Queued popup dismissal for: " .. popupType)
+    end
+end
+
 
 function Initialize()
     -- Set up handlers for different popup types
@@ -425,7 +443,8 @@ function Initialize()
         end
     end)
 
-    Events.DiplomacyMeetAnimation.Add(function(player1ID, player2ID)
+    -- Use DiplomacyStatement event instead of DiplomacyMeetAnimation
+    Events.DiplomacyStatement.Add(function(fromPlayer, toPlayer, kVariants)
         if m_PopupManager.activePopups["DIPLOMACY"] then
             m_PopupManager:ClosePopup("DIPLOMACY") 
         end
@@ -439,119 +458,4 @@ function Initialize()
     print("Popup Manager Initialized")
 end
 Initialize()
--- local m_PopupManager = {
---     activePopups = {},
---     popupQueue = {},
---     isProcessing = false
--- }
 
--- -- Define popup types and their close functions
--- local POPUP_TYPES = {
---     NATURAL_WONDER = {
---         context = "/InGame/NaturalWonderPopup",
---         closeFunction = "Close",
---         clearFunction = function()
---             UI.ClearTemporaryPlotVisibility("NaturalWonder")
---             UI.PlaySound("Stop_Speech_NaturalWonders")
---             Events.StopAllCameraAnimations()
---             UI.SetInterfaceMode(InterfaceModeTypes.SELECTION)
---             UILens.RestoreActiveLens()
---         end
---     },
---     DIPLOMACY = {
---         context = "/InGame/DiplomacyActionView",
---         closeFunction = "Close",
---         clearFunction = function()
---             UI.PlaySound("Stop_Leader_Music")
---             UI.PlaySound("Exit_Leader_Screen")
---             UI.SetSoundStateValue("Game_Views", "Normal_View")
---             LuaEvents.DiplomacyActionView_ShowIngameUI()
---         end
---     }
--- }
-
--- function m_PopupManager:Initialize()
---     Events.LoadGameViewStateDone.Add(function()
---         self:SetupEventHandlers()
---     end)
--- end
-
--- function m_PopupManager:SetupEventHandlers()
---     -- Handle natural wonder popups
---     Events.NaturalWonderRevealed.Add(function(plotX, plotY, eFeature, isFirstToFind)
---         self:QueuePopupDismissal("NATURAL_WONDER")
---     end)
-
---     -- Handle diplomacy popups 
---     Events.DiplomacyMeetAnimation.Add(function(player1ID, player2ID)
---         self:QueuePopupDismissal("DIPLOMACY")
---     end)
-
---     -- Process queue after game events complete
---     Events.GameCoreEventPublishComplete.Add(function()
---         self:ProcessPopupQueue()
---     end)
--- end
-
--- function m_PopupManager:QueuePopupDismissal(popupType)
---     if POPUP_TYPES[popupType] then
---         -- Add to queue if not already present
---         if not self.popupQueue[popupType] then
---             print("Queuing popup dismissal for: " .. popupType)
---             self.popupQueue[popupType] = true
---             self.activePopups[popupType] = true
---         end
---     else
---         print("Warning: Unknown popup type: " .. popupType)
---     end
--- end
-
--- function m_PopupManager:ClosePopup(popupType)
---     local success = false
---     local popupInfo = POPUP_TYPES[popupType]
-    
---     if popupInfo then
---         local success, error = pcall(function()
---             local popupContext = ContextPtr:LookUpControl(popupInfo.context)
---             if popupContext then
---                 -- Execute popup-specific cleanup
---                 if popupInfo.clearFunction then
---                     popupInfo.clearFunction()
---                 end
-                
---                 -- Call the close function
---                 if popupContext[popupInfo.closeFunction] then
---                     popupContext[popupInfo.closeFunction]()
---                     print("Successfully closed popup: " .. popupType)
---                     success = true
---                 end
---             end
---         end)
-        
---         if not success then
---             print("Failed to close popup: " .. popupType .. " Error: " .. tostring(error))
---         end
---     end
-
---     -- Clear from active popups regardless of success
---     self.activePopups[popupType] = nil
---     return success
--- end
-
--- function m_PopupManager:ProcessPopupQueue()
---     if self.isProcessing then return end
-    
---     self.isProcessing = true
-    
---     -- Process all queued popups
---     for popupType in pairs(self.popupQueue) do
---         print("Processing popup dismissal: " .. popupType)
---         self:ClosePopup(popupType)
---         self.popupQueue[popupType] = nil
---     end
-    
---     self.isProcessing = false
--- end
-
--- -- Initialize the popup manager
--- m_PopupManager:Initialize()

@@ -1,7 +1,7 @@
-﻿﻿<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Mod id="72ced5a1-93e1-4642-9edf-4edd59217e70" version="1">
   <Properties>
-    <Name>RLv1enviroment</Name>
+    <Name>RLv1enviromentv2</Name>
     <Description>This is a brief description of the mod.</Description>
     <Created>1735670210</Created>
     <Teaser>This is a brief description of the mod.</Teaser>
@@ -14,7 +14,7 @@
   </Dependencies>
 
   <InGameActions>
-    <!-- Import all files -->
+    <!-- Import the files first -->
     <ImportFiles id="RLv1_Files">
       <File>civobvRL.lua</File>
       <File>civactionsRL.lua</File>
@@ -22,7 +22,7 @@
       <File>Rl_enviroment_scripts.xml</File>
     </ImportFiles>
     
-    <!-- Add only the XML UI interface -->
+    <!-- Then add the UI interface MODINFO BREAKS IF RL_Enviroment_Text is capitalized any othjer way? -->
     <AddUserInterfaces id="RLv1_UI">
       <Properties>
         <Context>InGame</Context>
@@ -36,6 +36,6 @@
     <File>civobvRL.lua</File>
     <File>Rl_enviroment_scripts.lua</File>
     <File>Rl_enviroment_scripts.xml</File>
-    <File>Rl_Environment_Text.xml</File>
+    <File>RL_Environment_Text.xml</File>
   </Files>
 </Mod>
