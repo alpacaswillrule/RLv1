@@ -14,7 +14,7 @@
   </Dependencies>
 
   <InGameActions>
-    <!-- Import the files first -->
+    <!-- Import all files -->
     <ImportFiles id="RLv1_Files">
       <File>civobvRL.lua</File>
       <File>civactionsRL.lua</File>
@@ -22,21 +22,20 @@
       <File>Rl_enviroment_scripts.xml</File>
     </ImportFiles>
     
-    <!-- Then add the UI interface -->
+    <!-- Add only the XML UI interface -->
     <AddUserInterfaces id="RLv1_UI">
       <Properties>
         <Context>InGame</Context>
       </Properties>
-      <File>RL_enviroment_scripts.xml</File>
-      <File>Rl_enviroment_scripts.lua</File>
+      <File>Rl_enviroment_scripts.xml</File>
     </AddUserInterfaces>
   </InGameActions>
 
   <Files>
     <File>civactionsRL.lua</File>
     <File>civobvRL.lua</File>
-    <File>RL_enviroment_scripts.lua</File>
-    <File>RL_enviroment_scripts.xml</File>
-    <File>RL_Environment_Text.xml</File>
+    <File>Rl_enviroment_scripts.lua</File>
+    <File>Rl_enviroment_scripts.xml</File>
+    <File>Rl_Environment_Text.xml</File>
   </Files>
 </Mod>
