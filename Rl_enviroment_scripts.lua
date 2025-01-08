@@ -8,9 +8,9 @@ RLv1 = {};
 include("civobvRL");
 include("civactionsRL");
 
-print("RL Environment Script Loading JOHAN MAKER 2...");
 local m_pendingPopupDismissals = {}
 local m_isAgentEnabled = false; -- Default to disabled
+
 
 function RLv1.ToggleAgent()
     m_isAgentEnabled = not m_isAgentEnabled;
@@ -32,7 +32,6 @@ function RLv1.ToggleAgent()
     end
 end
 
--- Add at the top with other state variables
 -- Initialize state
 local m_isInitialized = false;
 local m_currentGameTurn = 0;
@@ -59,7 +58,6 @@ function OnLoadGameViewStateDone()
     Events.GameCoreEventPlaybackComplete.Add(OnGameCoreEventPlaybackComplete);
 end
 
-
 function OnGameCoreEventPlaybackComplete()
     -- Add natural wonder popup handler
     Events.NaturalWonderRevealed.Add(function(plotX, plotY, eFeature, isFirstToFind)
@@ -84,7 +82,6 @@ function OnGameCoreEventPlaybackComplete()
         end
     end)
 end
-
 
 function OnInputHandler(pInputStruct)
     local uiMsg = pInputStruct:GetMessageType();
@@ -137,13 +134,8 @@ function InitializeRL()
         -- Show the button container
         Controls.RLButtonContainer:SetHide(false);
     else
-        print("WARNING: ToggleRLButton control not found! Available controls:");
-        for k,v in pairs(Controls) do
-            print("  - " .. tostring(k));
-        end
-
-    m_isInitialized = true;
-end
+        print("WARNING: ToggleRLButton control not found!");
+    end
 
     -- Set up input handler
     ContextPtr:SetInputHandler(OnInputHandler, true);
@@ -177,46 +169,10 @@ function RLv1.OnTurnBegin()
     print("Getting possible actions for turn " .. tostring(m_currentGameTurn));
     local possibleActions = GetPossibleActions();
     
-    -- Print detailed action information
-    print("\n=== AVAILABLE ACTIONS FOR TURN " .. tostring(m_currentGameTurn) .. " ===");
-    
-    for actionType, actions in pairs(possibleActions) do
-        if type(actions) == "table" and #actions > 0 then
-            print("\nAction Type: " .. actionType);
-            print("Number of possible actions: " .. #actions);
-            print("Available Parameters:");
-            
-            -- Print specific details based on action type
-            for i, action in ipairs(actions) do
-                if actionType == "MoveUnit" then
-                    print(string.format("  %d. Unit ID: %s, Target Position: X=%s, Y=%s", 
-                        i, tostring(action.UnitID), tostring(action.X), tostring(action.Y)));
-                elseif actionType == "UnitRangedAttack" then
-                    print(string.format("  %d. Unit ID: %s, Target Position: X=%s, Y=%s", 
-                        i, tostring(action.UnitID), tostring(action.X), tostring(action.Y)));
-                elseif actionType == "PromoteUnit" then
-                    print(string.format("  %d. Unit ID: %s, Promotion: %s", 
-                        i, tostring(action.UnitID), tostring(action.PromotionType)));
-                elseif actionType == "ChooseCivic" or actionType == "ChooseTech" then
-                    print(string.format("  %d. %s", i, tostring(action)));
-                elseif actionType == "ChangePolicies" then
-                    print(string.format("  %d. Slot: %s, Policy: %s", 
-                        i, tostring(action.SlotIndex), tostring(action.PolicyType)));
-                else
-                    if type(action) == "table" then
-                        print(string.format("  %d. Parameters: %s", 
-                            i, table.concat(action, ", ")));
-                    else
-                        print(string.format("  %d. Parameter: %s", i, tostring(action)));
-                    end
-                end
-            end
-        elseif actions == true then
-            print("\nAction Type: " .. actionType);
-            print("Available (no parameters required)");
-        end
+    if not possibleActions then
+        print("No possible actions available")
+        return
     end
-    print("\n=== END OF AVAILABLE ACTIONS ===\n");
     
     -- Count total number of possible actions
     local totalActions = 0
@@ -240,117 +196,59 @@ function RLv1.OnTurnBegin()
         local numActionsToTake = math.random(1, math.min(3, totalActions))
         print("Will take " .. tostring(numActionsToTake) .. " actions this turn")
         
- -- Take random actions
- for i = 1, numActionsToTake do
-    -- Select random action type that has available actions
-    local validActionTypes = {};
-    for _, actionType in ipairs(actionTypes) do
-        -- Only add action types that have valid parameters
-        if type(possibleActions[actionType]) == "table" then
-            if #possibleActions[actionType] > 0 then
-                -- For actions that require parameters, verify they have them
-                local hasValidParams = false;
-                if actionType == "MoveUnit" then
-                    hasValidParams = possibleActions[actionType][1].UnitID and 
-                                   possibleActions[actionType][1].X and 
-                                   possibleActions[actionType][1].Y;
-                elseif actionType == "SelectUnit" or actionType == "DeleteUnit" then
-                    hasValidParams = type(possibleActions[actionType][1].UnitID) == "number";
-                elseif actionType == "PromoteUnit" then
-                    hasValidParams = possibleActions[actionType][1].UnitID and 
-                                   possibleActions[actionType][1].PromotionType;
-                elseif actionType == "ChangePolicies" then
-                    -- Check for the new structure
-                    hasValidParams = possibleActions[actionType][1].SlotIndex and
-                                     possibleActions[actionType][1].PolicyType and
-                                     possibleActions[actionType][1].PolicyHash
-                else
-                    hasValidParams = true; -- Other actions are assumed valid if they exist
-                end
-                
-                if hasValidParams then
+        -- Take random actions
+        for i = 1, numActionsToTake do
+            -- Select random action type that has available actions
+            local validActionTypes = {};
+            for _, actionType in ipairs(actionTypes) do
+                if type(possibleActions[actionType]) == "table" then
+                    if #possibleActions[actionType] > 0 then
+                        table.insert(validActionTypes, actionType);
+                    end
+                elseif possibleActions[actionType] == true then
                     table.insert(validActionTypes, actionType);
                 end
             end
-        elseif possibleActions[actionType] == true then
-            -- For boolean actions like EndTurn
-            table.insert(validActionTypes, actionType);
-        end
-    end
-    
-    if #validActionTypes > 0 then
-        local randomActionType = validActionTypes[math.random(#validActionTypes)];
-        print("Selected action type: " .. randomActionType);
-        
-        local actionParams = {};
-        if type(possibleActions[randomActionType]) == "table" then
-            local actionsOfType = possibleActions[randomActionType];
-            if #actionsOfType > 0 then
-                local randomActionIndex = math.random(#actionsOfType);
-                local randomAction = actionsOfType[randomActionIndex];
+            
+            if #validActionTypes > 0 then
+                local randomActionType = validActionTypes[math.random(#validActionTypes)];
+                print("Selected action type: " .. randomActionType);
                 
-                if randomActionType == "MoveUnit" then
-                    actionParams = {randomAction.UnitID, randomAction.X, randomAction.Y};
-                elseif randomActionType == "SelectUnit" or randomActionType == "DeleteUnit" then
-                    actionParams = {randomAction.UnitID};
-                elseif randomActionType == "PromoteUnit" then
-                    actionParams = {randomAction.UnitID, randomAction.PromotionType};
-                elseif randomActionType == "ChooseCivic" or randomActionType == "ChooseTech" then
-                    actionParams = {randomAction};
-                elseif randomActionType == "ChangePolicies" then
-                        -- Get a random policy change option
-                        local randomPolicyChange = actionsOfType[math.random(#actionsOfType)]
+                local actionParams = {};
+                if type(possibleActions[randomActionType]) == "table" then
+                    local actionsOfType = possibleActions[randomActionType];
+                    if #actionsOfType > 0 then
+                        local randomActionIndex = math.random(#actionsOfType);
+                        local randomAction = actionsOfType[randomActionIndex];
                         
-                        -- Pass the full policy change data structure
-                        actionParams = {
-                            SlotIndex = randomPolicyChange.SlotIndex,
-                            PolicyType = randomPolicyChange.PolicyType,
-                            PolicyHash = randomPolicyChange.PolicyHash
-                        }
-                elseif randomActionType == "CityProduction" then
-                        -- Get a random city production option
-                        local randomCityProduction = actionsOfType[math.random(#actionsOfType)]
-                        
-                        -- Select random production type from available options
-                        local productionTypes = {"Units", "Buildings", "Districts", "Projects"}
-                        local validTypes = {}
-                        
-                        -- Only include production types that have options
-                        for _, pType in ipairs(productionTypes) do
-                            if randomCityProduction.Productions[pType] and #randomCityProduction.Productions[pType] > 0 then
-                                table.insert(validTypes, pType)
-                            end
+                        if randomActionType == "MoveUnit" then
+                            actionParams = {randomAction.UnitID, randomAction.X, randomAction.Y};
+                        elseif randomActionType == "SelectUnit" or randomActionType == "DeleteUnit" then
+                            actionParams = {randomAction.UnitID};
+                        elseif randomActionType == "PromoteUnit" then
+                            actionParams = {randomAction.UnitID, randomAction.PromotionType};
+                        elseif randomActionType == "ChooseCivic" or randomActionType == "ChooseTech" then
+                            actionParams = {randomAction};
+                        elseif randomActionType == "ChangePolicies" then
+                            actionParams = randomAction;
+                        elseif randomActionType == "CityProduction" then
+                            actionParams = randomAction;
+                        else
+                            actionParams = {table.unpack(randomAction)};
                         end
                         
-                        if #validTypes > 0 then
-                            -- Select random production type and item
-                            local selectedType = validTypes[math.random(#validTypes)]
-                            local productions = randomCityProduction.Productions[selectedType]
-                            local selectedProduction = productions[math.random(#productions)]
-                            
-                            -- Create properly structured parameters
-                            actionParams = {
-                                CityID = randomCityProduction.CityID,
-                                ProductionHash = selectedProduction.Hash,
-                                ProductionType = selectedType
-                            }
-                        end
+                        -- Execute the action
+                        RLv1.ExecuteAction(randomActionType, actionParams);
+                        
+                        -- Remove used action
+                        table.remove(actionsOfType, randomActionIndex);
+                    end
+                else
+                    -- Handle boolean actions like EndTurn
+                    RLv1.ExecuteAction(randomActionType, {});
                 end
-                
-                print("Executing random action: " .. randomActionType);
-                print("With parameters:", table.concat(actionParams, ", "));
-                
-                RLv1.ExecuteAction(randomActionType, actionParams);
-                
-                -- Remove used action
-                table.remove(actionsOfType, randomActionIndex);
             end
-        else
-            -- Handle boolean actions like EndTurn
-            RLv1.ExecuteAction(randomActionType, {});
         end
-    end
-end
     end
     
     -- Always end turn after taking actions
@@ -365,13 +263,12 @@ function RLv1.OnTurnEnd()
     print("RL Turn " .. tostring(m_currentGameTurn) .. " End");
 end
 
-
 -- Register our load handler
 Events.LoadGameViewStateDone.Add(OnLoadGameViewStateDone);
 
 print("RL Environment Script Registration Complete!");
 
--- POPUP MANAGER
+-- Initialize popup manager
 local m_PopupManager = {
     activePopups = {},
     popupQueue = {},
@@ -390,7 +287,6 @@ local POPUP_TYPES = {
     }
 }
 
-
 function m_PopupManager:ClosePopup(popupType)
     local success = false
     local popupInfo = POPUP_TYPES[popupType]
@@ -400,12 +296,10 @@ function m_PopupManager:ClosePopup(popupType)
             local popupContext = ContextPtr:LookUpControl(popupInfo.context)
             if popupContext then
                 if popupType == "DIPLOMACY" then
-                    -- Special handling for diplomacy popups
                     LuaEvents.DiplomacyActionView_ShowIngameUI();
                     UI.PlaySound("Exit_Leader_Screen");
                     UI.SetSoundStateValue("Game_Views", "Normal_View");
                 else
-                    -- Handle other popup types
                     local closeFunction = popupContext[popupInfo.closeFunction]
                     if closeFunction then
                         closeFunction()
@@ -453,28 +347,24 @@ function m_PopupManager:QueuePopupDismissal(popupType)
     end
 end
 
-
 function Initialize()
-    -- Set up handlers for different popup types
     Events.NaturalWonderRevealed.Add(function(plotX, plotY, eFeature, isFirstToFind)
         if m_PopupManager.activePopups["NATURAL_WONDER"] then
             m_PopupManager:ClosePopup("NATURAL_WONDER")
         end
     end)
 
-    -- Use DiplomacyStatement event instead of DiplomacyMeetAnimation
     Events.DiplomacyStatement.Add(function(fromPlayer, toPlayer, kVariants)
         if m_PopupManager.activePopups["DIPLOMACY"] then
             m_PopupManager:ClosePopup("DIPLOMACY") 
         end
     end)
 
-    -- Process any queued popups after game events complete
     Events.GameCoreEventPublishComplete.Add(function()
         m_PopupManager:ProcessPopupQueue()
     end)
 
     print("Popup Manager Initialized")
 end
-Initialize()
 
+Initialize()

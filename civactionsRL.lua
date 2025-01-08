@@ -17,30 +17,8 @@ include( "SupportFunctions" );
 function RLv1.ExecuteAction(actionType, actionParams)
     print("\n=== EXECUTING ACTION ===");
     print("Action Type: " .. tostring(actionType));
-    print("Parameters:");
+    print("Parameters:" .. tostring(actionParams));
     
-    -- Format parameters based on action type
-    if actionType == "MoveUnit" then
-        print(string.format("  Unit ID: %s", tostring(actionParams[1])));
-        print(string.format("  Target Position: X=%s, Y=%s", tostring(actionParams[2]), tostring(actionParams[3])));
-    elseif actionType == "UnitRangedAttack" then
-        print(string.format("  Unit ID: %s", tostring(actionParams[1])));
-        print(string.format("  Target Position: X=%s, Y=%s", tostring(actionParams[2]), tostring(actionParams[3])));
-    elseif actionType == "PromoteUnit" then
-        print(string.format("  Unit ID: %s", tostring(actionParams[1])));
-        print(string.format("  Promotion: %s", tostring(actionParams[2])));
-    elseif actionType == "ChooseCivic" or actionType == "ChooseTech" then
-        print(string.format("  Selection: %s", tostring(actionParams[1])));
-        -- Generic parameter printing for other action types
-        for i, param in ipairs(actionParams) do
-            if type(param) == "table" then
-                print(string.format("  Parameter %d: %s", i, table.concat(param, ", ")));
-            else
-                print(string.format("  Parameter %d: %s", i, tostring(param)));
-            end
-        end
-    end
-    print("=== END OF ACTION EXECUTION ===\n");
 
     if actionType == "EndTurn" then
         EndTurn();
@@ -102,14 +80,16 @@ function RLv1.ExecuteAction(actionType, actionParams)
         EstablishTradeRoute(actionParams[1], actionParams[2]);
     elseif actionType == "CityProduction" then
         local cityID = actionParams.CityID
+        print("JOHAN ACTION PARAMS FOR CITY PRODUCTION")
+        print(tostring(actionParams))
         local productionHash = actionParams.ProductionHash
-        StartCityProduction(cityID, productionHash)
-    elseif actionType == "PlaceDistrict" then
-        local cityID = actionParams.CityID
-        local districtHash = actionParams.DistrictHash 
         local plotX = actionParams.PlotX
         local plotY = actionParams.PlotY
-        PlaceDistrict(cityID, districtHash, plotX, plotY)
+        if actionParams.ProductionType == 'Districts' then
+        PlaceDistrict(cityID, productionHash, plotX, plotY)
+        else
+        StartCityProduction(cityID, productionHash, productionType)
+        end
     elseif actionType == "ChangePolicies" then
         for slot, policy in pairs(actionParams) do
             print(string.format("  Slot %s: %s", tostring(slot), tostring(policy)));

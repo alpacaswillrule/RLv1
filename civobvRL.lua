@@ -341,9 +341,9 @@ for _, city in player:GetCities():Members() do
                 print("  Hash: " .. tostring(row.Hash))
                 print("  Cost: " .. tostring(buildQueue:GetUnitCost(row.Index)))
                 
-                table.insert(possibleProductions.Units, {
+                table.insert(possibleProductions.CityProduction, {
                     CityID = cityID,
-                    Type = "UNIT",
+                    ProductionType = "Units",
                     Hash = row.Hash, 
                     Name = row.UnitType,
                     Cost = buildQueue:GetUnitCost(row.Index),
@@ -364,9 +364,9 @@ for _, city in player:GetCities():Members() do
                 print("  Hash: " .. tostring(row.Hash))
                 print("  Cost: " .. tostring(cost))
                 
-                table.insert(possibleProductions.Buildings, {
+                table.insert(possibleProductions.CityProduction, {
                     CityID = cityID,
-                    Type = "BUILDING",
+                    ProductionType = "Buildings",
                     Hash = row.Hash,
                     Name = row.BuildingType,
                     Cost = cost,
@@ -387,9 +387,9 @@ for _, city in player:GetCities():Members() do
                 print("  Hash: " .. tostring(row.Hash))
                 print("  Cost: " .. tostring(cost))
                 
-                table.insert(possibleProductions.Projects, {
+                table.insert(possibleProductions.CityProduction, {
                     CityID = cityID,
-                    Type = "PROJECT",
+                    ProductionType = "Projects",
                     Hash = row.Hash,
                     Name = row.ProjectType,
                     Cost = cost,
@@ -411,9 +411,9 @@ for _, city in player:GetCities():Members() do
                 if #validPlots > 0 then
                     print("  Adding district to possibilities")
                     -- Add to possible productions
-                    table.insert(possibleProductions.Districts, {
+                    table.insert(possibleProductions.CityProduction, {
                         CityID = cityID,
-                        Type = "DISTRICT",
+                        ProductionType = "Districts",
                         Hash = row.Hash,
                         Name = row.DistrictType,
                         Cost = buildQueue:GetDistrictCost(row.Index),
