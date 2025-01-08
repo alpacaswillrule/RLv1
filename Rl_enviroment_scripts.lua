@@ -213,6 +213,12 @@ function RLv1.OnTurnBegin()
             if #validActionTypes > 0 then
                 local randomActionType = validActionTypes[math.random(#validActionTypes)];
                 print("Selected action type: " .. randomActionType);
+
+                if randomActionType == "EndTurn" then
+                    print("EndTurn selected - breaking action loop");
+                    RLv1.ExecuteAction(randomActionType, {});
+                    return; -- Exit the function entirely since we're ending the turn
+                end
                 
                 local actionParams = {};
                 if type(possibleActions[randomActionType]) == "table" then

@@ -80,14 +80,13 @@ function RLv1.ExecuteAction(actionType, actionParams)
         EstablishTradeRoute(actionParams[1], actionParams[2]);
     elseif actionType == "CityProduction" then
         local cityID = actionParams.CityID
-        print("JOHAN ACTION PARAMS FOR CITY PRODUCTION")
-        print(tostring(actionParams))
         local productionHash = actionParams.ProductionHash
-        local plotX = actionParams.PlotX
-        local plotY = actionParams.PlotY
         if actionParams.ProductionType == 'Districts' then
+          local plotX = actionParams.PlotX
+          local plotY = actionParams.PlotY
         PlaceDistrict(cityID, productionHash, plotX, plotY)
         else
+        productionType = actionParams.ProductionType
         StartCityProduction(cityID, productionHash, productionType)
         end
     elseif actionType == "ChangePolicies" then
@@ -113,7 +112,6 @@ function EndTurn(force)
   end
 end
 
---sarts city production
 function StartCityProduction(cityID, productionHash, productionType)
   local pCity = CityManager.GetCity(Game.GetLocalPlayer(), cityID)
   if not pCity then 
@@ -126,30 +124,24 @@ function StartCityProduction(cityID, productionHash, productionType)
     tostring(productionHash)))
   
   local tParameters = {}
-  tParameters[CityOperationTypes.PARAM_PROJECT_TYPE] = productionHash
   tParameters[CityOperationTypes.PARAM_INSERT_MODE] = CityOperationTypes.VALUE_EXCLUSIVE
   
-  -- Use the correct operation type based on what we're producing
-  local operationType
+  -- Set the correct parameter type based on what we're producing
   if productionType == "Units" then
-      operationType = CityOperationTypes.BUILD
+      tParameters[CityOperationTypes.PARAM_UNIT_TYPE] = productionHash
   elseif productionType == "Buildings" then
-      operationType = CityOperationTypes.CONSTRUCT
+      tParameters[CityOperationTypes.PARAM_BUILDING_TYPE] = productionHash
   elseif productionType == "Districts" then
-      -- Districts need placement after production is started
+      print("ERROR, TYPE SHOULD NOT BE DISTRICTS FOR START CITY PRODUCTION FUNCTION. check execute actions")
       return true
   elseif productionType == "Projects" then
-      operationType = CityOperationTypes.START_PROJECT
+      tParameters[CityOperationTypes.PARAM_PROJECT_TYPE] = productionHash
   end
   
-  if operationType then
-      CityManager.RequestOperation(pCity, operationType, tParameters)
-      return true
-  end
-  
-  return false
+  -- All production types use the BUILD operation
+  CityManager.RequestOperation(pCity, CityOperationTypes.BUILD, tParameters)
+  return true
 end
-
 -- Chooses a civic to research.
 -- @param civicName The name of the civic to research (e.g., "CIVIC_FOREIGN_TRADE").
 
@@ -857,35 +849,6 @@ function CanChangePolicies()
     return false
 end
 
-
--- Helper function to get valid district plots for a city
-function GetValidDistrictPlots(city, districtHash)
-  local validPlots = {}
-  local plots = city:GetOwnedPlots()
-  
-  if plots then
-      for _, plot in ipairs(plots) do
-          -- Create plot purchase parameters
-          local tParameters = {}
-          tParameters[CityOperationTypes.PARAM_X] = plot:GetX()
-          tParameters[CityOperationTypes.PARAM_Y] = plot:GetY()
-          tParameters[CityOperationTypes.PARAM_DISTRICT_TYPE] = districtHash
-
-          -- Check if we can place district here
-          if city:CanStartOperation(CityOperationTypes.BUILD_DISTRICT, tParameters) then
-              table.insert(validPlots, {
-                  X = plot:GetX(),
-                  Y = plot:GetY(),
-                  Appeal = plot:GetAppeal(),
-                  TerrainType = plot:GetTerrainType(),
-                  DistrictHash = districtHash
-              })
-          end
-      end
-  end
-  
-  return validPlots
-end
 
 function QueueUnitPath(unit, targetPlotID)
   local plot = Map.GetPlotByIndex(targetPlotID);
