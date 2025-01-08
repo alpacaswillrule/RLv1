@@ -58,30 +58,6 @@ function OnLoadGameViewStateDone()
     Events.GameCoreEventPlaybackComplete.Add(OnGameCoreEventPlaybackComplete);
 end
 
-function OnGameCoreEventPlaybackComplete()
-    -- Add natural wonder popup handler
-    Events.NaturalWonderRevealed.Add(function(plotX, plotY, eFeature, isFirstToFind)
-        local wonderPopupContext = ContextPtr:LookUpControl("/InGame/NaturalWonderPopup")
-        if wonderPopupContext and wonderPopupContext.Close then
-            wonderPopupContext.Close()
-        end
-    end)
-
-    -- Handle diplomacy using DiplomacyStatement instead
-    Events.DiplomacyStatement.Add(function(fromPlayer, toPlayer, kVariants)
-        local diplo = ContextPtr:LookUpControl("/InGame/DiplomacyActionView")
-        if diplo and diplo.CloseDiplomacyActionView then
-            diplo.CloseDiplomacyActionView()
-        end
-    end)
-
-    Events.GameCoreEventPublishComplete.Add(function()
-        for popupType, _ in pairs(m_pendingPopupDismissals) do
-            m_PopupManager:ClosePopup(popupType)
-            m_pendingPopupDismissals[popupType] = nil
-        end
-    end)
-end
 
 function OnInputHandler(pInputStruct)
     local uiMsg = pInputStruct:GetMessageType();
@@ -274,6 +250,9 @@ Events.LoadGameViewStateDone.Add(OnLoadGameViewStateDone);
 
 print("RL Environment Script Registration Complete!");
 
+print("POPUP MANAGER")
+
+
 -- Initialize popup manager
 local m_PopupManager = {
     activePopups = {},
@@ -374,3 +353,28 @@ function Initialize()
 end
 
 Initialize()
+
+function OnGameCoreEventPlaybackComplete()
+    -- Add natural wonder popup handler
+    Events.NaturalWonderRevealed.Add(function(plotX, plotY, eFeature, isFirstToFind)
+        local wonderPopupContext = ContextPtr:LookUpControl("/InGame/NaturalWonderPopup")
+        if wonderPopupContext and wonderPopupContext.Close then
+            wonderPopupContext.Close()
+        end
+    end)
+
+    -- Handle diplomacy using DiplomacyStatement instead
+    Events.DiplomacyStatement.Add(function(fromPlayer, toPlayer, kVariants)
+        local diplo = ContextPtr:LookUpControl("/InGame/DiplomacyActionView")
+        if diplo and diplo.CloseDiplomacyActionView then
+            diplo.CloseDiplomacyActionView()
+        end
+    end)
+
+    Events.GameCoreEventPublishComplete.Add(function()
+        for popupType, _ in pairs(m_pendingPopupDismissals) do
+            m_PopupManager:ClosePopup(popupType)
+            m_pendingPopupDismissals[popupType] = nil
+        end
+    end)
+end
