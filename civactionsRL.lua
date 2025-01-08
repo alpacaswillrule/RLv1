@@ -31,21 +31,6 @@ function RLv1.ExecuteAction(actionType, actionParams)
         print(string.format("  Promotion: %s", tostring(actionParams[2])));
     elseif actionType == "ChooseCivic" or actionType == "ChooseTech" then
         print(string.format("  Selection: %s", tostring(actionParams[1])));
-    elseif actionType == "CityProduction" then
-        local cityID = actionParams.CityID
-        local productionHash = actionParams.ProductionHash
-        StartCityProduction(cityID, productionHash)
-    elseif actionType == "PlaceDistrict" then
-        local cityID = actionParams.CityID
-        local districtHash = actionParams.DistrictHash 
-        local plotX = actionParams.PlotX
-        local plotY = actionParams.PlotY
-        PlaceDistrict(cityID, districtHash, plotX, plotY)
-    elseif actionType == "ChangePolicies" then
-        for slot, policy in pairs(actionParams) do
-            print(string.format("  Slot %s: %s", tostring(slot), tostring(policy)));
-        end
-    else
         -- Generic parameter printing for other action types
         for i, param in ipairs(actionParams) do
             if type(param) == "table" then
@@ -115,12 +100,25 @@ function RLv1.ExecuteAction(actionType, actionParams)
         ChangePolicies(actionParams);
     elseif actionType == "EstablishTradeRoute" then
         EstablishTradeRoute(actionParams[1], actionParams[2]);
+    elseif actionType == "CityProduction" then
+        local cityID = actionParams.CityID
+        local productionHash = actionParams.ProductionHash
+        StartCityProduction(cityID, productionHash)
+    elseif actionType == "PlaceDistrict" then
+        local cityID = actionParams.CityID
+        local districtHash = actionParams.DistrictHash 
+        local plotX = actionParams.PlotX
+        local plotY = actionParams.PlotY
+        PlaceDistrict(cityID, districtHash, plotX, plotY)
+    elseif actionType == "ChangePolicies" then
+        for slot, policy in pairs(actionParams) do
+            print(string.format("  Slot %s: %s", tostring(slot), tostring(policy)));
+        end
     else
         print("RLv1: Unknown action type: " .. tostring(actionType));
         return false;
     end
 
-    m_lastAction = actionType;
     return true;
 end
 
@@ -138,22 +136,38 @@ end
 --sarts city production
 function StartCityProduction(cityID, productionHash, productionType)
   local pCity = CityManager.GetCity(Game.GetLocalPlayer(), cityID)
-  if not pCity then return false end
+  if not pCity then 
+      print("City not found")
+      return false 
+  end
+  print(string.format("Starting production in city %s: Type=%s, Hash=%s", 
+    tostring(cityID),
+    tostring(productionType),
+    tostring(productionHash)))
   
   local tParameters = {}
   tParameters[CityOperationTypes.PARAM_PROJECT_TYPE] = productionHash
   tParameters[CityOperationTypes.PARAM_INSERT_MODE] = CityOperationTypes.VALUE_EXCLUSIVE
   
-  -- Districts need placement after production is started
-  if productionType == "DISTRICT" then
-      -- Don't actually start production here - it will be started 
-      -- when placement is chosen via PlaceDistrict
+  -- Use the correct operation type based on what we're producing
+  local operationType
+  if productionType == "Units" then
+      operationType = CityOperationTypes.BUILD
+  elseif productionType == "Buildings" then
+      operationType = CityOperationTypes.CONSTRUCT
+  elseif productionType == "Districts" then
+      -- Districts need placement after production is started
       return true
-  else
-      -- For non-district items, start production immediately
-      CityManager.RequestOperation(pCity, CityOperationTypes.BUILD, tParameters)
+  elseif productionType == "Projects" then
+      operationType = CityOperationTypes.START_PROJECT
+  end
+  
+  if operationType then
+      CityManager.RequestOperation(pCity, operationType, tParameters)
       return true
   end
+  
+  return false
 end
 
 -- Chooses a civic to research.

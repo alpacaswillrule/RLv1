@@ -38,7 +38,6 @@ local m_isInitialized = false;
 local m_currentGameTurn = 0;
 local m_localPlayerID = -1;
 local m_currentState = nil;
-local m_lastAction = nil;
 local m_lastReward = 0;
 
 -- Helper function to send notifications
@@ -308,14 +307,34 @@ function RLv1.OnTurnBegin()
                             PolicyType = randomPolicyChange.PolicyType,
                             PolicyHash = randomPolicyChange.PolicyHash
                         }
-                else
-                    if type(randomAction) == "table" then
-                        for k, v in pairs(randomAction) do
-                            table.insert(actionParams, v);
+                elseif randomActionType == "CityProduction" then
+                        -- Get a random city production option
+                        local randomCityProduction = actionsOfType[math.random(#actionsOfType)]
+                        
+                        -- Select random production type from available options
+                        local productionTypes = {"Units", "Buildings", "Districts", "Projects"}
+                        local validTypes = {}
+                        
+                        -- Only include production types that have options
+                        for _, pType in ipairs(productionTypes) do
+                            if randomCityProduction.Productions[pType] and #randomCityProduction.Productions[pType] > 0 then
+                                table.insert(validTypes, pType)
+                            end
                         end
-                    else
-                        actionParams = {randomAction};
-                    end
+                        
+                        if #validTypes > 0 then
+                            -- Select random production type and item
+                            local selectedType = validTypes[math.random(#validTypes)]
+                            local productions = randomCityProduction.Productions[selectedType]
+                            local selectedProduction = productions[math.random(#productions)]
+                            
+                            -- Create properly structured parameters
+                            actionParams = {
+                                CityID = randomCityProduction.CityID,
+                                ProductionHash = selectedProduction.Hash,
+                                ProductionType = selectedType
+                            }
+                        end
                 end
                 
                 print("Executing random action: " .. randomActionType);

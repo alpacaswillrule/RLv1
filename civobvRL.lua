@@ -262,7 +262,7 @@ if currentCivicID == -1 then
     for civic in GameInfo.Civics() do
         local civicIndex = civic.Index
         -- Debug print civic info
-        print("Checking civic: " .. civic.CivicType .. " Index: " .. tostring(civicIndex))
+        --print("Checking civic: " .. civic.CivicType .. " Index: " .. tostring(civicIndex))
         
         -- Check if the civic can be researched
         if playerCulture:CanProgress(civicIndex) then
@@ -315,109 +315,149 @@ print("GetPossibleActions: Checking city production options...")
 
 local player = Players[Game.GetLocalPlayer()];
 
-
--- UNITS
-for row in GameInfo.Units() do
-    local city = player:GetCities():FindID(cityID)
-    if city then
-        local buildQueue = city:GetBuildQueue()
-        if buildQueue then
-            if buildQueue:CanProduce(row.Hash, false, true) then
+print("\n=== BEGINNING CITY PRODUCTION ANALYSIS ===")
+-- Process each city
+for _, city in player:GetCities():Members() do
+    local cityID = city:GetID()
+    print("\nProcessing City ID: " .. tostring(cityID))
+    local buildQueue = city:GetBuildQueue()
+    
+    -- Initialize production possibilities for this city
+    local possibleProductions = {
+        Units = {},
+        Buildings = {},
+        Districts = {},
+        Projects = {}
+    }
+    
+    if buildQueue then
+        print("Build queue obtained successfully")
+        
+        -- Check Units
+        print("\nChecking Available Units:")
+        for row in GameInfo.Units() do
+            if row and row.Hash and buildQueue:CanProduce(row.Hash, false, true) then
+                print("- Can produce unit: " .. tostring(row.UnitType))
+                print("  Hash: " .. tostring(row.Hash))
+                print("  Cost: " .. tostring(buildQueue:GetUnitCost(row.Index)))
+                
                 table.insert(possibleProductions.Units, {
                     CityID = cityID,
                     Type = "UNIT",
                     Hash = row.Hash, 
                     Name = row.UnitType,
                     Cost = buildQueue:GetUnitCost(row.Index),
-                    Turns = buildQueue:GetUnitTurns(row.Index)
+                    Turns = buildQueue:GetTurnsLeft(row.UnitType)
                 })
             end
-        else
-            print("BuildQueue is nil for city: " .. cityID)
         end
-    else
-        print("Could not find city with ID: " .. cityID) 
-    end
-end
--- Check Buildings
-for _, city in player:GetCities():Members() do
-    local cityID = city:GetID()
-    local buildQueue = city:GetBuildQueue()
-    
-    if buildQueue then
-        for row in GameInfo.Buildings() do
-            if row and row.Hash then -- Check row exists and has Hash
-                if buildQueue:CanProduce(row.Hash, false, true) then
-                    local cost = 0
-                    local turns = 0
-                    -- Safely get cost and turns
-                    if row.Index then
-                        cost = buildQueue:GetBuildingCost(row.Index)
-                        turns = buildQueue:GetBuildingTurns(row.Index)
-                    end
-                    
-                    table.insert(possibleProductions.Buildings, {
-                        CityID = cityID,
-                        Type = "BUILDING",
-                        Hash = row.Hash,
-                        Name = row.BuildingType,
-                        Cost = cost,
-                        Turns = turns
-                    })
-                end
-            end
-        end
-    else
-        print("Could not get build queue for city: " .. tostring(cityID))
-    end
-end
-
--- Check Projects
-for _, city in player:GetCities():Members() do
-    local cityID = city:GetID()
-    local buildQueue = city:GetBuildQueue()
-    
-    if buildQueue then
-        for row in GameInfo.Projects() do
-            if row and row.Hash then -- Check row exists and has Hash
-                if buildQueue:CanProduce(row.Hash, false, true) then
-                    local cost = 0
-                    local turns = 0
-                    -- Safely get cost and turns
-                    if row.Index then
-                        cost = buildQueue:GetProjectCost(row.Index)
-                        turns = buildQueue:GetProjectTurns(row.Index)
-                    end
-                    
-                    table.insert(possibleProductions.Projects, {
-                        CityID = cityID,
-                        Type = "PROJECT",
-                        Hash = row.Hash,
-                        Name = row.ProjectType,
-                        Cost = cost,
-                        Turns = turns
-                    })
-                end
-            end
-        end
-    else
-        print("Could not get build queue for city: " .. tostring(cityID))
-    end
-end
-
-
-    -- Add all production possibilities for this city
-    if #possibleProductions.Units > 0 or 
-       #possibleProductions.Buildings > 0 or 
-       #possibleProductions.Districts > 0 or 
-       #possibleProductions.Projects > 0 then
+        print("Total producible units: " .. #possibleProductions.Units)
         
-        table.insert(possibleActions.CityProduction, {
-            CityID = cityID,
-            Productions = possibleProductions
-        });
+        -- Check Buildings
+        print("\nChecking Available Buildings:")
+        for row in GameInfo.Buildings() do
+            if row and row.Hash and buildQueue:CanProduce(row.Hash, false, true) then
+                local cost = row.Index and buildQueue:GetBuildingCost(row.Index) or 0
+                local turns = row.Index and buildQueue:GetTurnsLeft(row.BuildingType) or 0
+                
+                print("- Can produce building: " .. tostring(row.BuildingType))
+                print("  Hash: " .. tostring(row.Hash))
+                print("  Cost: " .. tostring(cost))
+                
+                table.insert(possibleProductions.Buildings, {
+                    CityID = cityID,
+                    Type = "BUILDING",
+                    Hash = row.Hash,
+                    Name = row.BuildingType,
+                    Cost = cost,
+                    Turns = turns
+                })
+            end
+        end
+        print("Total producible buildings: " .. #possibleProductions.Buildings)
+        
+        -- Check Projects
+        print("\nChecking Available Projects:")
+        for row in GameInfo.Projects() do
+            if row and row.Hash and buildQueue:CanProduce(row.Hash, false, true) then
+                local cost = row.Index and buildQueue:GetProjectCost(row.Index) or 0
+                local turns = row.Index and buildQueue:GetTurnsLeft(row.ProjectType) or 0
+                
+                print("- Can produce project: " .. tostring(row.ProjectType))
+                print("  Hash: " .. tostring(row.Hash))
+                print("  Cost: " .. tostring(cost))
+                
+                table.insert(possibleProductions.Projects, {
+                    CityID = cityID,
+                    Type = "PROJECT",
+                    Hash = row.Hash,
+                    Name = row.ProjectType,
+                    Cost = cost,
+                    Turns = turns
+                })
+            end
+        end
+        print("Total producible projects: " .. #possibleProductions.Projects)
+        
+        -- Check Districts
+        print("\nChecking Available Districts:")
+        for row in GameInfo.Districts() do
+            if row and row.Hash and buildQueue:CanProduce(row.Hash, false, true) then
+                print("- Checking district: " .. tostring(row.DistrictType))
+                local validPlots = GetValidDistrictPlots(city, row.Hash)
+                print("  Number of valid plots: " .. #validPlots)
+                
+                -- Only add if there are valid plots for placement
+                if #validPlots > 0 then
+                    print("  Adding district to possibilities")
+                    -- Add to possible productions
+                    table.insert(possibleProductions.Districts, {
+                        CityID = cityID,
+                        Type = "DISTRICT",
+                        Hash = row.Hash,
+                        Name = row.DistrictType,
+                        Cost = buildQueue:GetDistrictCost(row.Index),
+                        Turns = buildQueue:GetTurnsLeft(row.DistrictType),
+                        ValidPlots = validPlots
+                    })
+                    
+                    -- Add to district placement actions
+                    table.insert(possibleActions.PlaceDistrict, {
+                        CityID = cityID,
+                        DistrictHash = row.Hash,
+                        ValidPlots = validPlots
+                    })
+                else
+                    print("  No valid plots available for this district")
+                end
+            end
+        end
+        print("Total producible districts: " .. #possibleProductions.Districts)
+        
+        -- Add all production possibilities for this city if any exist
+        if #possibleProductions.Units > 0 or 
+           #possibleProductions.Buildings > 0 or 
+           #possibleProductions.Districts > 0 or 
+           #possibleProductions.Projects > 0 then
+            
+            print("\nAdding production possibilities to city:")
+            print("Units: " .. #possibleProductions.Units)
+            print("Buildings: " .. #possibleProductions.Buildings)
+            print("Districts: " .. #possibleProductions.Districts)
+            print("Projects: " .. #possibleProductions.Projects)
+            
+            table.insert(possibleActions.CityProduction, {
+                CityID = cityID,
+                Productions = possibleProductions
+            })
+        else
+            print("\nNo production possibilities found for this city")
+        end
+    else
+        print("ERROR: Could not get build queue for city: " .. tostring(cityID))
     end
 end
+print("\n=== END OF CITY PRODUCTION ANALYSIS ===")
 
   print("GetPossibleActions: Checking city ranged attacks...")
     -- CITY RANGED ATTACK
@@ -810,30 +850,38 @@ if playerCulture and CanChangePolicies() then
   end
 end
 
--- Add this helper function if you don't have it already
 function GetValidDistrictPlots(city, districtHash)
     local validPlots = {}
-    local plots = city:GetOwnedPlots()
-    
-    if plots then
-        for _, plot in ipairs(plots) do
-            local tParameters = {}
-            tParameters[CityOperationTypes.PARAM_X] = plot:GetX()
-            tParameters[CityOperationTypes.PARAM_Y] = plot:GetY()
-            tParameters[CityOperationTypes.PARAM_DISTRICT_TYPE] = districtHash
+    local cityX, cityY = city:GetX(), city:GetY()
+    local cityOwner = city:GetOwner()
 
-            if city:CanStartOperation(CityOperationTypes.BUILD_DISTRICT, tParameters) then
-                table.insert(validPlots, {
-                    X = plot:GetX(),
-                    Y = plot:GetY(),
-                    Appeal = plot:GetAppeal(),
-                    TerrainType = plot:GetTerrainType(),
-                    DistrictHash = districtHash
-                })
+    -- Iterate through plots within a reasonable range (e.g., 3 tiles)
+    for x = cityX - 3, cityX + 3 do
+        for y = cityY - 3, cityY + 3 do
+            local plot = Map.GetPlot(x, y)
+            if plot then
+                -- Check if the plot is owned by the same player as the city
+                if plot:GetOwner() == cityOwner then
+                  
+                    local tParameters = {}
+                    tParameters[CityOperationTypes.PARAM_X] = plot:GetX()
+                    tParameters[CityOperationTypes.PARAM_Y] = plot:GetY()
+                    tParameters[CityOperationTypes.PARAM_DISTRICT_TYPE] = districtHash
+
+                    if city:CanStartOperation(CityOperationTypes.BUILD_DISTRICT, tParameters) then
+                        table.insert(validPlots, {
+                            X = plot:GetX(),
+                            Y = plot:GetY(),
+                            Appeal = plot:GetAppeal(),
+                            TerrainType = plot:GetTerrainType(),
+                            DistrictHash = districtHash
+                        })
+                    end
+                end
             end
         end
     end
-    
+
     return validPlots
 end
 
@@ -907,3 +955,4 @@ end  -- Only one end needed for the function block
   return possibleActions;
 
   -- End of GetPossibleActions()
+end
