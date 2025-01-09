@@ -73,7 +73,7 @@ function RLv1.ExecuteAction(actionType, actionParams)
     elseif actionType == "UpgradeUnit" then
         UpgradeUnit(actionParams[1]);
     elseif actionType == "ChangeGovernment" then
-        ChangeGovernment(actionParams[1]);
+        ChangeGovernment(actionParams);
     elseif actionType == "ChangePolicies" then
         ChangePolicies(actionParams);
     elseif actionType == "EstablishTradeRoute" then
@@ -610,13 +610,12 @@ function UpgradeUnit(unitID)
 end
 
 -- Changes the current government.
--- @param governmentName The name of the government to adopt (e.g., "GOVERNMENT_AUTOCRACY").
-function ChangeGovernment(governmentName)
+-- @param government Hash of the govt you want
+function ChangeGovernment(governmentHash)
   local playerID = Game.GetLocalPlayer();
   local player = Players[playerID];
   local playerCulture = player:GetCulture();
 
-  local governmentHash = GameInfo.Governments[governmentName].Hash;
 
   if not playerCulture:IsGovernmentUnlocked(governmentHash) then
       print("Government " .. governmentName .. " is not unlocked.");
@@ -667,22 +666,27 @@ function ChangePolicies(params)
 end
 
 
--- Add new function to place districts
 function PlaceDistrict(cityID, districtHash, plotX, plotY)
   local pCity = CityManager.GetCity(Game.GetLocalPlayer(), cityID)
   if not pCity then return false end
   
+  -- First check if we can actually produce this district
+  local buildQueue = pCity:GetBuildQueue()
+  if not buildQueue:CanProduce(districtHash, true) then
+    return false
+  end
+
+  -- Set up parameters for district placement
   local tParameters = {}
   tParameters[CityOperationTypes.PARAM_X] = plotX
   tParameters[CityOperationTypes.PARAM_Y] = plotY
   tParameters[CityOperationTypes.PARAM_DISTRICT_TYPE] = districtHash
   
-  if pCity:CanStartOperation(CityOperationTypes.BUILD_DISTRICT, tParameters) then
-      CityManager.RequestOperation(pCity, CityOperationTypes.BUILD_DISTRICT, tParameters)
-      return true
-  end
-  return false
+  -- Request the build operation
+  CityManager.RequestOperation(pCity, CityOperationTypes.BUILD_DISTRICT, tParameters)
+  return true
 end
+
 -- Establishes a trade route between two cities.
 -- @param originCityID The ID of the origin city.
 -- @param destinationCityID The ID of the destination city.

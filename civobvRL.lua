@@ -800,7 +800,7 @@ end
     for government in GameInfo.Governments() do
       if playerCulture:IsGovernmentUnlocked(government.Hash) then
 	    print("GetPossibleActions: Adding change government to: " .. tostring(government.GovernmentType))
-        table.insert(possibleActions.ChangeGovernment, government.GovernmentType);
+        table.insert(possibleActions.ChangeGovernment, government.Hash);
       end
     end
   end
