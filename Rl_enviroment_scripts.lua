@@ -54,7 +54,6 @@ end
 function OnLoadGameViewStateDone()
     print("RL OnLoadGameViewStateDone fired");
     InitializeRL();  -- Initialize immediately when view is loaded
-    Events.GameCoreEventPlaybackComplete.Add(OnGameCoreEventPlaybackComplete);
 end
 
 
@@ -246,27 +245,27 @@ function RLv1.OnTurnEnd()
     print("RL Turn " .. tostring(m_currentGameTurn) .. " End");
 end
 
--- Register our load handler
+-- -- Register our load handler
 Events.LoadGameViewStateDone.Add(OnLoadGameViewStateDone);
+-- Events.GameCoreEventPlaybackComplete.Add(OnGameCoreEventPlaybackComplete);
+-- print("RL Environment Script Registration Complete!");
 
-print("RL Environment Script Registration Complete!");
+-- print("POPUP MANAGER")
 
-print("POPUP MANAGER")
+-- function CloseAllPopups()
+-- 	LuaEvents.LaunchBar_CloseGreatPeoplePopup();
+-- 	LuaEvents.LaunchBar_CloseGreatWorksOverview();
+-- 	LuaEvents.LaunchBar_CloseReligionPanel();
+-- 	if isGovernmentOpen then
+-- 		LuaEvents.LaunchBar_CloseGovernmentPanel();
+-- 	end
+-- 	LuaEvents.LaunchBar_CloseTechTree();
+-- 	LuaEvents.LaunchBar_CloseCivicsTree();
+-- end
 
-function CloseAllPopups()
-	LuaEvents.LaunchBar_CloseGreatPeoplePopup();
-	LuaEvents.LaunchBar_CloseGreatWorksOverview();
-	LuaEvents.LaunchBar_CloseReligionPanel();
-	if isGovernmentOpen then
-		LuaEvents.LaunchBar_CloseGovernmentPanel();
-	end
-	LuaEvents.LaunchBar_CloseTechTree();
-	LuaEvents.LaunchBar_CloseCivicsTree();
-end
-
-function OnGameCoreEventPlaybackComplete()
-    if m_isAgentEnabled == true then
-        print("attempting to close popups");
-    CloseAllPopups();
-    end
-end
+-- function OnGameCoreEventPlaybackComplete()
+--     if m_isAgentEnabled == true then
+--         print("attempting to close popups");
+--     CloseAllPopups();
+--     end
+-- end

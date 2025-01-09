@@ -279,7 +279,7 @@ function GetPossibleActions()
     EnterFormation = {},
     FoundCity = {},
     PromoteUnit = {},
-    DeleteUnit = {},
+    --DeleteUnit = {},
     UpgradeUnit = {},
     ChangeGovernment = {},
     ChangePolicies = {},
@@ -747,7 +747,7 @@ function GetAllUnitActions(player)
       end
 
       -- Add delete action
-      table.insert(unitActions.DeleteUnit, { UnitID = pUnit:GetID() })
+      --table.insert(unitActions.DeleteUnit, { UnitID = pUnit:GetID() }) --TODO can reinsert delete
   end
 
   return unitActions
@@ -790,7 +790,7 @@ local unitActions = GetAllUnitActions(player)
 for actionType, actions in pairs(unitActions) do
     if #actions > 0 then
         possibleActions[actionType] = actions
-        print("GetPossibleActions: Found " .. #actions .. " possible " .. actionType .. " actions")
+        -- print("GetPossibleActions: Found " .. #actions .. " possible " .. actionType .. " actions")
     end
 end
 

@@ -627,9 +627,7 @@ function ChangeGovernment(governmentHash)
       return false;
   end
 
-  local parameters = {};
-  parameters[PlayerOperations.PARAM_GOVERNMENT_TYPE] = governmentHash;
-  UI.RequestPlayerOperation(playerID, PlayerOperations.CHANGE_GOVERNMENT, parameters);
+  playerCulture:RequestChangeGovernment(governmentHash);
   return true
 end
 
