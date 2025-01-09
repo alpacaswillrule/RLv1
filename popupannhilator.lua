@@ -189,10 +189,23 @@ function Close()
 	end
 end
 
+
+function CloseAllPopups()
+	LuaEvents.LaunchBar_CloseGreatPeoplePopup();
+	LuaEvents.LaunchBar_CloseGreatWorksOverview();
+	LuaEvents.LaunchBar_CloseReligionPanel();
+	if isGovernmentOpen then
+		LuaEvents.LaunchBar_CloseGovernmentPanel();
+	end
+	LuaEvents.LaunchBar_CloseTechTree();
+	LuaEvents.LaunchBar_CloseCivicsTree();
+end
+
 -- ===========================================================================
 function OnGameCoreEventPlaybackComplete()
     if m_isAgentEnabled == true then
         print("attempting to close popups");
+		CloseAllPopups()
 		-- Use a local variable to signal that popups should be closed.
 		g_closePopups = true;
     end
@@ -201,6 +214,7 @@ end
 -- ===========================================================================
 -- UI Event Handler: Called when the game core has finished an event batch.
 -- ===========================================================================
+
 
 -- ===========================================================================
 -- Timer to close popups after a delay
