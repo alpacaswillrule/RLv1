@@ -13,6 +13,8 @@ local m_isAgentEnabled = false; -- Default to disabled
 
 function RLv1.ToggleAgent()
     m_isAgentEnabled = not m_isAgentEnabled;
+    -- Fire event for popup annihilator
+    LuaEvents.RLAgentToggled(m_isAgentEnabled);
     if Controls.ToggleRLText then
         if m_isAgentEnabled then
             Controls.ToggleRLText:SetText(Locale.ToUpper("RL Agent: ON"));

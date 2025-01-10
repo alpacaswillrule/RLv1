@@ -19,6 +19,7 @@
       <File>civobvRL.lua</File>
       <File>civactionsRL.lua</File>
       <File>popupannhilator.lua</File>
+      <File>PopupManager.lua</File>
       <File>Rl_enviroment_scripts.lua</File>
       <File>Rl_enviroment_scripts.xml</File>
       <File>popupannhilator.xml</File>
@@ -38,6 +39,7 @@
     <File>civactionsRL.lua</File>
     <File>civobvRL.lua</File>
     <File>popupannhilator.lua</File>
+    <File>PopupManager.lua</File>
     <File>Rl_enviroment_scripts.lua</File>
     <File>Rl_enviroment_scripts.xml</File>
     <File>RL_Environment_Text.xml</File>

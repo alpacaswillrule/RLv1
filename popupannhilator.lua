@@ -12,26 +12,8 @@ local m_NaturalDisasterPopupControl = nil; -- Cache for the Natural Disaster Pop
 local g_closePopups = false;
 
 -- ===========================================================================
--- Function to unlock the PopupManager for the NaturalDisasterPopup
+-- WE ALSO OVERWRITE THE CIV6 UI POPUPMANAGER, BC GOTTA STOP LOCKS FROM OCCURING
 -- ===========================================================================
-function UnlockNaturalDisasterPopup()
-    print("UnlockNaturalDisasterPopup: Attempting to unlock NaturalDisasterPopup");
-    local popupManager = UI.GetPopupManager();
-    if popupManager then
-        if popupManager:IsLocked(ContextPtr) then
-            if m_NaturalDisasterPopupControl then
-                popupManager:Unlock(m_NaturalDisasterPopupControl);
-                print("UnlockNaturalDisasterPopup: PopupManager unlocked for NaturalDisasterPopup");
-            else
-                print("UnlockNaturalDisasterPopup: m_NaturalDisasterPopupControl is nil, cannot unlock.");
-            end
-        else
-            print("UnlockNaturalDisasterPopup: PopupManager is not locked.");
-        end
-    else
-        print("UnlockNaturalDisasterPopup: PopupManager not found.");
-    end
-end
 
 -- ===========================================================================
 -- Function to close the Natural Disaster Popup directly
@@ -45,8 +27,6 @@ function CloseNaturalDisasterPopup()
         else
             print("CloseNaturalDisasterPopup: NaturalDisasterPopup found but already hidden.");
         end
-    else
-        print("CloseNaturalDisasterPopup: NaturalDisasterPopup control not found or not initialized.");
     end
 end
 
@@ -68,6 +48,8 @@ function CloseAllPopups()
     LuaEvents.LaunchBar_CloseTechTree();
     LuaEvents.LaunchBar_CloseCivicsTree();
     CloseNaturalDisasterPopup();
+    BulkHide(false, "CloseAllPopups_Restore");
+
 end
 
 -- ===========================================================================
@@ -107,41 +89,10 @@ function BulkHide(isHide: boolean, debugWho: string)
 
     -- Handle NaturalDisasterPopup specifically
     if isHide and m_bulkHideTracker == 1 then
-        print("BulkHide: Attempting to unlock and hide NaturalDisasterPopup as part of bulk hide.");
-        UnlockNaturalDisasterPopup();
         CloseNaturalDisasterPopup();
     end
 end
 
--- ===========================================================================
--- Timer to close popups after a delay
--- ===========================================================================
-function ClosePopupsWithDelay()
-    if g_closePopups then
-        print("ClosePopupsWithDelay: Closing popups after delay");
-        CloseAllPopups();
-        g_closePopups = false; -- Reset the flag
-    end
-end
-
--- ===========================================================================
--- Game Event: Natural Disaster Occurs (or a similar event that triggers the popup)
--- ===========================================================================
-function OnNaturalDisasterOccurred(params)
-    print("OnNaturalDisasterOccurred: Natural disaster occurred!");
-    m_isAgentEnabled = true; -- Assuming this is where your agent becomes active
-
-    -- Get the NaturalDisasterPopup control
-    m_NaturalDisasterPopupControl = ContextPtr:LookUpControl("/InGame/NaturalDisasterPopup");
-
-    if m_NaturalDisasterPopupControl then
-        print("OnNaturalDisasterOccurred: NaturalDisasterPopup control found.");
-    else
-        print("OnNaturalDisasterOccurred: NaturalDisasterPopup control NOT found.");
-    end
-    
-    -- Other logic to handle the natural disaster event...
-end
 
 -- ===========================================================================
 -- Game Event: Playback Complete
@@ -152,19 +103,24 @@ function OnGameCoreEventPlaybackComplete()
         print("OnGameCoreEventPlaybackComplete: Agent is enabled. Setting g_closePopups to true.");
         g_closePopups = true;
 
-        -- Start the timer to close popups after a delay
-        UI.StartTimer(ClosePopupsWithDelay, 0.1); -- 100ms delay
+        CloseAllPopups();
     end
 end
 
 -- ===========================================================================
 -- Initialization
 -- ===========================================================================
+function OnRLAgentToggled(isEnabled)
+    print("PopupSuppressor: Agent toggle state changed to: " .. tostring(isEnabled));
+    m_isAgentEnabled = isEnabled;
+end
+
 function Initialize()
     print("PopupSuppressor: Initialize called");
 
     -- Subscribe to events
     Events.GameCoreEventPlaybackComplete.Add(OnGameCoreEventPlaybackComplete);
+    LuaEvents.RLAgentToggled.Add(OnRLAgentToggled);
 
     print("PopupSuppressor: Initialization complete");
 end
