@@ -219,9 +219,10 @@ function RLv1.OnTurnBegin()
                             actionParams = randomAction;
                         end
                         
-                        -- Execute the action
-                        RLv1.ExecuteAction(randomActionType, actionParams);
-                        
+                        -- Execute the action, if it isn't delete unit
+                        if randomActionType ~= "DeleteUnit" then
+                            RLv1.ExecuteAction(randomActionType, actionParams);
+                        end
                         -- Remove used action
                         table.remove(actionsOfType, randomActionIndex);
                     end

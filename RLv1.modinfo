@@ -21,6 +21,7 @@
       <File>popupannhilator.lua</File>
       <File>Rl_enviroment_scripts.lua</File>
       <File>Rl_enviroment_scripts.xml</File>
+      <File>popupannhilator.xml</File>
     </ImportFiles>
     
     <!-- Then add the UI interface MODINFO BREAKS IF RL_Enviroment_Text is capitalized any othjer way? -->
@@ -29,6 +30,7 @@
         <Context>InGame</Context>
       </Properties>
       <File>Rl_enviroment_scripts.xml</File>
+      <File>popupannhilator.xml</File>
     </AddUserInterfaces>
   </InGameActions>
 
@@ -39,5 +41,6 @@
     <File>Rl_enviroment_scripts.lua</File>
     <File>Rl_enviroment_scripts.xml</File>
     <File>RL_Environment_Text.xml</File>
+    <File>popupannhilator.xml</File>
   </Files>
 </Mod>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Context Name="PopupSuppressor">
+    <InvokeInstance Context="Default"/>
+    
+    <!-- Optional container for any UI elements -->
+    <Container ID="PopupSuppressorContainer"/> 
+    
+    <!-- Include the script -->
+    <Include File="popupannhilator.lua"/>
+</Context>
