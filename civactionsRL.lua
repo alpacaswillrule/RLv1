@@ -681,7 +681,7 @@ function PlaceDistrict(cityID, districtHash, plotX, plotY)
   tParameters[CityOperationTypes.PARAM_DISTRICT_TYPE] = districtHash
   
   -- Request the build operation
-  CityManager.RequestOperation(pCity, CityOperationTypes.BUILD_DISTRICT, tParameters)
+  CityManager.RequestOperation(pCity, CityOperationTypes.BUILD, tParameters)
   return true
 end
 

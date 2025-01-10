@@ -368,9 +368,9 @@ for _, city in player:GetCities():Members() do
     print("\nChecking Available Units:")
     for row in GameInfo.Units() do
         if row and row.Hash and buildQueue:CanProduce(row.Hash, false, true) then
-            print("- Can produce unit: " .. tostring(row.UnitType))
-            print("  Hash: " .. tostring(row.Hash))
-            print("  Cost: " .. tostring(buildQueue:GetUnitCost(row.Index)))
+            -- print("- Can produce unit: " .. tostring(row.UnitType))
+            -- print("  Hash: " .. tostring(row.Hash))
+            -- print("  Cost: " .. tostring(buildQueue:GetUnitCost(row.Index)))
             
             -- Insert into possibleActions (not possibleProductions)
             table.insert(possibleActions.CityProduction, {
@@ -390,9 +390,9 @@ for _, city in player:GetCities():Members() do
         if row and row.Hash and buildQueue:CanProduce(row.Hash, true) then
             local cost = row.Index and buildQueue:GetBuildingCost(row.Index) or 0
             local turns = row.Index and buildQueue:GetTurnsLeft(row.BuildingType) or 0
-            print("- Can produce building: " .. tostring(row.BuildingType))
-            print("  Hash: " .. tostring(row.Hash))
-            print("  Cost: " .. tostring(buildQueue:GetBuildingCost(row.Index)))
+            -- print("- Can produce building: " .. tostring(row.BuildingType))
+            -- print("  Hash: " .. tostring(row.Hash))
+            -- print("  Cost: " .. tostring(buildQueue:GetBuildingCost(row.Index)))
             -- Insert into possibleActions
             table.insert(possibleActions.CityProduction, {
                 CityID = cityID,
