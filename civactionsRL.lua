@@ -132,7 +132,9 @@ function EvangelizeBelief(params)
   local unit = Players[Game.GetLocalPlayer()]:GetUnits():FindID(params.UnitID)
   if unit then
       local tParameters = {}
-      tParameters[PlayerOperations.PARAM_BELIEF_TYPE] = params.BeliefHash
+      UnitManager.RequestOperation(unit, UnitOperationTypes.EvangelizeBelief, tParameters)
+      
+      tParameters[PlayerOperations.PARAM_BELIEF_TYPE] = params.BeliefHash;
       tParameters[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE
       
       UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.ADD_BELIEF, tParameters)
