@@ -11,6 +11,7 @@ include("InstanceManager");
 include( "SupportFunctions" );
 -- Your mod includes
 include("civactionsRL"); -- or whatever your actions file is named
+include("DiplomacyStatementSupport")
 --------------------------------------------------
 -- OBSERVATION FUNCTIONS
 --------------------------------------------------
@@ -92,8 +93,8 @@ function GetPlayerData(playerID)
     Gold = player:GetTreasury():GetGoldBalance(),
     Faith = player:GetReligion():GetFaithBalance(),
     FaithPerTurn = player:GetReligion():GetFaithYield(),
-    SciencePerTurn = player:GetScienceYield(),
-    CulturePerTurn = player:GetCultureYield(),
+    SciencePerTurn = player:GetTechs():GetScienceYield(),
+    CulturePerTurn = player:GetCulture():GetCultureYield(),
     GoldPerTurn = player:GetTreasury():GetGoldYield(),
     maintenance = player:GetTreasury():GetTotalMaintenance(),
     DiplomaticStatuses = GetDiplomaticStatuses(player), -- Check if at war with any major civ
