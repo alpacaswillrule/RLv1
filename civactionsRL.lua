@@ -86,6 +86,24 @@ function RLv1.ExecuteAction(actionType, actionParams)
       FoundReligion(actionParams)
     elseif actionType == "EstablishTradeRoute" then
         EstablishTradeRoute(actionParams[1], actionParams[2]);
+          -- In ExecuteAction function, add these conditions:
+      elseif actionType == "PurchaseWithGold" then
+        if actionParams.PurchaseType == "UNIT" then
+            PurchaseUnit(actionParams.CityID, actionParams.TypeHash, "YIELD_GOLD")
+      elseif actionParams.PurchaseType == "BUILDING" then
+            PurchaseBuilding(actionParams.CityID, actionParams.TypeHash, "YIELD_GOLD")
+      elseif actionParams.PurchaseType == "DISTRICT" then
+          PurchaseDistrict(actionParams.CityID, actionParams.TypeHash, "YIELD_GOLD", actionParams.PlotX, actionParams.PlotY)
+        end
+      elseif actionType == "PurchaseWithFaith" then
+        if actionParams.PurchaseType == "UNIT" then
+            PurchaseUnit(actionParams.CityID, actionParams.TypeHash, "YIELD_FAITH")
+      elseif actionParams.PurchaseType == "BUILDING" then
+            PurchaseBuilding(actionParams.CityID, actionParams.TypeHash, "YIELD_FAITH")
+      elseif actionParams.PurchaseType == "DISTRICT" then
+            -- If district, we need plot coordinates too
+            PurchaseDistrict(actionParams.CityID, actionParams.TypeHash, "YIELD_FAITH", actionParams.PlotX, actionParams.PlotY)
+        end
     elseif actionType == "CityProduction" then
         local cityID = actionParams.CityID
         local productionHash = actionParams.ProductionHash
@@ -108,6 +126,120 @@ function RLv1.ExecuteAction(actionType, actionParams)
 
     return true;
 end
+
+
+-- Purchase unit (standard formation)
+function PurchaseUnit(cityID, unitHash, yieldType)
+  local city = CityManager.GetCity(Game.GetLocalPlayer(), cityID)
+  if not city then return end
+  
+  local tParameters = {}
+  tParameters[CityCommandTypes.PARAM_UNIT_TYPE] = unitHash
+  tParameters[CityCommandTypes.PARAM_MILITARY_FORMATION_TYPE] = MilitaryFormationTypes.STANDARD_MILITARY_FORMATION
+  
+  -- Set yield type based on parameter
+  if yieldType == "YIELD_GOLD" then
+      tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_GOLD"].Index
+  else
+      tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_FAITH"].Index
+  end
+  
+  CityManager.RequestCommand(city, CityCommandTypes.PURCHASE, tParameters)
+end
+
+-- Purchase building
+function PurchaseBuilding(cityID, buildingHash, yieldType)
+  local city = CityManager.GetCity(Game.GetLocalPlayer(), cityID)
+  if not city then return end
+  
+  local tParameters = {}
+  tParameters[CityCommandTypes.PARAM_BUILDING_TYPE] = buildingHash
+  
+  if yieldType == "YIELD_GOLD" then
+      tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_GOLD"].Index
+  else
+      tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_FAITH"].Index
+  end
+  
+  CityManager.RequestCommand(city, CityCommandTypes.PURCHASE, tParameters)
+end
+
+-- Purchase district
+function PurchaseDistrict(cityID, districtHash, yieldType, plotX, plotY)
+  local city = CityManager.GetCity(Game.GetLocalPlayer(), cityID)
+  if not city then return end
+  
+  local district = GameInfo.Districts[GameInfo.Hash2Type(districtHash)]
+  if not district then return end
+  
+  local tParameters = {}
+  tParameters[CityOperationTypes.PARAM_DISTRICT_TYPE] = districtHash
+  
+  if yieldType == "YIELD_GOLD" then
+      tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_GOLD"].Index
+  else
+      tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_FAITH"].Index
+  end
+  
+  -- Add plot coordinates for placement
+  if plotX and plotY then
+      tParameters[CityOperationTypes.PARAM_X] = plotX
+      tParameters[CityOperationTypes.PARAM_Y] = plotY
+  end
+  
+  -- Check if district needs placement
+  local bNeedsPlacement = district.RequiresPlacement
+  local pBuildQueue = city:GetBuildQueue()
+  
+  if pBuildQueue:HasBeenPlaced(districtHash) then
+      bNeedsPlacement = false
+  end
+  
+  if bNeedsPlacement and not (plotX and plotY) then
+      -- If needs placement but no coordinates provided, set interface mode
+      UI.SetInterfaceMode(InterfaceModeTypes.DISTRICT_PLACEMENT, tParameters)
+  else
+      -- Direct purchase
+      CityManager.RequestCommand(city, CityCommandTypes.PURCHASE, tParameters)
+  end
+end
+
+-- Corps/Army unit purchase functions for completeness
+function PurchaseUnitCorps(cityID, unitHash, yieldType)
+  local city = CityManager.GetCity(Game.GetLocalPlayer(), cityID)
+  if not city then return end
+  
+  local tParameters = {}
+  tParameters[CityCommandTypes.PARAM_UNIT_TYPE] = unitHash
+  tParameters[CityCommandTypes.PARAM_MILITARY_FORMATION_TYPE] = MilitaryFormationTypes.CORPS_MILITARY_FORMATION
+  
+  if yieldType == "YIELD_GOLD" then
+      tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_GOLD"].Index
+  else
+      tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_FAITH"].Index
+  end
+  
+  CityManager.RequestCommand(city, CityCommandTypes.PURCHASE, tParameters)
+end
+
+function PurchaseUnitArmy(cityID, unitHash, yieldType)
+  local city = CityManager.GetCity(Game.GetLocalPlayer(), cityID)
+  if not city then return end
+  
+  local tParameters = {}
+  tParameters[CityCommandTypes.PARAM_UNIT_TYPE] = unitHash
+  tParameters[CityCommandTypes.PARAM_MILITARY_FORMATION_TYPE] = MilitaryFormationTypes.ARMY_MILITARY_FORMATION
+  
+  if yieldType == "YIELD_GOLD" then
+      tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_GOLD"].Index
+  else
+      tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_FAITH"].Index
+  end
+  
+  CityManager.RequestCommand(city, CityCommandTypes.PURCHASE, tParameters)
+end
+
+
 
 function SpreadReligion(params)
   -- params contains:

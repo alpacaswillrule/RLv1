@@ -298,9 +298,144 @@ function GetPossibleActions()
     FoundReligion = {},
     SelectBeliefs = {},
     SpreadReligion = {},
-    EvangelizeBelief = {}
+    EvangelizeBelief = {},
+    PurchaseWithGold = {},
+    PurchaseWithFaith = {}
   };
   
+
+-- Add this section where we check city production options:
+print("GetPossibleActions: Checking purchase options...")
+
+local player = Players[Game.GetLocalPlayer()]
+local playerTreasury = player:GetTreasury()
+local playerReligion = player:GetReligion()
+
+for _, city in player:GetCities():Members() do
+    local cityID = city:GetID()
+    print("\nChecking purchase options for City ID: " .. tostring(cityID))
+    
+    -- Check unit purchases
+    for row in GameInfo.Units() do
+        if row and row.Hash then
+            local tParameters = {}
+            tParameters[CityCommandTypes.PARAM_UNIT_TYPE] = row.Hash
+            tParameters[CityCommandTypes.PARAM_MILITARY_FORMATION_TYPE] = MilitaryFormationTypes.STANDARD_MILITARY_FORMATION
+
+            -- Check gold purchase
+            tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_GOLD"].Index
+            if CityManager.CanStartCommand(city, CityCommandTypes.PURCHASE, tParameters) then
+                local goldCost = city:GetGoldCost(row.Hash)
+                if playerTreasury:GetGoldBalance() >= goldCost then
+                    table.insert(possibleActions.PurchaseWithGold, {
+                        CityID = cityID,
+                        PurchaseType = "UNIT",
+                        TypeHash = row.Hash,
+                        Cost = goldCost,
+                        Name = row.UnitType
+                    })
+                end
+            end
+
+            -- Check faith purchase
+            tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_FAITH"].Index
+            if CityManager.CanStartCommand(city, CityCommandTypes.PURCHASE, tParameters) then
+                local faithCost = city:GetFaithCost(row.Hash)
+                if playerReligion:GetFaithBalance() >= faithCost then
+                    table.insert(possibleActions.PurchaseWithFaith, {
+                        CityID = cityID,
+                        PurchaseType = "UNIT",
+                        TypeHash = row.Hash,
+                        Cost = faithCost,
+                        Name = row.UnitType
+                    })
+                end
+            end
+        end
+    end
+
+    -- Check building purchases
+    for row in GameInfo.Buildings() do
+        if row and row.Hash then
+            local tParameters = {}
+            tParameters[CityCommandTypes.PARAM_BUILDING_TYPE] = row.Hash
+
+            -- Check gold purchase
+            tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_GOLD"].Index
+            if CityManager.CanStartCommand(city, CityCommandTypes.PURCHASE, tParameters) then
+                local goldCost = city:GetGoldCost(row.Hash)
+                if playerTreasury:GetGoldBalance() >= goldCost then
+                    table.insert(possibleActions.PurchaseWithGold, {
+                        CityID = cityID,
+                        PurchaseType = "BUILDING",
+                        TypeHash = row.Hash,
+                        Cost = goldCost,
+                        Name = row.BuildingType
+                    })
+                end
+            end
+
+            -- Check faith purchase
+            tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_FAITH"].Index
+            if CityManager.CanStartCommand(city, CityCommandTypes.PURCHASE, tParameters) then
+                local faithCost = city:GetFaithCost(row.Hash)
+                if playerReligion:GetFaithBalance() >= faithCost then
+                    table.insert(possibleActions.PurchaseWithFaith, {
+                        CityID = cityID,
+                        PurchaseType = "BUILDING",
+                        TypeHash = row.Hash,
+                        Cost = faithCost,
+                        Name = row.BuildingType
+                    })
+                end
+            end
+        end
+    end
+
+    -- Check district purchases
+    for row in GameInfo.Districts() do
+        if row and row.Hash then
+            local tParameters = {}
+            tParameters[CityCommandTypes.PARAM_DISTRICT_TYPE] = row.Hash
+
+            -- Check gold purchase
+            tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_GOLD"].Index
+            if CityManager.CanStartCommand(city, CityCommandTypes.PURCHASE, tParameters) then
+                local goldCost = city:GetGoldCost(row.Hash)
+                -- Get valid plots for this district
+                local validPlots = GetValidDistrictPlots(city, row.Hash)
+                if playerTreasury:GetGoldBalance() >= goldCost and #validPlots > 0 then
+                    table.insert(possibleActions.PurchaseWithGold, {
+                        CityID = cityID,
+                        PurchaseType = "DISTRICT",
+                        TypeHash = row.Hash,
+                        Cost = goldCost,
+                        Name = row.DistrictType,
+                        ValidPlots = validPlots
+                    })
+                end
+            end
+
+            -- Check faith purchase
+            tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_FAITH"].Index
+            if CityManager.CanStartCommand(city, CityCommandTypes.PURCHASE, tParameters) then
+                local faithCost = city:GetFaithCost(row.Hash)
+                -- Get valid plots for this district
+                local validPlots = GetValidDistrictPlots(city, row.Hash)
+                if playerReligion:GetFaithBalance() >= faithCost and #validPlots > 0 then
+                    table.insert(possibleActions.PurchaseWithFaith, {
+                        CityID = cityID,
+                        PurchaseType = "DISTRICT",
+                        TypeHash = row.Hash,
+                        Cost = faithCost,
+                        Name = row.DistrictType,
+                        ValidPlots = validPlots
+                    })
+                end
+            end
+        end
+    end
+end
 
   print("GetPossibleActions: Checking pantheon options...")
   local playerReligion = player:GetReligion()
