@@ -197,7 +197,15 @@ function GetCityData(cityID)
   return data
 end
 
-		-- Determines all possible actions for the player in the current state.
+
+
+
+--EVERYTHING BELOW THIS MARKER IS FOR FINDING ACTIONS, ALL POSSIBLE ACTIONS
+
+
+
+
+-- Determines all possible actions for the player in the current state.
 -- Helper function to get valid district plots
 function GetValidDistrictPlots(city, districtHash)
     local validPlots = {}
@@ -291,7 +299,7 @@ function GetPossibleActions()
 
 
 -- In GetPossibleActions()
-print("GetPossibleActions: Checking civics...")
+--print("GetPossibleActions: Checking civics...")
 -- CIVICS
 local playerID = Game.GetLocalPlayer()
 local player = Players[playerID]
@@ -323,7 +331,7 @@ if currentCivicID == -1 then
     print("Total available civics: " .. #possibleActions.ChooseCivic)
 end
 
-  print("GetPossibleActions: Checking technologies...")
+--print("GetPossibleActions: Checking technologies...")
 
   -- TECHNOLOGIES
 -- Check if no technology is currently being researched
@@ -334,17 +342,17 @@ local player = Players[playerID]
 local playerTechs = player:GetTechs()
 local currentTechID = playerTechs:GetResearchingTech()
 
-print("GetPossibleActions: Checking available techs...")
-print("Current research tech ID: " .. tostring(currentTechID))
+--print("GetPossibleActions: Checking available techs...")
+--print("Current research tech ID: " .. tostring(currentTechID))
 
 -- If no tech is being researched (currentTechID is -1) or if we can switch techs
 if currentTechID == -1 then
-    print("No tech currently being researched")
+    --print("No tech currently being researched")
     -- Check each available tech
     for tech in GameInfo.Technologies() do
         local techIndex = tech.Index
         if playerTechs:CanResearch(techIndex) then
-            print("GetPossibleActions: Adding possible tech: " .. tostring(tech.TechnologyType))
+            --print("GetPossibleActions: Adding possible tech: " .. tostring(tech.TechnologyType))
             table.insert(possibleActions.ChooseTech, {
                 TechType = tech.TechnologyType,
                 Hash = GameInfo.Technologies[tech.TechnologyType].Hash
@@ -353,7 +361,7 @@ if currentTechID == -1 then
     end
 end
 -- Inside GetPossibleActions()
-print("GetPossibleActions: Checking city production options...")
+--print("GetPossibleActions: Checking city production options...")
 
 local player = Players[Game.GetLocalPlayer()];
 
@@ -683,23 +691,23 @@ function GetAllUnitActions(player)
   
   -- First sort units into categories
   for i, pUnit in pPlayerUnits:Members() do
-      print("Found unit: " .. tostring(i))
+      --print("Found unit: " .. tostring(i))
       local unitInfo:table = GameInfo.Units[pUnit:GetUnitType()];
-      print("Unit type: " .. unitInfo.UnitType)
+      --print("Unit type: " .. unitInfo.UnitType)
       
       if pUnit:GetCombat() == 0 and pUnit:GetRangedCombat() == 0 then
           -- if we have no attack strength we must be civilian
-          print("Adding to civilian units")
+          --print("Adding to civilian units")
           table.insert(civilianUnits, pUnit);
       else
-          print("Adding to military units")
+          --print("Adding to military units")
           table.insert(militaryUnits, pUnit);
       end
   end
 
   -- Process military units
   for _, pUnit in ipairs(militaryUnits) do
-      print("Processing military unit")
+      --print("Processing military unit")
       local unitInfo:table = GameInfo.Units[pUnit:GetUnitType()];
       
       -- Check movement
