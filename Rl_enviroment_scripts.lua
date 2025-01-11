@@ -7,6 +7,7 @@ RLv1 = {};
 -- Then our mod files
 include("civobvRL");
 include("civactionsRL");
+include("RL_heur_methods")
 local m_pendingPopupDismissals = {}
 local m_isAgentEnabled = false; -- Default to disabled
 
