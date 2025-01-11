@@ -197,6 +197,7 @@ function GetUnitData(unit)
 
 -- New function to get city state information
 -- Returns a table of information about all City States the player has met
+-- Returns a table of information about all City States the player has met
 function GetCityStatesInfo(playerID:number)
     local localPlayer = Players[playerID];
     if localPlayer == nil then return {}; end
@@ -234,19 +235,11 @@ function GetCityStatesInfo(playerID:number)
                 end
             end
 
-            -- Build bonuses table
-            local bonuses = {
-                HasFirstBonus = (envoyTokens >= FIRST_BONUS),
-                HasSecondBonus = (envoyTokens >= SECOND_BONUS),
-                HasThirdBonus = (envoyTokens >= THIRD_BONUS),
-                HasSuzerainBonus = (suzerainID == playerID)
+            -- Create kCityState table to get Suzerain bonus
+            local kCityState = {
+                Bonuses = {}
             };
-            
-            -- Get bonus texts
-            bonuses.FirstBonusTitle, bonuses.FirstBonusDetails = GetBonusText(cityStateID, FIRST_BONUS);
-            bonuses.SecondBonusTitle, bonuses.SecondBonusDetails = GetBonusText(cityStateID, SECOND_BONUS);
-            bonuses.ThirdBonusTitle, bonuses.ThirdBonusDetails = GetBonusText(cityStateID, THIRD_BONUS);
-            bonuses.SuzerainBonusDetails = GetSuzerainBonusText(cityStateID);
+            kCityState.Bonuses["Suzerain"] = { Details = GetSuzerainBonusText(cityStateID) };
 
             local cityState = {
                 ID = cityStateID,
@@ -261,7 +254,11 @@ function GetCityStatesInfo(playerID:number)
                 CanLevyMilitary = localInfluence:CanLevyMilitary(cityStateID),
                 LevyMilitaryCost = localInfluence:GetLevyMilitaryCost(cityStateID),
                 HasLevyActive = (pPlayer:GetInfluence():GetLevyTurnCounter() >= 0),
-                Bonuses = bonuses,
+                HasFirstBonus = (envoyTokens >= FIRST_BONUS),
+                HasSecondBonus = (envoyTokens >= SECOND_BONUS),
+                HasThirdBonus = (envoyTokens >= THIRD_BONUS),
+                HasSuzerainBonus = (suzerainID == playerID),
+                SuzerainBonusDetails = kCityState.Bonuses["Suzerain"].Details,
                 Quests = GetQuests(cityStateID)
             };
             
@@ -314,30 +311,6 @@ end
     return quests
   end
   
-  -- Helper function to get city state bonuses
-  function GetCityStateBonuses(playerID, cityStateID)
-    local bonuses = {
-      HasFirstBonus = false,
-      HasSecondBonus = false, 
-      HasThirdBonus = false,
-      HasSuzerainBonus = false
-    }
-    
-    local player = Players[playerID]
-    local envoys = player:GetInfluence():GetTokensToward(cityStateID)
-    
-    -- Check each bonus threshold
-    if envoys >= 1 then bonuses.HasFirstBonus = true end
-    if envoys >= 3 then bonuses.HasSecondBonus = true end
-    if envoys >= 6 then bonuses.HasThirdBonus = true end
-    
-    -- Check suzerain bonus
-    if player:GetInfluence():GetSuzerain(cityStateID) == playerID then
-      bonuses.HasSuzerainBonus = true
-    end
-    
-    return bonuses
-  end
 
 
 -- New function to get visible tile data
