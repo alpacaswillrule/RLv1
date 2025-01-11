@@ -98,12 +98,8 @@ function RLv1.ExecuteAction(actionType, actionParams)
       elseif actionType == "PurchaseWithFaith" then
         if actionParams.PurchaseType == "UNIT" then
             PurchaseUnit(actionParams.CityID, actionParams.TypeHash, "YIELD_FAITH")
-      elseif actionParams.PurchaseType == "BUILDING" then
-            PurchaseBuilding(actionParams.CityID, actionParams.TypeHash, "YIELD_FAITH")
-      elseif actionParams.PurchaseType == "DISTRICT" then
-            -- If district, we need plot coordinates too
-            PurchaseDistrict(actionParams.CityID, actionParams.TypeHash, "YIELD_FAITH", actionParams.PlotX, actionParams.PlotY)
-        end
+      elseif actionType == "ActivateGreatPerson" then
+          ActivateGreatPerson(actionParams)
     elseif actionType == "CityProduction" then
         local cityID = actionParams.CityID
         local productionHash = actionParams.ProductionHash
@@ -127,7 +123,22 @@ function RLv1.ExecuteAction(actionType, actionParams)
     return true;
 end
 
-
+function ActivateGreatPerson(actionParams)
+  local unit = Players[Game.GetLocalPlayer()]:GetUnits():FindID(actionParams.UnitID)
+  if unit then
+      local tParameters = {}
+      -- If a plot was specified, add plot parameters
+      if actionParams.PlotIndex then
+          local plot = Map.GetPlotByIndex(actionParams.PlotIndex)
+          if plot then
+              tParameters[UnitOperationTypes.PARAM_X] = plot:GetX()
+              tParameters[UnitOperationTypes.PARAM_Y] = plot:GetY()
+          end
+      end
+      --UnitManager.RequestOperation(unit, UnitOperationTypes.GREAT_PERSON, tParameters)
+      
+    end
+  end
 -- Purchase unit (standard formation)
 function PurchaseUnit(cityID, unitHash, yieldType)
   local city = CityManager.GetCity(Game.GetLocalPlayer(), cityID)

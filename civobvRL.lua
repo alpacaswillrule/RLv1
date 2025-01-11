@@ -300,7 +300,8 @@ function GetPossibleActions()
     SpreadReligion = {},
     EvangelizeBelief = {},
     PurchaseWithGold = {},
-    PurchaseWithFaith = {}
+    PurchaseWithFaith = {},
+    ActivateGreatPerson = {}
   };
   
 
@@ -717,6 +718,41 @@ end
       table.insert(possibleActions.PatronizeGreatPersonFaith, individual.Name);
     end
   end
+
+  print("GetPossibleActions: Checking great person activations...")
+-- Check each unit for great person activation capabilities
+for i, unit in player:GetUnits():Members() do
+    local unitGreatPerson = unit:GetGreatPerson()
+    if unitGreatPerson and unitGreatPerson:IsGreatPerson() and unitGreatPerson:GetActionCharges() > 0 then
+        -- Get the individual info
+        local greatPersonInfo = GameInfo.GreatPersonIndividuals[unitGreatPerson:GetIndividual()]
+        
+        if greatPersonInfo and greatPersonInfo.ActionEffectTileHighlighting then
+            -- Get valid activation plots
+            local activationPlots = unitGreatPerson:GetActivationHighlightPlots()
+            
+            if #activationPlots > 0 then
+                -- Add as possible action with plot options
+                table.insert(possibleActions.ActivateGreatPerson, {
+                    UnitID = unit:GetID(),
+                    IndividualID = unitGreatPerson:GetIndividual(),
+                    IndividualType = greatPersonInfo.GreatPersonIndividualType,
+                    ValidPlots = activationPlots,
+                    Name = Locale.Lookup(greatPersonInfo.Name)
+                })
+            end
+        else
+            -- Great person can activate without plot selection
+            table.insert(possibleActions.ActivateGreatPerson, {
+                UnitID = unit:GetID(),
+                IndividualID = unitGreatPerson:GetIndividual(),
+                IndividualType = greatPersonInfo.GreatPersonIndividualType,
+                ValidPlots = nil,
+                Name = Locale.Lookup(greatPersonInfo.Name)
+            })
+        end
+    end
+end
 
   print("GetPossibleActions: Checking for Great Prophet and Religion actions...")
 
