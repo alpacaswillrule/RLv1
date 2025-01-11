@@ -100,7 +100,7 @@ function GetPlayerData(playerID)
     GoldPerTurn = player:GetTreasury():GetGoldYield(),
     maintenance = player:GetTreasury():GetTotalMaintenance(),
     DiplomaticStatuses = GetDiplomaticStatuses(player), -- Check if at war with any major civ
-    CityStates = GetCityStateData(playerID),
+    CityStates = GetCityStatesInfo(playerID),
     VisibleTiles = GetVisibleTileData(playerID),
     Cities = {}, -- Add city data using GetCityData()
     Units = {},  -- Add unit data using GetUnitData()
@@ -339,16 +339,6 @@ function GetVisibleTileData(playerID)
           Faith = plot:GetYield(YieldTypes.FAITH)
         }
   
-        -- Get base yields (without improvements/districts)
-        local baseYields = {
-          Food = plot:GetYieldWithoutProperty(YieldTypes.FOOD),
-          Production = plot:GetYieldWithoutProperty(YieldTypes.PRODUCTION),
-          Gold = plot:GetYieldWithoutProperty(YieldTypes.GOLD),
-          Science = plot:GetYieldWithoutProperty(YieldTypes.SCIENCE),
-          Culture = plot:GetYieldWithoutProperty(YieldTypes.CULTURE),
-          Faith = plot:GetYieldWithoutProperty(YieldTypes.FAITH)
-        }
-  
         local tileData = {
           X = plot:GetX(),
           Y = plot:GetY(),
@@ -366,7 +356,6 @@ function GetVisibleTileData(playerID)
           MovementCost = plot:GetMovementCost(),
           -- Add yields
           Yields = yields,
-          BaseYields = baseYields,
           -- Additional useful yield-related info
           IsCity = plot:IsCity(),
           IsPillaged = plot:IsImprovementPillaged(),
