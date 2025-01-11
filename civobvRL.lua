@@ -381,7 +381,6 @@ function GetVisibleTileData(playerID)
             tileData.DistrictInfo = {
               IsPillaged = district:IsPillaged(),
               IsComplete = district:IsComplete(),
-              OwnerCity = district:GetCityID(),
               -- Add any district-specific yields
               DistrictYields = {
                 Food = district:GetYield(YieldTypes.FOOD),
