@@ -136,7 +136,8 @@ function ActivateGreatPerson(actionParams)
           end
       end
       --UnitManager.RequestOperation(unit, UnitOperationTypes.GREAT_PERSON, tParameters)
-      
+      --TODO JOHAN GOTTA FIGURE OUT HOW TO DO THIS
+
     end
   end
 -- Purchase unit (standard formation)
