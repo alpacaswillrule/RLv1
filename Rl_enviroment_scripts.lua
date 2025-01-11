@@ -142,6 +142,8 @@ function RLv1.OnTurnBegin()
     SendRLNotification("Turn " .. tostring(m_currentGameTurn) .. " beginning");
     print("RL Turn " .. tostring(m_currentGameTurn) .. " Begin");
 
+
+    -- HOW DO I GET ALL METHODS?
     --get the state
     local gameState = GetGameState()
     PrintGameStateSummary(gameState)

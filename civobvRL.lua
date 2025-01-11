@@ -169,6 +169,32 @@ function GetPlayerData(playerID)
   return data;
 end
 
+function GetUnitData(unit)
+    if unit == nil then return nil end
+  
+    local data = {
+      Name = unit:GetName(),
+      Combat = unit:GetCombat(),
+      RangedCombat = unit:GetRangedCombat(),
+      BombardCombat = unit:GetBombardCombat(),
+      AntiAirCombat = unit:GetAntiAirCombat(),
+      Range = unit:GetRange(),
+      Damage = unit:GetDamage(),
+      MaxDamage = unit:GetMaxDamage(),
+      Moves = unit:GetMovesRemaining(),
+      MaxMoves = unit:GetMaxMoves(),
+      UnitType = unit:GetUnitType(),
+      Formation = unit:GetMilitaryFormation(),
+      Experience = unit:GetExperience():GetExperiencePoints(),
+      Level = unit:GetExperience():GetLevel(),
+      Position = {
+        X = unit:GetX(),
+        Y = unit:GetY()
+      }
+    };
+    return data;
+  end
+
 -- New function to get city state information
 -- Returns a table of information about all City States the player has met
 function GetCityStatesInfo(playerID:number)
