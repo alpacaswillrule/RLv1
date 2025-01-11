@@ -146,6 +146,10 @@ function PrintGameStateSummary(gameState)
     print(string.format("Technologies Researched: %d", gameState.statistics.totalTechsResearched))
     print(string.format("Civics Researched: %d", gameState.statistics.totalCivicsResearched))
     print("=======================")
+
+    for commandRow in GameInfo.UnitCommands() do
+        print(commandRow)
+    end
 end
 
 -- Example usage:

@@ -86,18 +86,18 @@ function RLv1.ExecuteAction(actionType, actionParams)
       FoundReligion(actionParams)
     elseif actionType == "EstablishTradeRoute" then
         EstablishTradeRoute(actionParams[1], actionParams[2]);
-          -- In ExecuteAction function, add these conditions:
-      elseif actionType == "PurchaseWithGold" then
+    elseif actionType == "PurchaseWithGold" then
         if actionParams.PurchaseType == "UNIT" then
             PurchaseUnit(actionParams.CityID, actionParams.TypeHash, "YIELD_GOLD")
+        end
       elseif actionParams.PurchaseType == "BUILDING" then
             PurchaseBuilding(actionParams.CityID, actionParams.TypeHash, "YIELD_GOLD")
       elseif actionParams.PurchaseType == "DISTRICT" then
           PurchaseDistrict(actionParams.CityID, actionParams.TypeHash, "YIELD_GOLD", actionParams.PlotX, actionParams.PlotY)
-        end
       elseif actionType == "PurchaseWithFaith" then
         if actionParams.PurchaseType == "UNIT" then
             PurchaseUnit(actionParams.CityID, actionParams.TypeHash, "YIELD_FAITH")
+        end
       elseif actionType == "ActivateGreatPerson" then
           ActivateGreatPerson(actionParams)
     elseif actionType == "CityProduction" then
@@ -135,7 +135,8 @@ function ActivateGreatPerson(actionParams)
               tParameters[UnitOperationTypes.PARAM_Y] = plot:GetY()
           end
       end
-      --UnitManager.RequestOperation(unit, UnitOperationTypes.GREAT_PERSON, tParameters)
+      
+      UnitManager.RequestOperation(unit, GameInfo.UnitCommands['UNITCOMMAND_ACTIVATE_GREAT_PERSON'].Hash, tParameters)
       --TODO JOHAN GOTTA FIGURE OUT HOW TO DO THIS
 
     end
