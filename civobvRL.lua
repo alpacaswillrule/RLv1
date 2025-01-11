@@ -12,6 +12,7 @@ include( "SupportFunctions" );
 -- Your mod includes
 include("civactionsRL"); -- or whatever your actions file is named
 include("DiplomacyStatementSupport")
+include("CitySupport")
 --------------------------------------------------
 -- OBSERVATION FUNCTIONS
 --------------------------------------------------
@@ -93,11 +94,14 @@ function GetPlayerData(playerID)
     Gold = player:GetTreasury():GetGoldBalance(),
     Faith = player:GetReligion():GetFaithBalance(),
     FaithPerTurn = player:GetReligion():GetFaithYield(),
+    IsInAnarchy = playerCulture:IsInAnarchy(),
     SciencePerTurn = player:GetTechs():GetScienceYield(),
     CulturePerTurn = player:GetCulture():GetCultureYield(),
     GoldPerTurn = player:GetTreasury():GetGoldYield(),
     maintenance = player:GetTreasury():GetTotalMaintenance(),
     DiplomaticStatuses = GetDiplomaticStatuses(player), -- Check if at war with any major civ
+    CityStates = GetCityStateData(playerID),
+    VisibleTiles = GetVisibleTileData(playerID),
     Cities = {}, -- Add city data using GetCityData()
     Units = {},  -- Add unit data using GetUnitData()
     TechsResearched = {},
@@ -106,6 +110,7 @@ function GetPlayerData(playerID)
     CurrentPolicies = {},
     GreatPeoplePoints = {}
   };
+  
 
   print("GetPlayerData: Gathering city data...")
   -- Add city data
@@ -162,74 +167,6 @@ function GetPlayerData(playerID)
 
   print("GetPlayerData: Player data collection complete.")
   return data;
-end
-
--- Gets detailed information about a specific city.
--- @param cityID The ID of the city.
-function GetCityData(cityID)
-  print("GetCityData: Getting data for city ID: " .. tostring(cityID))
-  local playerID = Game.GetLocalPlayer();
-  local player = Players[playerID];
-  local city = player:GetCities():FindID(cityID);
-
-  if not city then 
-    print("GetCityData: City not found.")
-    return nil 
-  end
-
-  local data = {
-    ID = cityID,
-    Name = city:GetName(),
-    Population = city:GetPopulation(),
-    Position = { X = city:GetX(), Y = city:GetY() },
-    Districts = {},
-    Buildings = {},
-    ProductionQueue = {},
-    FoodYield = city:GetYield(YieldTypes.FOOD),
-    ProductionYield = city:GetYield(YieldTypes.PRODUCTION),
-    GoldYield = city:GetYield(YieldTypes.GOLD),
-    ScienceYield = city:GetYield(YieldTypes.SCIENCE),
-    CultureYield = city:GetYield(YieldTypes.CULTURE),
-    FaithYield = city:GetYield(YieldTypes.FAITH),
-    Housing = city:GetGrowth():GetHousing(),
-    Amenities = city:GetGrowth():GetAmenities()
-  };
-
-  print("GetCityData: Gathering district information for city...")
-    -- Add district information
-  for district in city:GetDistricts():Members() do
-    local districtInfo = GameInfo.Districts[district:GetType()];
-    table.insert(data.Districts, {
-      DistrictType = districtInfo.DistrictType,
-      IsPillaged = city:GetDistricts():IsPillaged(district:GetType()),
-      Position = { X = district:GetX(), Y = district:GetY() }
-    });
-  end
-
-  print("GetCityData: Gathering building information for city...")
-  -- Add building information
-  local cityBuildings = city:GetBuildings();
-  for buildingType in GameInfo.Buildings() do
-    if cityBuildings:HasBuilding(buildingType.Hash) then
-      table.insert(data.Buildings, {
-        BuildingType = buildingType.BuildingType,
-        IsPillaged = cityBuildings:IsPillaged(buildingType.Hash)
-      });
-    end
-  end
-
-  print("GetCityData: City data collection complete for city ID: " .. tostring(cityID))
-
-  -- Add anarchy status
-  local playerCulture = player:GetCulture()
-  data.IsInAnarchy = playerCulture:IsInAnarchy()
-
-  -- Add city state information
-  data.CityStates = GetCityStateData(playerID)
-  
-  -- Add visible map data
-  data.VisibleTiles = GetVisibleTileData(playerID)
-  return data
 end
 
 -- New function to get city state information
