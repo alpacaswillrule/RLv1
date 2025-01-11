@@ -377,7 +377,7 @@ function GetVisibleTileData(playerID)
   
         -- If it's a district, get additional district info
         if tileData.DistrictType then
-          local district = Districts.GetDistrictAtLocation(plot:GetX(), plot:GetY())
+          local district = CityManager.GetDistrictAt(plot)
           if district then
             tileData.DistrictInfo = {
               IsPillaged = district:IsPillaged(),
