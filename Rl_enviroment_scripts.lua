@@ -142,6 +142,10 @@ function RLv1.OnTurnBegin()
     SendRLNotification("Turn " .. tostring(m_currentGameTurn) .. " beginning");
     print("RL Turn " .. tostring(m_currentGameTurn) .. " Begin");
 
+    --get the state
+    local gameState = GetGameState()
+    PrintGameStateSummary(gameState)
+
     -- Get all possible actions
     print("Getting possible actions for turn " .. tostring(m_currentGameTurn));
     local possibleActions = GetPossibleActions();

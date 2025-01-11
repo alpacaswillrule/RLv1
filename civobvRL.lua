@@ -15,6 +15,53 @@ include("civactionsRL"); -- or whatever your actions file is named
 -- OBSERVATION FUNCTIONS
 --------------------------------------------------
 
+
+-- Helper function to get diplomatic status with other players
+function GetDiplomaticStatuses(player)
+    local diplomaticStatuses = {}
+    local playerDiplomacy = player:GetDiplomacy()
+    local localPlayerID = player:GetID()
+
+    -- Get all players
+    for _, otherPlayer in ipairs(PlayerManager.GetAliveMajors()) do
+        local otherPlayerID = otherPlayer:GetID()
+        
+        -- Skip if it's ourselves
+        if otherPlayerID ~= localPlayerID then
+            local pPlayerConfig = PlayerConfigurations[otherPlayerID]
+            local hasMet = playerDiplomacy:HasMet(otherPlayerID)
+            
+            -- Get diplomatic state if we've met
+            local diplomaticState = nil
+            if hasMet then
+                local stateID = player:GetDiplomaticAI():GetDiplomaticStateIndex(otherPlayerID)
+                if stateID ~= -1 then
+                    local stateEntry = GameInfo.DiplomaticStates[stateID]
+                    diplomaticState = stateEntry.StateType
+                end
+            end
+
+            -- Get player mood using function from DiplomacySupport
+            local mood = DiplomacySupport_GetPlayerMood(otherPlayer, localPlayerID)
+
+            -- Structure the diplomatic information
+            diplomaticStatuses[otherPlayerID] = {
+                PlayerName = pPlayerConfig:GetPlayerName(),
+                LeaderType = pPlayerConfig:GetLeaderTypeName(),
+                CivType = pPlayerConfig:GetCivilizationTypeName(),
+                HasMet = hasMet,
+                DiplomaticState = diplomaticState,
+                Mood = mood,
+                Team = pPlayerConfig:GetTeam(),
+                Score = otherPlayer:GetDiplomaticAI():GetDiplomaticScore(localPlayerID),
+                IsHuman = pPlayerConfig:IsHuman()
+            }
+        end
+    end
+
+    return diplomaticStatuses
+end
+
 -- Gets the current turn number.
 function GetTurnNumber()
   print("GetTurnNumber: Getting current turn number...")
@@ -42,12 +89,13 @@ function GetPlayerData(playerID)
   end
 
   local data = {
-    Gold = player:GetTreasury():GetGold(),
+    Gold = player:GetTreasury():GetGoldBalance(),
     Faith = player:GetFaith():GetFaith(),
     SciencePerTurn = player:GetScienceYield(),
     CulturePerTurn = player:GetCultureYield(),
-    GoldPerTurn = player:CalculateGoldPerTurn(),
-    IsAtWar = player:IsAtWar(),  -- Check if at war with any major civ
+    GoldPerTurn = player:GetTreasury():GetGoldYield(),
+    maintenance = player:GetTreasury():GetTotalMaintenance(),
+    DiplomaticStatuses = GetDiplomaticStatuses(player), -- Check if at war with any major civ
     Cities = {}, -- Add city data using GetCityData()
     Units = {},  -- Add unit data using GetUnitData()
     TechsResearched = {},
@@ -168,31 +216,6 @@ function GetCityData(cityID)
     end
   end
 
-  print("GetCityData: Gathering production queue information for city...")
-  -- Add production queue information
-  local queue = city:GetBuildQueue();
-  local queueData = {};
-  for i, item in ipairs(queue) do
-    local itemData = {
-      Name = item.Name,
-      Turns = item.Turns,
-      Cost = item.Cost
-    };
-    
-    -- Determine the type of item (Unit, Building, District, Project)
-    if GameInfo.Units[item.ID] then
-        itemData.Type = "UNIT"
-        itemData.SubType = GameInfo.Units[item.ID].UnitType
-    elseif GameInfo.Buildings[item.ID] then
-        itemData.Type = "BUILDING"
-        itemData.SubType = GameInfo.Buildings[item.ID].BuildingType
-    elseif GameInfo.Districts[item.ID] then
-        itemData.Type = "DISTRICT"
-        itemData.SubType = GameInfo.Districts[item.ID].DistrictType
-    elseif GameInfo.Projects[item.ID] then
-        itemData.Type = "PROJECT"
-    end
-  end
   print("GetCityData: City data collection complete for city ID: " .. tostring(cityID))
 
   -- Add anarchy status
