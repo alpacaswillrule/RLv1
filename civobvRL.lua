@@ -94,7 +94,7 @@ function GetPlayerData(playerID)
     Gold = player:GetTreasury():GetGoldBalance(),
     Faith = player:GetReligion():GetFaithBalance(),
     FaithPerTurn = player:GetReligion():GetFaithYield(),
-    IsInAnarchy = playerCulture:IsInAnarchy(),
+    IsInAnarchy = player:GetCulture():IsInAnarchy(),
     SciencePerTurn = player:GetTechs():GetScienceYield(),
     CulturePerTurn = player:GetCulture():GetCultureYield(),
     GoldPerTurn = player:GetTreasury():GetGoldYield(),
@@ -170,37 +170,81 @@ function GetPlayerData(playerID)
 end
 
 -- New function to get city state information
-function GetCityStateData(playerID)
-    print("GetCityStateData: Getting city-state data for player: " .. tostring(playerID))
+-- Returns a table of information about all City States the player has met
+function GetCityStatesInfo(playerID:number)
+    local localPlayer = Players[playerID];
+    if localPlayer == nil then return {}; end
     
-    local cityStates = {}
-    local player = Players[playerID]
-    local playerInfluence = player:GetInfluence()
+    local cityStatesInfo = {};
+    local localDiplomacy = localPlayer:GetDiplomacy();
+    local localInfluence = localPlayer:GetInfluence();
     
-    -- Loop through all players to find city states
-    for cityStatePlayer in GameInfo.Players() do
-      local cityStateID = cityStatePlayer.Index
-      -- Check if this is a city state and we've met them
-      if Players[cityStateID] and Players[cityStateID]:IsMinor() and player:GetDiplomacy():HasMet(cityStateID) then
+    -- Constants for envoy thresholds
+    local FIRST_BONUS = 1;
+    local SECOND_BONUS = 3;
+    local THIRD_BONUS = 6;
+
+    -- Loop through all minor civs
+    for _, pPlayer in ipairs(PlayerManager.GetAliveMinors()) do
+        local cityStateID = pPlayer:GetID();
         
-        local cityStateData = {
-          ID = cityStateID,
-          Name = PlayerConfigurations[cityStateID]:GetCivilizationShortDescription(),
-          Type = GetCityStateType(cityStateID), -- Get type (Cultural, Industrial, etc)
-          EnvoysSent = playerInfluence:GetTokensToward(cityStateID),
-          IsSuzerain = (playerInfluence:GetSuzerain(cityStateID) == playerID),
-          IsAtWar = player:GetDiplomacy():IsAtWarWith(cityStateID),
-          Quests = GetCityStateQuests(playerID, cityStateID),
-          Bonuses = GetCityStateBonuses(playerID, cityStateID)
-        }
-        
-        table.insert(cityStates, cityStateData)
-      end
+        -- Only include city states we've met
+        if pPlayer:IsMinor() and localDiplomacy:HasMet(cityStateID) then
+            local pPlayerConfig = PlayerConfigurations[cityStateID];
+            local pInfluence = pPlayer:GetInfluence();
+            local envoyTokens = pInfluence:GetTokensReceived(playerID);
+            local suzerainID = pInfluence:GetSuzerain();
+            local cityStateType = GetCityStateType(cityStateID);
+
+            -- Get suzerain name
+            local suzerainName = "None";
+            if suzerainID ~= -1 then
+                if suzerainID == playerID then
+                    suzerainName = "You";
+                elseif localDiplomacy:HasMet(suzerainID) then
+                    suzerainName = Locale.Lookup(PlayerConfigurations[suzerainID]:GetPlayerName());
+                else
+                    suzerainName = "Unknown";
+                end
+            end
+
+            -- Build bonuses table
+            local bonuses = {
+                HasFirstBonus = (envoyTokens >= FIRST_BONUS),
+                HasSecondBonus = (envoyTokens >= SECOND_BONUS),
+                HasThirdBonus = (envoyTokens >= THIRD_BONUS),
+                HasSuzerainBonus = (suzerainID == playerID)
+            };
+            
+            -- Get bonus texts
+            bonuses.FirstBonusTitle, bonuses.FirstBonusDetails = GetBonusText(cityStateID, FIRST_BONUS);
+            bonuses.SecondBonusTitle, bonuses.SecondBonusDetails = GetBonusText(cityStateID, SECOND_BONUS);
+            bonuses.ThirdBonusTitle, bonuses.ThirdBonusDetails = GetBonusText(cityStateID, THIRD_BONUS);
+            bonuses.SuzerainBonusDetails = GetSuzerainBonusText(cityStateID);
+
+            local cityState = {
+                ID = cityStateID,
+                Name = Locale.Lookup(pPlayerConfig:GetCivilizationShortDescription()),
+                Type = cityStateType,
+                Envoys = envoyTokens,
+                SuzerainID = suzerainID,
+                SuzerainName = suzerainName,
+                IsAlive = pPlayer:IsAlive(),
+                IsAtWar = localDiplomacy:IsAtWarWith(cityStateID),
+                CanReceiveTokens = localInfluence:CanGiveTokensToPlayer(cityStateID),
+                CanLevyMilitary = localInfluence:CanLevyMilitary(cityStateID),
+                LevyMilitaryCost = localInfluence:GetLevyMilitaryCost(cityStateID),
+                HasLevyActive = (pPlayer:GetInfluence():GetLevyTurnCounter() >= 0),
+                Bonuses = bonuses,
+                Quests = GetQuests(cityStateID)
+            };
+            
+            table.insert(cityStatesInfo, cityState);
+        end
     end
-    
-    print("GetCityStateData: Found " .. #cityStates .. " known city-states")
-    return cityStates
-  end
+
+    return cityStatesInfo;
+end
   
   -- Helper function to get city state type
   function GetCityStateType(cityStateID)
