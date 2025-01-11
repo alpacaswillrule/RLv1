@@ -217,6 +217,8 @@ function RLv1.OnTurnBegin()
                             actionParams = randomAction;
                         elseif randomActionType == "FoundCity" then
                             actionParams = randomAction;
+                        elseif randomActionType == "FoundReligion" then
+                            actionParams = randomAction[1]; --THE 1 HERE IS TO SELECT FIRST POSSIBLE BELIEF/RELIGION COMBO
                         else
                             actionParams = randomAction;
                         end

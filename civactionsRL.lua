@@ -76,6 +76,14 @@ function RLv1.ExecuteAction(actionType, actionParams)
         ChangeGovernment(actionParams);
     elseif actionType == "ChangePolicies" then
         ChangePolicies(actionParams);
+    elseif actionType == "FoundPantheon" then
+      FoundPantheon(actionParams)
+    elseif actionType == "SpreadReligion" then
+      SpreadReligion(actionParams)
+    elseif actionType == "EvangelizeBelief" then
+      EvangelizeBelief(actionParams)
+    elseif actionType == "FoundReligion" then
+      FoundReligion(actionParams)
     elseif actionType == "EstablishTradeRoute" then
         EstablishTradeRoute(actionParams[1], actionParams[2]);
     elseif actionType == "CityProduction" then
@@ -101,6 +109,69 @@ function RLv1.ExecuteAction(actionType, actionParams)
     return true;
 end
 
+function SpreadReligion(params)
+  -- params contains:
+  -- - UnitID: ID of religious unit
+  -- - X, Y: target coordinates
+  
+  local unit = Players[Game.GetLocalPlayer()]:GetUnits():FindID(params.UnitID)
+  if unit then
+      local tParameters = {}
+      tParameters[UnitOperationTypes.PARAM_X] = params.X
+      tParameters[UnitOperationTypes.PARAM_Y] = params.Y
+      
+      UnitManager.RequestOperation(unit, UnitOperationTypes.SPREAD_RELIGION, tParameters)
+  end
+end
+
+function EvangelizeBelief(params)
+  -- params contains:
+  -- - UnitID: ID of apostle unit
+  -- - BeliefHash: hash of chosen belief
+  
+  local unit = Players[Game.GetLocalPlayer()]:GetUnits():FindID(params.UnitID)
+  if unit then
+      local tParameters = {}
+      tParameters[PlayerOperations.PARAM_BELIEF_TYPE] = params.BeliefHash
+      tParameters[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE
+      
+      UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.ADD_BELIEF, tParameters)
+  end
+end
+
+
+
+
+
+function FoundPantheon(actionParams)
+  local tParameters = {};
+  tParameters[PlayerOperations.PARAM_BELIEF_TYPE] = actionParams;
+  tParameters[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE;
+  UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.FOUND_PANTHEON, tParameters);
+
+end
+
+function FoundReligion(params)
+  -- params should contain:
+  -- - ReligionHash: hash of chosen religion
+  -- - BeliefHashes: array of chosen belief hashes
+  -- - UnitID: ID of Great Prophet unit
+  
+  local tParameters = {}
+  tParameters[PlayerOperations.PARAM_RELIGION_TYPE] = params.ReligionHash
+  tParameters[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE
+  
+  -- Found the religion
+  UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.FOUND_RELIGION, tParameters)
+  
+  -- Add each belief
+  for _, beliefHash in ipairs(params.BeliefHashes) do
+    local beliefParams = {}
+    beliefParams[PlayerOperations.PARAM_BELIEF_TYPE] = beliefHash
+    beliefParams[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE
+    UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.ADD_BELIEF, beliefParams)
+  end
+end
 
 -- Ends the current turn.
 -- @param force (optional) If true, forces end turn (Shift+Enter equivalent).
