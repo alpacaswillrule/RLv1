@@ -90,7 +90,8 @@ function GetPlayerData(playerID)
 
   local data = {
     Gold = player:GetTreasury():GetGoldBalance(),
-    Faith = player:GetFaith():GetFaith(),
+    Faith = player:GetReligion():GetFaithBalance(),
+    FaithPerTurn = player:GetReligion():GetFaithYield(),
     SciencePerTurn = player:GetScienceYield(),
     CulturePerTurn = player:GetCultureYield(),
     GoldPerTurn = player:GetTreasury():GetGoldYield(),
