@@ -194,8 +194,220 @@ function GetCityData(cityID)
     end
   end
   print("GetCityData: City data collection complete for city ID: " .. tostring(cityID))
+
+  -- Add anarchy status
+  local playerCulture = player:GetCulture()
+  data.IsInAnarchy = playerCulture:IsInAnarchy()
+
+  -- Add city state information
+  data.CityStates = GetCityStateData(playerID)
+  
+  -- Add visible map data
+  data.VisibleTiles = GetVisibleTileData(playerID)
   return data
 end
+
+-- New function to get city state information
+function GetCityStateData(playerID)
+    print("GetCityStateData: Getting city-state data for player: " .. tostring(playerID))
+    
+    local cityStates = {}
+    local player = Players[playerID]
+    local playerInfluence = player:GetInfluence()
+    
+    -- Loop through all players to find city states
+    for cityStatePlayer in GameInfo.Players() do
+      local cityStateID = cityStatePlayer.Index
+      -- Check if this is a city state and we've met them
+      if Players[cityStateID] and Players[cityStateID]:IsMinor() and player:GetDiplomacy():HasMet(cityStateID) then
+        
+        local cityStateData = {
+          ID = cityStateID,
+          Name = PlayerConfigurations[cityStateID]:GetCivilizationShortDescription(),
+          Type = GetCityStateType(cityStateID), -- Get type (Cultural, Industrial, etc)
+          EnvoysSent = playerInfluence:GetTokensToward(cityStateID),
+          IsSuzerain = (playerInfluence:GetSuzerain(cityStateID) == playerID),
+          IsAtWar = player:GetDiplomacy():IsAtWarWith(cityStateID),
+          Quests = GetCityStateQuests(playerID, cityStateID),
+          Bonuses = GetCityStateBonuses(playerID, cityStateID)
+        }
+        
+        table.insert(cityStates, cityStateData)
+      end
+    end
+    
+    print("GetCityStateData: Found " .. #cityStates .. " known city-states")
+    return cityStates
+  end
+  
+  -- Helper function to get city state type
+  function GetCityStateType(cityStateID)
+    local leader = PlayerConfigurations[cityStateID]:GetLeaderTypeName()
+    local leaderInfo = GameInfo.Leaders[leader]
+    
+    if leaderInfo.InheritFrom == "LEADER_MINOR_CIV_SCIENTIFIC" then
+      return "SCIENTIFIC"
+    elseif leaderInfo.InheritFrom == "LEADER_MINOR_CIV_RELIGIOUS" then
+      return "RELIGIOUS" 
+    elseif leaderInfo.InheritFrom == "LEADER_MINOR_CIV_TRADE" then
+      return "TRADE"
+    elseif leaderInfo.InheritFrom == "LEADER_MINOR_CIV_CULTURAL" then
+      return "CULTURAL"
+    elseif leaderInfo.InheritFrom == "LEADER_MINOR_CIV_MILITARISTIC" then
+      return "MILITARISTIC"
+    elseif leaderInfo.InheritFrom == "LEADER_MINOR_CIV_INDUSTRIAL" then
+      return "INDUSTRIAL"
+    end
+    return "UNKNOWN"
+  end
+  
+  -- Helper function to get city state quests
+  function GetCityStateQuests(playerID, cityStateID)
+    local quests = {}
+    local questsManager = Game.GetQuestsManager()
+    
+    -- Loop through all quest types
+    for questInfo in GameInfo.Quests() do
+      if questsManager:HasActiveQuestFromPlayer(playerID, cityStateID, questInfo.Index) then
+        local quest = {
+          Type = questInfo.QuestType,
+          Name = questsManager:GetActiveQuestName(playerID, cityStateID, questInfo.Index),
+          Description = questsManager:GetActiveQuestDescription(playerID, cityStateID, questInfo.Index),
+          Reward = questsManager:GetActiveQuestReward(playerID, cityStateID, questInfo.Index)
+        }
+        table.insert(quests, quest)
+      end
+    end
+    
+    return quests
+  end
+  
+  -- Helper function to get city state bonuses
+  function GetCityStateBonuses(playerID, cityStateID)
+    local bonuses = {
+      HasFirstBonus = false,
+      HasSecondBonus = false, 
+      HasThirdBonus = false,
+      HasSuzerainBonus = false
+    }
+    
+    local player = Players[playerID]
+    local envoys = player:GetInfluence():GetTokensToward(cityStateID)
+    
+    -- Check each bonus threshold
+    if envoys >= 1 then bonuses.HasFirstBonus = true end
+    if envoys >= 3 then bonuses.HasSecondBonus = true end
+    if envoys >= 6 then bonuses.HasThirdBonus = true end
+    
+    -- Check suzerain bonus
+    if player:GetInfluence():GetSuzerain(cityStateID) == playerID then
+      bonuses.HasSuzerainBonus = true
+    end
+    
+    return bonuses
+  end
+
+
+-- New function to get visible tile data
+function GetVisibleTileData(playerID)
+    print("GetVisibleTileData: Getting visible tiles for player: " .. tostring(playerID))
+    
+    local visibleTiles = {}
+    local player = Players[playerID]
+    local playerVisibility = PlayersVisibility[playerID]
+    
+    -- Loop through all plots on map
+    local mapWidth, mapHeight = Map.GetGridSize()
+    for i = 0, (mapWidth * mapHeight) - 1, 1 do
+      local plot = Map.GetPlotByIndex(i)
+      
+      -- Check if plot is visible or revealed
+      if playerVisibility:IsRevealed(plot:GetX(), plot:GetY()) then
+        -- Get yields
+        local yields = {
+          Food = plot:GetYield(YieldTypes.FOOD),
+          Production = plot:GetYield(YieldTypes.PRODUCTION),
+          Gold = plot:GetYield(YieldTypes.GOLD),
+          Science = plot:GetYield(YieldTypes.SCIENCE),
+          Culture = plot:GetYield(YieldTypes.CULTURE),
+          Faith = plot:GetYield(YieldTypes.FAITH)
+        }
+  
+        -- Get base yields (without improvements/districts)
+        local baseYields = {
+          Food = plot:GetYieldWithoutProperty(YieldTypes.FOOD),
+          Production = plot:GetYieldWithoutProperty(YieldTypes.PRODUCTION),
+          Gold = plot:GetYieldWithoutProperty(YieldTypes.GOLD),
+          Science = plot:GetYieldWithoutProperty(YieldTypes.SCIENCE),
+          Culture = plot:GetYieldWithoutProperty(YieldTypes.CULTURE),
+          Faith = plot:GetYieldWithoutProperty(YieldTypes.FAITH)
+        }
+  
+        local tileData = {
+          X = plot:GetX(),
+          Y = plot:GetY(),
+          TerrainType = GameInfo.Terrains[plot:GetTerrainType()].TerrainType,
+          FeatureType = plot:GetFeatureType() >= 0 and GameInfo.Features[plot:GetFeatureType()].FeatureType or nil,
+          ResourceType = plot:GetResourceType() >= 0 and GameInfo.Resources[plot:GetResourceType()].ResourceType or nil,
+          ImprovementType = plot:GetImprovementType() >= 0 and GameInfo.Improvements[plot:GetImprovementType()].ImprovementType or nil,
+          DistrictType = plot:GetDistrictType() >= 0 and GameInfo.Districts[plot:GetDistrictType()].DistrictType or nil,
+          IsVisible = playerVisibility:IsVisible(plot:GetX(), plot:GetY()),
+          IsRevealed = true,
+          OwnerID = plot:GetOwner(),
+          Appeal = plot:GetAppeal(),
+          IsWater = plot:IsWater(),
+          IsImpassable = plot:IsImpassable(),
+          MovementCost = plot:GetMovementCost(),
+          -- Add yields
+          Yields = yields,
+          BaseYields = baseYields,
+          -- Additional useful yield-related info
+          IsCity = plot:IsCity(),
+          IsPillaged = plot:IsImprovementPillaged(),
+          HasRemovableFeature = plot:GetFeatureType() >= 0 and GameInfo.Features[plot:GetFeatureType()].Removable,
+          IsWorked = false -- Will be set below
+        }
+  
+        -- Check if tile is being worked by a city
+        if plot:GetWorkerCount() > 0 then
+          tileData.IsWorked = true
+          -- Get the city working this tile if owned
+          if plot:GetOwner() == playerID then
+            local city = Cities.GetPlotWorkingCity(plot:GetIndex())
+            if city then
+              tileData.WorkingCityID = city:GetID()
+            end
+          end
+        end
+  
+        -- If it's a district, get additional district info
+        if tileData.DistrictType then
+          local district = Districts.GetDistrictAtLocation(plot:GetX(), plot:GetY())
+          if district then
+            tileData.DistrictInfo = {
+              IsPillaged = district:IsPillaged(),
+              IsComplete = district:IsComplete(),
+              OwnerCity = district:GetCityID(),
+              -- Add any district-specific yields
+              DistrictYields = {
+                Food = district:GetYield(YieldTypes.FOOD),
+                Production = district:GetYield(YieldTypes.PRODUCTION),
+                Gold = district:GetYield(YieldTypes.GOLD),
+                Science = district:GetYield(YieldTypes.SCIENCE),
+                Culture = district:GetYield(YieldTypes.CULTURE),
+                Faith = district:GetYield(YieldTypes.FAITH)
+              }
+            }
+          end
+        end
+  
+        table.insert(visibleTiles, tileData)
+      end
+    end
+    
+    print("GetVisibleTileData: Found " .. #visibleTiles .. " visible/revealed tiles")
+    return visibleTiles
+  end
 
 
 
