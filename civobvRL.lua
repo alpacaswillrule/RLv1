@@ -166,8 +166,6 @@ function GetPlayerData(playerID)
     }
   end
 
-  for row in GameInfo.Project_GreatPersonPoints() do
-
   -- Get Great People points
   print("GetPlayerData: Getting Great People points...")
   for class in GameInfo.GreatPersonClasses() do
@@ -569,7 +567,7 @@ for _, city in player:GetCities():Members() do
             -- Check gold purchase
             tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_GOLD"].Index
             if CityManager.CanStartCommand(city, CityCommandTypes.PURCHASE, tParameters) then
-                local goldCost = city:GetGoldCost(row.Hash)
+                local goldCost = city:GetGold():GetPurchaseCost( "YIELD_GOLD", row.Hash )
                 if playerTreasury:GetGoldBalance() >= goldCost then
                     table.insert(possibleActions.PurchaseWithGold, {
                         CityID = cityID,
@@ -584,7 +582,7 @@ for _, city in player:GetCities():Members() do
             -- Check faith purchase
             tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_FAITH"].Index
             if CityManager.CanStartCommand(city, CityCommandTypes.PURCHASE, tParameters) then
-                local faithCost = city:GetFaithCost(row.Hash)
+                local faithCost = city:GetGold():GetPurchaseCost( "YIELD_FAITH", row.Hash )
                 if playerReligion:GetFaithBalance() >= faithCost then
                     table.insert(possibleActions.PurchaseWithFaith, {
                         CityID = cityID,
@@ -607,7 +605,7 @@ for _, city in player:GetCities():Members() do
             -- Check gold purchase
             tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_GOLD"].Index
             if CityManager.CanStartCommand(city, CityCommandTypes.PURCHASE, tParameters) then
-                local goldCost = city:GetGoldCost(row.Hash)
+                local goldCost = city:GetGold():GetPurchaseCost( "YIELD_GOLD", row.Hash )
                 if playerTreasury:GetGoldBalance() >= goldCost then
                     table.insert(possibleActions.PurchaseWithGold, {
                         CityID = cityID,
@@ -622,7 +620,7 @@ for _, city in player:GetCities():Members() do
             -- Check faith purchase
             tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_FAITH"].Index
             if CityManager.CanStartCommand(city, CityCommandTypes.PURCHASE, tParameters) then
-                local faithCost = city:GetFaithCost(row.Hash)
+                local faithCost = city:GetGold():GetPurchaseCost( "YIELD_FAITH", row.Hash )
                 if playerReligion:GetFaithBalance() >= faithCost then
                     table.insert(possibleActions.PurchaseWithFaith, {
                         CityID = cityID,
@@ -645,7 +643,7 @@ for _, city in player:GetCities():Members() do
             -- Check gold purchase
             tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_GOLD"].Index
             if CityManager.CanStartCommand(city, CityCommandTypes.PURCHASE, tParameters) then
-                local goldCost = city:GetGoldCost(row.Hash)
+                local goldCost = city:GetGold():GetPurchaseCost( "YIELD_GOLD", row.Hash )
                 -- Get valid plots for this district
                 local validPlots = GetValidDistrictPlots(city, row.Hash)
                 if playerTreasury:GetGoldBalance() >= goldCost and #validPlots > 0 then
@@ -663,7 +661,7 @@ for _, city in player:GetCities():Members() do
             -- Check faith purchase
             tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_FAITH"].Index
             if CityManager.CanStartCommand(city, CityCommandTypes.PURCHASE, tParameters) then
-                local faithCost = city:GetFaithCost(row.Hash)
+                local faithCost = city:GetGold():GetPurchaseCost( "YIELD_FAITH", row.Hash )
                 -- Get valid plots for this district
                 local validPlots = GetValidDistrictPlots(city, row.Hash)
                 if playerReligion:GetFaithBalance() >= faithCost and #validPlots > 0 then
