@@ -328,13 +328,9 @@ function FoundReligion(params)
   -- Important: We need to verify the unit can be activated here
 
   local activateGPHash = 374670040
-  if UnitManager.CanStartCommand(pUnit, activateGPHash, activateParams) then
-      UnitManager.RequestCommand(pUnit, activateGPHash, activateParams)
-  else
-    print("Error: Cannot activate Great Prophet at current location")
-    return false;
-  end
-
+  --if UnitManager.CanStartCommand(pUnit, UnitOperationTypes.FOUND_RELIGION, activateParams) then
+  UnitManager.RequestCommand(pUnit, activateGPHash, activateParams)
+  DeleteUnit(pUnit:GetID())
   -- Set up religion founding parameters
   local foundParams = {}
   foundParams[PlayerOperations.PARAM_RELIGION_TYPE] = params.ReligionHash

@@ -750,6 +750,7 @@ if currentDistrictCount < maxAllowedDistricts then
         end
     end
 end
+end
   --print("GetPossibleActions: Checking pantheon options...")
   local playerReligion = player:GetReligion()
   if playerReligion:CanCreatePantheon() then
@@ -935,6 +936,7 @@ if currentDistrictCount < maxAllowedDistricts then
             end
         end
     end
+end
 end
 --print("\n=== END OF CITY PRODUCTION ANALYSIS ===")
 

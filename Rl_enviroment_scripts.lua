@@ -159,7 +159,7 @@ function RLv1.OnTurnBegin()
     end
     
     -- Use the prioritized action selector
-    local numActionsToTake = math.random(4, 9)
+    local numActionsToTake = 4 --math.random(4, 9)
     print("Planning to take " .. numActionsToTake .. " actions")
     
     for i = 1, numActionsToTake do
