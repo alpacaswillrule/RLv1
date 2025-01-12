@@ -61,6 +61,99 @@ function PrintGameStateSummary(gameState)
 end
 
 
+-- Function to select which action to take based on priorities
+function SelectPrioritizedAction(possibleActions)
+    -- Check for highest priority actions first
+    
+    -- Priority 1: Found Religion if possible
+    if possibleActions.FoundReligion and #possibleActions.FoundReligion > 0 then
+        print("Found religion action available - selecting it")
+        return "FoundReligion", possibleActions.FoundReligion[1]
+    end
+
+    -- Priority 2: District Construction
+    if possibleActions.CityProduction then
+        for _, production in ipairs(possibleActions.CityProduction) do
+            if production.ProductionType == "Districts" then
+                print("District construction available - selecting it")
+                -- Pick a random valid plot from the ValidPlots list
+                local plotIndex = math.random(#production.ValidPlots)
+                local plot = production.ValidPlots[plotIndex]
+                return "CityProduction", {
+                    CityID = production.CityID,
+                    ProductionType = "Districts",
+                    ProductionHash = production.ProductionHash,
+                    PlotX = plot.X or plot.x,  -- Handle different possible key names
+                    PlotY = plot.Y or plot.y
+                }
+            end
+        end
+    end
+
+    -- Priority 3: Activate Great People
+    if possibleActions.ActivateGreatPerson and #possibleActions.ActivateGreatPerson > 0 then
+        local greatPerson = possibleActions.ActivateGreatPerson[1]
+        if greatPerson.ValidPlots and #greatPerson.ValidPlots > 0 then
+            -- Pick a random valid plot if needed
+            local plotIndex = greatPerson.ValidPlots[math.random(#greatPerson.ValidPlots)]
+            greatPerson.PlotIndex = plotIndex
+        end
+        return "ActivateGreatPerson", greatPerson
+    end
+
+    -- Priority 4: Found Cities
+    if possibleActions.FoundCity and #possibleActions.FoundCity > 0 then
+        return "FoundCity", possibleActions.FoundCity[1]
+    end
+
+    -- Priority 5: Building Construction
+    if possibleActions.CityProduction then
+        local buildingProductions = {}
+        for _, production in ipairs(possibleActions.CityProduction) do
+            if production.ProductionType == "Buildings" then
+                table.insert(buildingProductions, production)
+            end
+        end
+        if #buildingProductions > 0 then
+            return "CityProduction", buildingProductions[math.random(#buildingProductions)]
+        end
+    end
+
+    -- Priority 6: Unit Production
+    if possibleActions.CityProduction then
+        local unitProductions = {}
+        for _, production in ipairs(possibleActions.CityProduction) do
+            if production.ProductionType == "Units" then
+                table.insert(unitProductions, production)
+            end
+        end
+        if #unitProductions > 0 then
+            return "CityProduction", unitProductions[math.random(#unitProductions)]
+        end
+    end
+
+    -- Priority 7: Move Units if available
+    if possibleActions.MoveUnit and #possibleActions.MoveUnit > 0 then
+        return "MoveUnit", possibleActions.MoveUnit[math.random(#possibleActions.MoveUnit)]
+    end
+
+    -- Priority 8: Any remaining action (random selection)
+    local availableActions = {}
+    for actionType, actions in pairs(possibleActions) do
+        if type(actions) == "table" and #actions > 0 then
+            table.insert(availableActions, {type = actionType, action = actions[math.random(#actions)]})
+        end
+    end
+
+    if #availableActions > 0 then
+        local randomAction = availableActions[math.random(#availableActions)]
+        return randomAction.type, randomAction.action
+    end
+
+    -- No actions available
+    return nil, nil
+end
+
 
 -- Example usage:
 -- local gameState = GetGameState()

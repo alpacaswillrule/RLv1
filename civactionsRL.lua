@@ -23,9 +23,9 @@ function RLv1.ExecuteAction(actionType, actionParams)
     if actionType == "EndTurn" then
         EndTurn();
     elseif actionType == "ChooseCivic" then
-        ChooseCivic(actionParams[1]);
+        ChooseCivic(actionParams);
     elseif actionType == "ChooseTech" then
-        ChooseTech(actionParams[1]);
+        ChooseTech(actionParams);
     elseif actionType == "CityRangedAttack" then
         CityRangedAttack(actionParams[1]);
     elseif actionType == "EncampmentRangedAttack" then
@@ -45,6 +45,7 @@ function RLv1.ExecuteAction(actionType, actionParams)
     elseif actionType == "PatronizeGreatPersonFaith" then
         PatronizeGreatPersonFaith(actionParams[1]);
     elseif actionType == "MoveUnit" then
+        actionParams = {actionParams.UnitID, actionParams.X, actionParams.Y};
         MoveUnit(actionParams[1], actionParams[2], actionParams[3]);
     elseif actionType == "SelectUnit" then
         SelectUnit(actionParams[1])
@@ -67,8 +68,10 @@ function RLv1.ExecuteAction(actionType, actionParams)
     elseif actionType == "FoundCity" then
         FoundCity(actionParams[1]);
     elseif actionType == "PromoteUnit" then
+        actionParams = {actionParams.UnitID, actionParams.PromotionType};
         PromoteUnit(actionParams[1], actionParams[2]);
     elseif actionType == "DeleteUnit" then
+        actionParams = {actionParams.UnitID};
         DeleteUnit(actionParams[1]);
     elseif actionType == "UpgradeUnit" then
         UpgradeUnit(actionParams[1]);

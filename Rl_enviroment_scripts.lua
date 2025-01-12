@@ -143,14 +143,9 @@ function RLv1.OnTurnBegin()
     SendRLNotification("Turn " .. tostring(m_currentGameTurn) .. " beginning");
     print("RL Turn " .. tostring(m_currentGameTurn) .. " Begin");
 
-
-    -- HOW DO I GET ALL METHODS?
-    --get the state
-    local gameState = GetGameState()
-    PrintGameStateSummary(gameState)
-
-    -- Get all possible actions
-    print("Getting possible actions for turn " .. tostring(m_currentGameTurn));
+    -- Get the game state and possible actions
+    --local gameState = GetGameState()
+    --PrintGameStateSummary(gameState)
     local possibleActions = GetPossibleActions();
     
     if not possibleActions then
@@ -158,94 +153,22 @@ function RLv1.OnTurnBegin()
         return
     end
     
-    -- Count total number of possible actions
-    local totalActions = 0
-    local actionTypes = {}
-    for actionType, actions in pairs(possibleActions) do
-        if type(actions) == "table" and #actions > 0 then
-            totalActions = totalActions + #actions
-            table.insert(actionTypes, actionType)
-        elseif actions == true then
-            -- Count boolean actions like EndTurn as 1 action
-            totalActions = totalActions + 1
-            table.insert(actionTypes, actionType)
-        end
-    end
-
-    print("Total possible actions: " .. tostring(totalActions))
-
-    -- Only proceed if we have actions available
-    if totalActions > 0 then
-        -- Randomly decide how many actions to take (between 1 and 3)
-        local numActionsToTake = math.random(4, math.min(9, totalActions))
-        print("Will take " .. tostring(numActionsToTake) .. " actions this turn")
-        
-        -- Take random actions
-        for i = 1, numActionsToTake do
-            -- Select random action type that has available actions
-            local validActionTypes = {};
-            for _, actionType in ipairs(actionTypes) do
-                if type(possibleActions[actionType]) == "table" then
-                    if #possibleActions[actionType] > 0 then
-                        table.insert(validActionTypes, actionType);
-                    end
-                elseif possibleActions[actionType] == true then
-                    table.insert(validActionTypes, actionType);
-                end
-            end
+    -- Use the prioritized action selector
+    local numActionsToTake = math.random(4, 9)
+    for i = 1, numActionsToTake do
+        local actionType, actionParams = SelectPrioritizedAction(possibleActions)
+        if actionType then
+            print("Executing action:", actionType)
+            RLv1.ExecuteAction(actionType, actionParams)
             
-            if #validActionTypes > 0 then
-                local randomActionType = validActionTypes[math.random(#validActionTypes)];
-                print("Selected action type: " .. randomActionType);
-
-                -- if randomActionType == "EndTurn" then
-                --     print("EndTurn selected - breaking action loop");
-                --     --RLv1.ExecuteAction(randomActionType, {});
-                --     --return; -- Exit the function entirely since we're ending the turn
-                -- end
-                
-                local actionParams = {};
-                if type(possibleActions[randomActionType]) == "table" then
-                    local actionsOfType = possibleActions[randomActionType];
-                    if #actionsOfType > 0 then
-                        local randomActionIndex = math.random(#actionsOfType);
-                        local randomAction = actionsOfType[randomActionIndex];
-                        
-                        if randomActionType == "MoveUnit" then
-                            actionParams = {randomAction.UnitID, randomAction.X, randomAction.Y};
-                        elseif randomActionType == "SelectUnit" or randomActionType == "DeleteUnit" then
-                            actionParams = {randomAction.UnitID};
-                        elseif randomActionType == "PromoteUnit" then
-                            actionParams = {randomAction.UnitID, randomAction.PromotionType};
-                        elseif randomActionType == "ChooseCivic" or randomActionType == "ChooseTech" then
-                            actionParams = {randomAction};
-                        elseif randomActionType == "ChangePolicies" then
-                            actionParams = randomAction;
-                        elseif randomActionType == "CityProduction" then
-                            actionParams = randomAction;
-                        elseif randomActionType == "FoundCity" then
-                            actionParams = randomAction;
-                        elseif randomActionType == "FoundReligion" then
-                            actionParams = randomAction;
-                        else
-                            actionParams = randomAction;
-                        end
-                        
-                        -- Execute the action, if it isn't delete unit
-                        if randomActionType ~= "DeleteUnit" then
-                            RLv1.ExecuteAction(randomActionType, actionParams);
-                        end
-                        -- Remove used action
-                        table.remove(actionsOfType, randomActionIndex);
-                    end
-                else
-                    -- Handle boolean actions like EndTurn
-                    RLv1.ExecuteAction(randomActionType, {});
-                end
-            end
+            -- Update possible actions after each execution to maintain accuracy
+            possibleActions = GetPossibleActions()
+            if not possibleActions then break end
+        else
+            break -- No more actions available
         end
     end
-    
+
     -- Always end turn after taking actions
     print("Ending turn " .. tostring(m_currentGameTurn));
     EndTurn();
