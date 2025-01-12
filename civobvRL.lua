@@ -154,13 +154,17 @@ function GetPlayerData(playerID)
 
   -- Get current policies
   print("GetPlayerData: Getting current policies...")
-  for slotIndex = 0, playerCulture:GetNumGovernmentSlots() - 1 do
-    local policyIndex = playerCulture:GetGovernmentPolicyInSlot(slotIndex)
-    if policyIndex then
-      local policy = GameInfo.Policies[policyIndex]
-      data.CurrentPolicies[slotIndex] = policy.PolicyType
-    end
+  local currentPolicies = GetCurrentPolicies(PlayedID)
+  for slotIndex, policyData in pairs(currentPolicies) do
+    print(string.format("Slot %d: %s", slotIndex, policyData.PolicyType))
+    data.CurrentPolicies[slotIndex] = {
+        SlotIndex = slotIndex,
+        PolicyType = policyData.PolicyType,
+        PolicyHash = policyData.Hash,
+        PolicyData = policyData
+    }
   end
+
 
   -- Get Great People points
   print("GetPlayerData: Getting Great People points...")
@@ -198,6 +202,34 @@ function GetUnitData(unit)
     return data;
   end
 
+
+  function GetCurrentPolicies(playerID)
+    local pPlayer = Players[playerID]
+    local playerCulture = pPlayer:GetCulture()
+    local currentPolicies = {}
+  
+    -- Get number of policy slots
+    local numSlots = playerCulture:GetNumPolicySlots()
+    
+    -- For each slot
+    for slotIndex = 0, numSlots-1 do
+      local policyHash = playerCulture:GetSlotPolicy(slotIndex)
+      if policyHash ~= -1 then -- -1 indicates empty slot
+        -- Get policy info from hash
+        local policy = GameInfo.Policies[policyHash]
+        if policy then
+          currentPolicies[slotIndex] = {
+            SlotIndex = slotIndex,
+            PolicyType = policy.PolicyType, 
+            PolicyHash = policyHash,
+            SlotType = playerCulture:GetSlotType(slotIndex)
+          }
+        end
+      end
+    end
+  
+    return currentPolicies
+  end
 -- New function to get city state information
 -- Returns a table of information about all City States the player has met
 -- Returns a table of information about all City States the player has met
