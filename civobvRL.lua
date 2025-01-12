@@ -1061,7 +1061,39 @@ for i, unit in player:GetUnits():Members() do
 end
 
   print("GetPossibleActions: Checking for Great Prophet and Religion actions...")
-  GetReligionFoundingOptions(player)
+  -- In your GetPossibleActions() function:
+    local foundingOptions = GetReligionFoundingOptions(player)
+    if foundingOptions then
+        -- Convert the options into discrete possible actions
+        possibleActions.FoundReligion = {}
+        
+        -- Create one complete action for each possible religion/belief combination
+        for _, religion in ipairs(foundingOptions.AvailableReligions) do
+            -- For each valid combination of beliefs...
+            if foundingOptions.RequiredBeliefs["BELIEF_CLASS_FOUNDER"] and 
+               foundingOptions.RequiredBeliefs["BELIEF_CLASS_FOLLOWER"] then
+                
+                for _, founderBelief in ipairs(foundingOptions.RequiredBeliefs["BELIEF_CLASS_FOUNDER"]) do
+                    for _, followerBelief in ipairs(foundingOptions.RequiredBeliefs["BELIEF_CLASS_FOLLOWER"]) do
+                        local worshipBeliefs = foundingOptions.OptionalBeliefs["BELIEF_CLASS_WORSHIP"] or {{Hash = nil}}
+                        
+                        for _, worshipBelief in ipairs(worshipBeliefs) do
+                            -- Create a complete action
+                            table.insert(possibleActions.FoundReligion, {
+                                UnitID = foundingOptions.UnitID,
+                                ReligionHash = religion.Hash,
+                                BeliefHashes = {
+                                    founderBelief.Hash,
+                                    followerBelief.Hash,
+                                    worshipBelief.Hash
+                                }
+                            })
+                        end
+                    end
+                end
+            end
+        end
+    end
 
 
 -- Add this section after the Great Prophet checks:

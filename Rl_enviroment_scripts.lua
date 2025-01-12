@@ -73,6 +73,7 @@ function OnInputHandler(pInputStruct)
     return false;
 end
 
+
 function InitializeRL()
     print("RL InitializeRL called");
     if m_isInitialized then 
@@ -225,7 +226,7 @@ function RLv1.OnTurnBegin()
                         elseif randomActionType == "FoundCity" then
                             actionParams = randomAction;
                         elseif randomActionType == "FoundReligion" then
-                            actionParams = randomAction[1]; --THE 1 HERE IS TO SELECT FIRST POSSIBLE BELIEF/RELIGION COMBO
+                            actionParams = randomAction;
                         else
                             actionParams = randomAction;
                         end
@@ -259,25 +260,5 @@ end
 
 -- -- Register our load handler
 Events.LoadGameViewStateDone.Add(OnLoadGameViewStateDone);
--- Events.GameCoreEventPlaybackComplete.Add(OnGameCoreEventPlaybackComplete);
--- print("RL Environment Script Registration Complete!");
 
--- print("POPUP MANAGER")
 
--- function CloseAllPopups()
--- 	LuaEvents.LaunchBar_CloseGreatPeoplePopup();
--- 	LuaEvents.LaunchBar_CloseGreatWorksOverview();
--- 	LuaEvents.LaunchBar_CloseReligionPanel();
--- 	if isGovernmentOpen then
--- 		LuaEvents.LaunchBar_CloseGovernmentPanel();
--- 	end
--- 	LuaEvents.LaunchBar_CloseTechTree();
--- 	LuaEvents.LaunchBar_CloseCivicsTree();
--- end
-
--- function OnGameCoreEventPlaybackComplete()
---     if m_isAgentEnabled == true then
---         print("attempting to close popups");
---     CloseAllPopups();
---     end
--- end
