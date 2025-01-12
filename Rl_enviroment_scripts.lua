@@ -137,16 +137,30 @@ function InitializeRL()
 end
 
 function RLv1.OnTurnBegin()
-    if not m_isInitialized or not m_isAgentEnabled then return; end
+    print("=== TURN BEGIN FUNCTION START ===")
+    
+    if not m_isInitialized then 
+        print("Not initialized, returning")
+        return
+    end
+    if not m_isAgentEnabled then
+        print("Agent not enabled, returning")
+        return
+    end
     
     m_currentGameTurn = Game.GetCurrentGameTurn();
     SendRLNotification("Turn " .. tostring(m_currentGameTurn) .. " beginning");
     print("RL Turn " .. tostring(m_currentGameTurn) .. " Begin");
 
-    -- Get the game state and possible actions
-    --local gameState = GetGameState()
-    --PrintGameStateSummary(gameState)
-    local possibleActions = GetPossibleActions();
+    -- Wrap the action execution in pcall to catch errors
+    local status, possibleActions = pcall(function() 
+        return GetPossibleActions()
+    end)
+    
+    if not status then
+        print("Error getting possible actions:", possibleActions)
+        return
+    end
     
     if not possibleActions then
         print("No possible actions available")
@@ -155,30 +169,65 @@ function RLv1.OnTurnBegin()
     
     -- Use the prioritized action selector
     local numActionsToTake = math.random(4, 9)
+    print("Planning to take " .. numActionsToTake .. " actions")
+    
     for i = 1, numActionsToTake do
-        local actionType, actionParams = SelectPrioritizedAction(possibleActions)
+        print("Starting action iteration " .. i)
+        
+        local status, actionType, actionParams = pcall(function()
+            return SelectPrioritizedAction(possibleActions)
+        end)
+        
+        if not status then
+            print("Error selecting action:", actionType) -- actionType will contain error message
+            break
+        end
+        
         if actionType then
-            print("Executing action:", actionType)
-            RLv1.ExecuteAction(actionType, actionParams)
+            print("Selected action:", actionType)
+            print("Action params:", actionParams and table.concat(actionParams, ", ") or "nil")
+            
+            local execStatus, execError = pcall(function()
+                RLv1.ExecuteAction(actionType, actionParams)
+            end)
+            
+            if not execStatus then
+                print("Error executing action:", execError)
+                break
+            end
+            
+            print("Action execution completed")
             
             -- Update possible actions after each execution to maintain accuracy
-            possibleActions = GetPossibleActions()
-            if not possibleActions then break end
+            local updateStatus, newActions = pcall(function()
+                return GetPossibleActions()
+            end)
+            
+            if not updateStatus then
+                print("Error updating possible actions:", newActions)
+                break
+            end
+            
+            possibleActions = newActions
+            if not possibleActions then 
+                print("No more possible actions after update")
+                break 
+            end
         else
-            break -- No more actions available
+            print("No action selected, breaking loop")
+            break
         end
+        
+        print("Completed action iteration " .. i)
     end
 
+    print("Action loop complete, ending turn")
     -- Always end turn after taking actions
-    print("Ending turn " .. tostring(m_currentGameTurn));
     EndTurn();
+    print("=== TURN BEGIN FUNCTION END ===")
 end
 
 function RLv1.OnTurnEnd()
-    if not m_isInitialized or not m_isAgentEnabled then return; end
-    
-    SendRLNotification("Turn " .. tostring(m_currentGameTurn) .. " completed");
-    print("RL Turn " .. tostring(m_currentGameTurn) .. " End");
 end
 
 -- -- Register our load handler

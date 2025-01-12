@@ -316,8 +316,9 @@ function FoundReligion(params)
   activateParams[UnitOperationTypes.PARAM_Y] = pUnit:GetY()
 
   -- Important: We need to verify the unit can be activated here
-  if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.ACTIVATE_GREAT_PERSON, nil, activateParams) then
-    UnitManager.RequestOperation(pUnit, UnitOperationTypes.ACTIVATE_GREAT_PERSON, activateParams)
+  
+  if UnitManager.CanStartOperation(unit, GameInfo.UnitCommands['UNITCOMMAND_ACTIVATE_GREAT_PERSON'].Hash, activateParams) then
+    UnitManager.RequestOperation(unit, GameInfo.UnitCommands['UNITCOMMAND_ACTIVATE_GREAT_PERSON'].Hash, activateParams)
   else
     print("Error: Cannot activate Great Prophet at current location")
     return false

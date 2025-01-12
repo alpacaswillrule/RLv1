@@ -66,27 +66,27 @@ end
 
 -- Gets the current turn number.
 function GetTurnNumber()
-  print("GetTurnNumber: Getting current turn number...")
+  --print("GetTurnNumber: Getting current turn number...")
   local turn = Game.GetCurrentGameTurn()
-  print("GetTurnNumber: Current turn number is: " .. tostring(turn))
+  --print("GetTurnNumber: Current turn number is: " .. tostring(turn))
   return turn;
 end
 
 -- Gets the current player's ID.
 function GetPlayerID()
-  print("GetPlayerID: Getting local player ID...")
+  --print("GetPlayerID: Getting local player ID...")
   local playerID = Game.GetLocalPlayer();
-  print("GetPlayerID: Local player ID is: " .. tostring(playerID))
+  --print("GetPlayerID: Local player ID is: " .. tostring(playerID))
   return playerID;
 end
 
 -- Gets information about the local player.
 function GetPlayerData(playerID)
-  print("GetPlayerData: Getting data for player: " .. tostring(playerID))
+  --print("GetPlayerData: Getting data for player: " .. tostring(playerID))
 
   local player = Players[playerID];
   if not player then 
-    print("GetPlayerData: Player not found.")
+    --print("GetPlayerData: Player not found.")
     return nil 
   end
 
@@ -113,7 +113,7 @@ function GetPlayerData(playerID)
   };
   
 
-  print("GetPlayerData: Gathering city data...")
+  --print("GetPlayerData: Gathering city data...")
   -- Add city data
   for i, city in player:GetCities():Members() do
       local cityData = GetCityData(city);
@@ -122,14 +122,14 @@ function GetPlayerData(playerID)
       end
   end
 
-  print("GetPlayerData: Gathering unit data...")
+  --print("GetPlayerData: Gathering unit data...")
   -- Add unit data
   for _, unit in player:GetUnits():Members() do
     table.insert(data.Units, GetUnitData(unit));
   end
 
   -- Add researched techs
-  print("GetPlayerData: Gathering researched techs...")
+  --print("GetPlayerData: Gathering researched techs...")
   local playerTechs = player:GetTechs()
   for tech in GameInfo.Technologies() do
     if playerTechs:HasTech(tech.Hash) then
@@ -138,7 +138,7 @@ function GetPlayerData(playerID)
   end
 
   -- Add researched civics
-  print("GetPlayerData: Gathering researched civics...")
+  --print("GetPlayerData: Gathering researched civics...")
   local playerCulture = player:GetCulture()
   for civic in GameInfo.Civics() do
     if playerCulture:HasCivic(civic.Hash) then
@@ -147,17 +147,17 @@ function GetPlayerData(playerID)
   end
 
   -- Get current government
-  print("GetPlayerData: Getting current government...")
+  --print("GetPlayerData: Getting current government...")
   local governmentIndex = playerCulture:GetCurrentGovernment()
   if governmentIndex then
     data.CurrentGovernment = GameInfo.Governments[governmentIndex].GovernmentType
   end
 
   -- Get current policies
-  print("GetPlayerData: Getting current policies...")
+  --print("GetPlayerData: Getting current policies...")
   local currentPolicies = GetCurrentPolicies(playerID, player)
   for slotIndex, policyData in pairs(currentPolicies) do
-    print(string.format("Slot %d: %s", slotIndex, policyData.PolicyType))
+    --print(string.format("Slot %d: %s", slotIndex, policyData.PolicyType))
     data.CurrentPolicies[slotIndex] = {
         SlotIndex = slotIndex,
         PolicyType = policyData.PolicyType,
@@ -167,13 +167,13 @@ function GetPlayerData(playerID)
   end
 
   -- Get Great People points
-  print("GetPlayerData: Getting Great People points...")
+  --print("GetPlayerData: Getting Great People points...")
   for class in GameInfo.GreatPersonClasses() do
     data.GreatPeoplePoints[class.GreatPersonClassType] = player:GetGreatPeoplePoints():GetPointsTotal(class.Hash)
     data.GreatPeoplePointsPerTurn[class.GreatPersonClassType] = player:GetGreatPeoplePoints():GetPointsPerTurn(classID)
   end
 
-  print("GetPlayerData: Player data collection complete.")
+  --print("GetPlayerData: Player data collection complete.")
   return data;
 end
 
@@ -351,7 +351,7 @@ end
 
 -- New function to get visible tile data
 function GetVisibleTileData(playerID)
-    print("GetVisibleTileData: Getting visible tiles for player: " .. tostring(playerID))
+    --print("GetVisibleTileData: Getting visible tiles for player: " .. tostring(playerID))
     
     local visibleTiles = {}
     local player = Players[playerID]
@@ -434,7 +434,7 @@ function GetVisibleTileData(playerID)
       end
     end
     
-    print("GetVisibleTileData: Found " .. #visibleTiles .. " visible/revealed tiles")
+    --print("GetVisibleTileData: Found " .. #visibleTiles .. " visible/revealed tiles")
     return visibleTiles
   end
 
@@ -612,7 +612,7 @@ function GetPossibleActions()
   
 
 -- Add this section where we check city production options:
-print("GetPossibleActions: Checking purchase options...")
+--print("GetPossibleActions: Checking purchase options...")
 
 local player = Players[Game.GetLocalPlayer()]
 local playerTreasury = player:GetTreasury()
@@ -620,7 +620,7 @@ local playerReligion = player:GetReligion()
 
 for _, city in player:GetCities():Members() do
     local cityID = city:GetID()
-    print("\nChecking purchase options for City ID: " .. tostring(cityID))
+    --print("\nChecking purchase options for City ID: " .. tostring(cityID))
     
     -- Check unit purchases
     for row in GameInfo.Units() do
@@ -744,11 +744,11 @@ for _, city in player:GetCities():Members() do
     end
 end
 
-  print("GetPossibleActions: Checking pantheon options...")
+  --print("GetPossibleActions: Checking pantheon options...")
   local playerReligion = player:GetReligion()
   if playerReligion:CanCreatePantheon() then
       -- Get available pantheon beliefs
-      print("Can create pantheon, checking available beliefs...")
+      --print("Can create pantheon, checking available beliefs...")
       local pGameReligion = Game.GetReligion()
       
       for row in GameInfo.Beliefs() do
@@ -763,13 +763,13 @@ end
                   Name = Locale.Lookup(row.Name),
                   Description = Locale.Lookup(row.Description)
               })
-              print("Added available pantheon belief: " .. row.BeliefType)
+              --print("Added available pantheon belief: " .. row.BeliefType)
           end
       end
   end
 
 
---print("GetPossibleActions: Checking civics...")
+----print("GetPossibleActions: Checking civics...")
 
 local playerID = Game.GetLocalPlayer()
 local player = Players[playerID]
@@ -778,30 +778,30 @@ local currentCivicID = playerCulture:GetProgressingCivic()
 
 -- If no civic is being researched (currentCivicID is -1) or if we can switch civics
 if currentCivicID == -1 then
-    print("No civic currently in progress, checking available civics...")
+    --print("No civic currently in progress, checking available civics...")
     for civic in GameInfo.Civics() do
         local civicIndex = civic.Index
-        -- Debug print civic info
-        --print("Checking civic: " .. civic.CivicType .. " Index: " .. tostring(civicIndex))
+        -- Debug --print civic info
+        ----print("Checking civic: " .. civic.CivicType .. " Index: " .. tostring(civicIndex))
         
         -- Check if the civic can be researched
         if playerCulture:CanProgress(civicIndex) then
-            print("Can progress civic: " .. civic.CivicType)
+            --print("Can progress civic: " .. civic.CivicType)
             if not playerCulture:HasCivic(civicIndex) then
-                print("Don't have civic yet, adding as possible choice: " .. civic.CivicType)
+                --print("Don't have civic yet, adding as possible choice: " .. civic.CivicType)
                 table.insert(possibleActions.ChooseCivic, {
                     CivicType = civic.CivicType,
                     Hash = civicIndex  -- Use Index instead of Hash for proper lookup
                 })
-                print("Added civic: " .. civic.CivicType .. " with index: " .. tostring(civicIndex))
+                --print("Added civic: " .. civic.CivicType .. " with index: " .. tostring(civicIndex))
             end
         end
     end
-    -- Debug print total available civics
-    print("Total available civics: " .. #possibleActions.ChooseCivic)
+    -- Debug --print total available civics
+    --print("Total available civics: " .. #possibleActions.ChooseCivic)
 end
 
---print("GetPossibleActions: Checking technologies...")
+----print("GetPossibleActions: Checking technologies...")
 
   -- TECHNOLOGIES
 -- Check if no technology is currently being researched
@@ -812,17 +812,17 @@ local player = Players[playerID]
 local playerTechs = player:GetTechs()
 local currentTechID = playerTechs:GetResearchingTech()
 
---print("GetPossibleActions: Checking available techs...")
---print("Current research tech ID: " .. tostring(currentTechID))
+----print("GetPossibleActions: Checking available techs...")
+----print("Current research tech ID: " .. tostring(currentTechID))
 
 -- If no tech is being researched (currentTechID is -1) or if we can switch techs
 if currentTechID == -1 then
-    --print("No tech currently being researched")
+    ----print("No tech currently being researched")
     -- Check each available tech
     for tech in GameInfo.Technologies() do
         local techIndex = tech.Index
         if playerTechs:CanResearch(techIndex) then
-            --print("GetPossibleActions: Adding possible tech: " .. tostring(tech.TechnologyType))
+            ----print("GetPossibleActions: Adding possible tech: " .. tostring(tech.TechnologyType))
             table.insert(possibleActions.ChooseTech, {
                 TechType = tech.TechnologyType,
                 Hash = GameInfo.Technologies[tech.TechnologyType].Hash
@@ -831,24 +831,24 @@ if currentTechID == -1 then
     end
 end
 -- Inside GetPossibleActions()
---print("GetPossibleActions: Checking city production options...")
+----print("GetPossibleActions: Checking city production options...")
 
 local player = Players[Game.GetLocalPlayer()];
 
-print("\n=== BEGINNING CITY PRODUCTION ANALYSIS ===")
+--print("\n=== BEGINNING CITY PRODUCTION ANALYSIS ===")
 -- Inside GetPossibleActions() where we process city productions
 for _, city in player:GetCities():Members() do
     local cityID = city:GetID()
-    print("\nProcessing City ID: " .. tostring(cityID))
+    --print("\nProcessing City ID: " .. tostring(cityID))
     local buildQueue = city:GetBuildQueue()
     
     -- Check Units
-    print("\nChecking Available Units:")
+    --print("\nChecking Available Units:")
     for row in GameInfo.Units() do
         if row and row.Hash and buildQueue:CanProduce(row.Hash, false, true) then
-            -- print("- Can produce unit: " .. tostring(row.UnitType))
-            -- print("  Hash: " .. tostring(row.Hash))
-            -- print("  Cost: " .. tostring(buildQueue:GetUnitCost(row.Index)))
+            -- --print("- Can produce unit: " .. tostring(row.UnitType))
+            -- --print("  Hash: " .. tostring(row.Hash))
+            -- --print("  Cost: " .. tostring(buildQueue:GetUnitCost(row.Index)))
             
             -- Insert into possibleActions (not possibleProductions)
             table.insert(possibleActions.CityProduction, {
@@ -863,14 +863,14 @@ for _, city in player:GetCities():Members() do
     end
 
     -- Check Buildings
-    print("\nChecking Available Buildings:")
+    --print("\nChecking Available Buildings:")
     for row in GameInfo.Buildings() do
         if row and row.Hash and buildQueue:CanProduce(row.Hash, true) then
             local cost = row.Index and buildQueue:GetBuildingCost(row.Index) or 0
             local turns = row.Index and buildQueue:GetTurnsLeft(row.BuildingType) or 0
-            -- print("- Can produce building: " .. tostring(row.BuildingType))
-            -- print("  Hash: " .. tostring(row.Hash))
-            -- print("  Cost: " .. tostring(buildQueue:GetBuildingCost(row.Index)))
+            -- --print("- Can produce building: " .. tostring(row.BuildingType))
+            -- --print("  Hash: " .. tostring(row.Hash))
+            -- --print("  Cost: " .. tostring(buildQueue:GetBuildingCost(row.Index)))
             -- Insert into possibleActions
             table.insert(possibleActions.CityProduction, {
                 CityID = cityID,
@@ -884,7 +884,7 @@ for _, city in player:GetCities():Members() do
     end
 
     -- Check Projects
-    print("\nChecking Available Projects:")
+    --print("\nChecking Available Projects:")
     for row in GameInfo.Projects() do
         if row and row.Hash and buildQueue:CanProduce(row.Hash, true) then
             local cost = row.Index and buildQueue:GetProjectCost(row.Index) or 0
@@ -903,15 +903,15 @@ for _, city in player:GetCities():Members() do
     end
 
     -- Check Districts 
-    print("\nChecking Available Districts:")
+    ----print("\nChecking Available Districts:")
     for row in GameInfo.Districts() do
         if row and row.Hash and buildQueue:CanProduce(row.Hash, true) then
-            print("- Checking district: " .. tostring(row.DistrictType))
+            ----print("- Checking district: " .. tostring(row.DistrictType))
             local validPlots = GetValidDistrictPlots(city, row.Hash)
-            print("  Number of valid plots: " .. #validPlots)
+            ----print("  Number of valid plots: " .. #validPlots)
             
             if #validPlots > 0 then
-                print("  Adding district to possibilities")
+                --print("  Adding district to possibilities")
                 -- Insert into possibleActions
                 table.insert(possibleActions.CityProduction, {
                     CityID = cityID,
@@ -926,19 +926,19 @@ for _, city in player:GetCities():Members() do
         end
     end
 end
-print("\n=== END OF CITY PRODUCTION ANALYSIS ===")
+--print("\n=== END OF CITY PRODUCTION ANALYSIS ===")
 
-  print("GetPossibleActions: Checking city ranged attacks...")
+  --print("GetPossibleActions: Checking city ranged attacks...")
     -- CITY RANGED ATTACK
   for _, city in player:GetCities():Members() do
     if CityManager.CanStartCommand(city, CityCommandTypes.RANGE_ATTACK) then
-	  print("GetPossibleActions: Adding city ranged attack for city ID: " .. tostring(city:GetID()))
+	  --print("GetPossibleActions: Adding city ranged attack for city ID: " .. tostring(city:GetID()))
       table.insert(possibleActions.CityRangedAttack, city:GetID());
     end
   end
 
 
-  print("GetPossibleActions: Checking encampment ranged attacks...")
+  --print("GetPossibleActions: Checking encampment ranged attacks...")
 -- ENCAMPMENT RANGED ATTACK
 for district in player:GetDistricts():Members() do
     -- Get the actual district object using the ID
@@ -951,16 +951,16 @@ for district in player:GetDistricts():Members() do
         -- Check if we got valid district info and it's an encampment
         if districtInfo and districtInfo.DistrictType == "DISTRICT_ENCAMPMENT" then
             if CityManager.CanStartCommand(districtObj, CityCommandTypes.RANGE_ATTACK) then
-                print("GetPossibleActions: Adding encampment ranged attack for district ID: " .. tostring(district))
+                --print("GetPossibleActions: Adding encampment ranged attack for district ID: " .. tostring(district))
                 table.insert(possibleActions.EncampmentRangedAttack, district)
             end
         end
     end
 end
 
-  print("Finished checking districts")
+  --print("Finished checking districts")
 
-  print("GetPossibleActions: Checking envoy actions...")
+  --print("GetPossibleActions: Checking envoy actions...")
   -- SEND ENVOY
   local influence = player:GetInfluence()
   if influence:CanGiveInfluence() then
@@ -970,62 +970,62 @@ end
           -- Check if this is a city state
           if cityStatePlayer and cityStatePlayer:IsCityState() then
               if influence:CanGiveTokensToPlayer(cityState) then
-                  print("GetPossibleActions: Adding send envoy action for city-state ID: " .. tostring(cityState))
+                  --print("GetPossibleActions: Adding send envoy action for city-state ID: " .. tostring(cityState))
                   table.insert(possibleActions.SendEnvoy, cityState)
               end
           end
       end
   end
 
-  print("GetPossibleActions: Checking make peace actions...")
+  --print("GetPossibleActions: Checking make peace actions...")
   -- MAKE PEACE WITH CITY-STATE
   for _, cityState in ipairs(PlayerManager.GetAlive()) do
       local cityStatePlayer = Players[cityState]
       -- Check if this is a city state
       if cityStatePlayer and cityStatePlayer:IsCityState() then
           if player:GetDiplomacy():CanMakePeaceWith(cityState) then
-              print("GetPossibleActions: Adding make peace action for city-state ID: " .. tostring(cityState))
+              --print("GetPossibleActions: Adding make peace action for city-state ID: " .. tostring(cityState))
               table.insert(possibleActions.MakePeace, cityState)
           end
       end
   end
   
-  print("GetPossibleActions: Checking levy military actions...")
+  --print("GetPossibleActions: Checking levy military actions...")
   -- LEVY MILITARY
   for _, cityState in ipairs(PlayerManager.GetAlive()) do
       local cityStatePlayer = Players[cityState]
       -- Check if this is a city state
       if cityStatePlayer and cityStatePlayer:IsCityState() then
           if player:GetInfluence():CanLevyMilitary(cityState) then
-              print("GetPossibleActions: Adding levy military action for city-state ID: " .. tostring(cityState))
+              --print("GetPossibleActions: Adding levy military action for city-state ID: " .. tostring(cityState))
               table.insert(possibleActions.LevyMilitary, cityState)
           end
       end
   end
 
-  print("GetPossibleActions: Checking Great People actions...")
+  --print("GetPossibleActions: Checking Great People actions...")
     -- GREAT PEOPLE
   local greatPeople = Game.GetGreatPeople();
   for individual in GameInfo.GreatPersonIndividuals() do
     if greatPeople:CanRecruitPerson(playerID, individual.Hash) then
-	  print("GetPossibleActions: Adding recruit Great Person action for: " .. tostring(individual.Name))
+	  --print("GetPossibleActions: Adding recruit Great Person action for: " .. tostring(individual.Name))
       table.insert(possibleActions.RecruitGreatPerson, individual.Name);
     end
     if greatPeople:CanRejectPerson(playerID, individual.Hash) then
-	  print("GetPossibleActions: Adding reject Great Person action for: " .. tostring(individual.Name))
+	  --print("GetPossibleActions: Adding reject Great Person action for: " .. tostring(individual.Name))
       table.insert(possibleActions.RejectGreatPerson, individual.Name);
     end
     if greatPeople:CanPatronizePerson(playerID, individual.Hash, YieldTypes.GOLD) then
-	  print("GetPossibleActions: Adding patronize with Gold action for: " .. tostring(individual.Name))
+	  --print("GetPossibleActions: Adding patronize with Gold action for: " .. tostring(individual.Name))
       table.insert(possibleActions.PatronizeGreatPersonGold, individual.Name);
     end
     if greatPeople:CanPatronizePerson(playerID, individual.Hash, YieldTypes.FAITH) then
-	  print("GetPossibleActions: Adding patronize with Faith action for: " .. tostring(individual.Name))
+	  --print("GetPossibleActions: Adding patronize with Faith action for: " .. tostring(individual.Name))
       table.insert(possibleActions.PatronizeGreatPersonFaith, individual.Name);
     end
   end
 
-  print("GetPossibleActions: Checking great person activations...")
+  --print("GetPossibleActions: Checking great person activations...")
 -- Check each unit for great person activation capabilities
 for i, unit in player:GetUnits():Members() do
     local unitGreatPerson = unit:GetGreatPerson()
@@ -1060,7 +1060,7 @@ for i, unit in player:GetUnits():Members() do
     end
 end
 
-  print("GetPossibleActions: Checking for Great Prophet and Religion actions...")
+  --print("GetPossibleActions: Checking for Great Prophet and Religion actions...")
   -- In your GetPossibleActions() function:
     local foundingOptions = GetReligionFoundingOptions(player)
     if foundingOptions then
@@ -1097,7 +1097,7 @@ end
 
 
 -- Add this section after the Great Prophet checks:
-print("GetPossibleActions: Checking for religious unit actions...")
+--print("GetPossibleActions: Checking for religious unit actions...")
 
 -- Check each unit for religious spread capabilities
 for i, unit in player:GetUnits():Members() do
@@ -1313,7 +1313,7 @@ function GetAllUnitActions(player)
       UpgradeUnit = {}
   }
 
-  print("=== BEGIN UNIT DISCOVERY ===")
+  --print("=== BEGIN UNIT DISCOVERY ===")
   
   local pPlayerUnits:table = player:GetUnits();
   local militaryUnits:table = {};
@@ -1321,23 +1321,23 @@ function GetAllUnitActions(player)
   
   -- First sort units into categories
   for i, pUnit in pPlayerUnits:Members() do
-      --print("Found unit: " .. tostring(i))
+      ----print("Found unit: " .. tostring(i))
       local unitInfo:table = GameInfo.Units[pUnit:GetUnitType()];
-      --print("Unit type: " .. unitInfo.UnitType)
+      ----print("Unit type: " .. unitInfo.UnitType)
       
       if pUnit:GetCombat() == 0 and pUnit:GetRangedCombat() == 0 then
           -- if we have no attack strength we must be civilian
-          --print("Adding to civilian units")
+          ----print("Adding to civilian units")
           table.insert(civilianUnits, pUnit);
       else
-          --print("Adding to military units")
+          ----print("Adding to military units")
           table.insert(militaryUnits, pUnit);
       end
   end
 
   -- Process military units
   for _, pUnit in ipairs(militaryUnits) do
-      --print("Processing military unit")
+      ----print("Processing military unit")
       local unitInfo:table = GameInfo.Units[pUnit:GetUnitType()];
       
       -- Check movement
@@ -1359,14 +1359,14 @@ function GetAllUnitActions(player)
 
   -- Process civilian units
   for _, pUnit in ipairs(civilianUnits) do
-      print("Processing civilian unit")
+      --print("Processing civilian unit")
       local unitInfo:table = GameInfo.Units[pUnit:GetUnitType()];
       
       -- Check if unit is a settler
       if unitInfo.FoundCity then
-          print("Found settler!")
+          --print("Found settler!")
           if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.FOUND_CITY, nil) then
-              print("Settler can found city")
+              --print("Settler can found city")
               table.insert(unitActions.FoundCity, { UnitID = pUnit:GetID() })
           end
       end
@@ -1398,7 +1398,7 @@ function GetValidMoveLocations(unit)
   local startX = unit:GetX()
   local startY = unit:GetY()
   
-  print(string.format("Checking moves from position %d,%d with range %d", startX, startY, range))
+  --print(string.format("Checking moves from position %d,%d with range %d", startX, startY, range))
   
   for dx = -range, range do
       for dy = -range, range do
@@ -1418,22 +1418,22 @@ function GetValidMoveLocations(unit)
       end
   end
   
-  print("Found " .. #validMoves .. " valid move locations")
+  --print("Found " .. #validMoves .. " valid move locations")
   return validMoves
 end
 
 --CHECKING ALL ACTIONS THAT ARE POSSIBLE
-print("GetPossibleActions: Checking unit actions...")
+--print("GetPossibleActions: Checking unit actions...")
 local unitActions = GetAllUnitActions(player)
 for actionType, actions in pairs(unitActions) do
     if #actions > 0 then
         possibleActions[actionType] = actions
-        -- print("GetPossibleActions: Found " .. #actions .. " possible " .. actionType .. " actions")
+        -- --print("GetPossibleActions: Found " .. #actions .. " possible " .. actionType .. " actions")
     end
 end
 
 -- CHANGE GOVERNMENT
-print("GetPossibleActions: Checking change government...")
+--print("GetPossibleActions: Checking change government...")
 if CanChangeGovernment() then
   for government in GameInfo.Governments() do
     if government and government.Hash and playerCulture:IsGovernmentUnlocked(government.Hash) then
@@ -1445,7 +1445,7 @@ end
 
 
 -- CHANGE POLICIES
-print("GetPossibleActions: Checking change policies...")
+--print("GetPossibleActions: Checking change policies...")
 if playerCulture and CanChangePolicies() then
   -- Get all policy slots
   local numPolicySlots = playerCulture:GetNumPolicySlots()
@@ -1547,6 +1547,7 @@ function RequestBuildImprovement(unit, improvementHash)
 end  -- Only one end needed for the function block
 
   -- Return the table of possible actions
+  print("got possible actions")
   return possibleActions;
 
   -- End of GetPossibleActions()
