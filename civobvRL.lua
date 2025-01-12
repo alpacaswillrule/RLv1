@@ -489,6 +489,7 @@ function GetValidDistrictPlots(city, districtHash)
     return validPlots
 end
 
+
 function GetPossibleActions()
   print("GetPossibleActions: Determining possible actions for player...")
   local playerID = Game.GetLocalPlayer();
@@ -1062,12 +1063,6 @@ end
       end
     end
 
--- Add to initial possibleActions table:
-local possibleActions = {
-    -- ... existing actions ...
-    SpreadReligion = {},
-    EvangelizeBelief = {}
-};
 
 -- Add this section after the Great Prophet checks:
 print("GetPossibleActions: Checking for religious unit actions...")
@@ -1405,16 +1400,16 @@ for actionType, actions in pairs(unitActions) do
     end
 end
 
-  -- CHANGE GOVERNMENT
-  print("GetPossibleActions: Checking change government...")
-  if CanChangeGovernment() then
-    for government in GameInfo.Governments() do
-      if playerCulture:IsGovernmentUnlocked(government.Hash) then
-	    print("GetPossibleActions: Adding change government to: " .. tostring(government.GovernmentType))
-        table.insert(possibleActions.ChangeGovernment, government.Hash);
-      end
+-- CHANGE GOVERNMENT
+print("GetPossibleActions: Checking change government...")
+if CanChangeGovernment() then
+  for government in GameInfo.Governments() do
+    if government and government.Hash and playerCulture:IsGovernmentUnlocked(government.Hash) then
+      -- Make sure the table exists before inserting
+      table.insert(possibleActions.ChangeGovernment, government.hash)
     end
   end
+end
 
 
 -- CHANGE POLICIES
@@ -1451,6 +1446,7 @@ if playerCulture and CanChangePolicies() then
       end
   end
 end
+
 
 -- Helper functions for unit actions
 function GetAvailablePromotions(unit)
