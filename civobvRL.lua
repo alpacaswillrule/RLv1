@@ -154,7 +154,7 @@ function GetPlayerData(playerID)
 
   -- Get current policies
   print("GetPlayerData: Getting current policies...")
-  local currentPolicies = GetCurrentPolicies(PlayedID)
+  local currentPolicies = GetCurrentPolicies(playerID, player)
   for slotIndex, policyData in pairs(currentPolicies) do
     print(string.format("Slot %d: %s", slotIndex, policyData.PolicyType))
     data.CurrentPolicies[slotIndex] = {
@@ -203,8 +203,8 @@ function GetUnitData(unit)
   end
 
 
-  function GetCurrentPolicies(playerID)
-    local pPlayer = Players[playerID]
+  function GetCurrentPolicies(playerID,Player)
+    local pPlayer = Player
     local playerCulture = pPlayer:GetCulture()
     local currentPolicies = {}
   
