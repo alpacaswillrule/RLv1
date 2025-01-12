@@ -1001,15 +1001,13 @@ end
   for i, unit in player:GetUnits():Members() do
     local unitType = GameInfo.Units[unit:GetUnitType()]
     if unitType.UnitType == "UNIT_GREAT_PROPHET" then
-      -- Check if unit is at a Holy Site
-      local plot = Map.GetPlot(unit:GetX(), unit:GetY())
-      local districtID = plot:GetDistrictID()
-      if districtID ~= -1 then
-        local district = CityManager.GetDistrict(player:GetID(), districtID)
+        -- Check if unit is at a Holy Site
+        local plot = Map.GetPlot(unit:GetX(), unit:GetY())
+        local district = CityManager.GetDistrictAt(plot)
         if district and GameInfo.Districts[district:GetType()].DistrictType == "DISTRICT_HOLY_SITE" then
-          -- Structure the religions and beliefs into actionable format
-          local foundingChoices = {}
-          
+            -- Structure the religions and beliefs into actionable format
+        local foundingChoices = {}
+            
           -- Get available religions
           for row in GameInfo.Religions() do
             if row.Pantheon == false and not Game.GetReligion():HasBeenFounded(row.Index) then
@@ -1021,6 +1019,7 @@ end
               })
             end
           end
+        
   
           -- Get possible beliefs, organized by class
           local beliefsByClass = {}
@@ -1062,7 +1061,6 @@ end
         end
       end
     end
-  end
 
 -- Add to initial possibleActions table:
 local possibleActions = {
