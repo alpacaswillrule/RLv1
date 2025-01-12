@@ -114,8 +114,11 @@ function GetPlayerData(playerID)
 
   print("GetPlayerData: Gathering city data...")
   -- Add city data
-  for city in player:GetCities():Members() do
-    table.insert(data.Cities, GetCityData(city));
+  for i, city in player:GetCities():Members() do
+      local cityData = GetCityData(city);
+      if cityData then
+        table.insert(data.Cities, cityData);
+      end
   end
 
   print("GetPlayerData: Gathering unit data...")
