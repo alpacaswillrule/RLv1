@@ -832,7 +832,7 @@ print("\n=== END OF CITY PRODUCTION ANALYSIS ===")
 
   print("GetPossibleActions: Checking city ranged attacks...")
     -- CITY RANGED ATTACK
-  for city in player:GetCities():Members() do
+  for _, city in player:GetCities():Members() do
     if CityManager.CanStartCommand(city, CityCommandTypes.RANGE_ATTACK) then
 	  print("GetPossibleActions: Adding city ranged attack for city ID: " .. tostring(city:GetID()))
       table.insert(possibleActions.CityRangedAttack, city:GetID());
