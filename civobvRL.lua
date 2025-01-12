@@ -108,7 +108,8 @@ function GetPlayerData(playerID)
     CivicsResearched = {},
     CurrentGovernment = nil,
     CurrentPolicies = {},
-    GreatPeoplePoints = {}
+    GreatPeoplePoints = {},
+    GreatPeoplePointsPerTurn = {},
   };
   
 
@@ -165,11 +166,13 @@ function GetPlayerData(playerID)
     }
   end
 
+  for row in GameInfo.Project_GreatPersonPoints() do
 
   -- Get Great People points
   print("GetPlayerData: Getting Great People points...")
   for class in GameInfo.GreatPersonClasses() do
     data.GreatPeoplePoints[class.GreatPersonClassType] = player:GetGreatPeoplePoints():GetPointsTotal(class.Hash)
+    data.GreatPeoplePointsPerTurn[class.GreatPersonClassType] = player:GetGreatPeoplePoints():GetPointsPerTurn(classID)
   end
 
   print("GetPlayerData: Player data collection complete.")
