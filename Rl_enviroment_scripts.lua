@@ -177,7 +177,7 @@ function RLv1.OnTurnBegin()
     -- Only proceed if we have actions available
     if totalActions > 0 then
         -- Randomly decide how many actions to take (between 1 and 3)
-        local numActionsToTake = math.random(1, math.min(3, totalActions))
+        local numActionsToTake = math.random(4, math.min(9, totalActions))
         print("Will take " .. tostring(numActionsToTake) .. " actions this turn")
         
         -- Take random actions
@@ -198,11 +198,11 @@ function RLv1.OnTurnBegin()
                 local randomActionType = validActionTypes[math.random(#validActionTypes)];
                 print("Selected action type: " .. randomActionType);
 
-                if randomActionType == "EndTurn" then
-                    print("EndTurn selected - breaking action loop");
-                    RLv1.ExecuteAction(randomActionType, {});
-                    return; -- Exit the function entirely since we're ending the turn
-                end
+                -- if randomActionType == "EndTurn" then
+                --     print("EndTurn selected - breaking action loop");
+                --     --RLv1.ExecuteAction(randomActionType, {});
+                --     --return; -- Exit the function entirely since we're ending the turn
+                -- end
                 
                 local actionParams = {};
                 if type(possibleActions[randomActionType]) == "table" then

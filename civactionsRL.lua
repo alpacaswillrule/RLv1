@@ -299,47 +299,57 @@ function FoundReligion(params)
   -- UnitID: ID of the Great Prophet
   -- ReligionHash: Hash of chosen religion 
   -- BeliefHashes: Table of chosen belief hashes
-  -- Custom name (optional)
   
-  local pUnit = UnitManager.GetUnit(Game.GetLocalPlayer(), params.UnitID)
+  local playerID = Game.GetLocalPlayer()
+  local pUnit = UnitManager.GetUnit(playerID, params.UnitID)
   if not pUnit then
+    print("Error: Could not find Great Prophet unit")
     return false
   end
 
-  -- First activate the Great Prophet
-  local tParameters = {}
-  tParameters[UnitCommandTypes.PARAM_X] = pUnit:GetX()
-  tParameters[UnitCommandTypes.PARAM_Y] = pUnit:GetY()
-  
-  UnitManager.RequestOperation(
-    pUnit,
-    GameInfo.UnitCommands["UNITCOMMAND_ACTIVATE_GREAT_PERSON"].Hash,
-    tParameters
-  )
+  -- First activate the Great Prophet in place
+  local activateParams = {}
+  activateParams[UnitOperationTypes.PARAM_X] = pUnit:GetX()
+  activateParams[UnitOperationTypes.PARAM_Y] = pUnit:GetY()
+
+  -- Important: We need to verify the unit can be activated here
+  if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.ACTIVATE_GREAT_PERSON, nil, activateParams) then
+    UnitManager.RequestOperation(pUnit, UnitOperationTypes.ACTIVATE_GREAT_PERSON, activateParams)
+  else
+    print("Error: Cannot activate Great Prophet at current location")
+    return false
+  end
 
   -- Set up religion founding parameters
   local foundParams = {}
   foundParams[PlayerOperations.PARAM_RELIGION_TYPE] = params.ReligionHash
   foundParams[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE
-  
-  if params.CustomName then
-    foundParams[PlayerOperations.PARAM_RELIGION_CUSTOM_NAME] = params.CustomName
+
+  -- Get the religion data to check if we need a custom name
+  local religionData = GameInfo.Religions[params.ReligionHash]
+  if religionData and religionData.RequiresCustomName then
+    -- Generate a default custom name if none provided
+    local defaultName = "Religion_" .. tostring(playerID) .. "_" .. os.time()
+    foundParams[PlayerOperations.PARAM_RELIGION_CUSTOM_NAME] = defaultName
   end
 
   -- Found the religion
-  UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.FOUND_RELIGION, foundParams)
+  print("Founding religion with hash: " .. tostring(params.ReligionHash))
+  UI.RequestPlayerOperation(playerID, PlayerOperations.FOUND_RELIGION, foundParams)
 
   -- Add each chosen belief
   for _, beliefHash in ipairs(params.BeliefHashes) do
-    local beliefParams = {}
-    beliefParams[PlayerOperations.PARAM_BELIEF_TYPE] = beliefHash
-    beliefParams[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE
-    UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.ADD_BELIEF, beliefParams)
+    if beliefHash then  -- Skip nil belief hashes
+      local beliefParams = {}
+      beliefParams[PlayerOperations.PARAM_BELIEF_TYPE] = beliefHash
+      beliefParams[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE
+      print("Adding belief with hash: " .. tostring(beliefHash))
+      UI.RequestPlayerOperation(playerID, PlayerOperations.ADD_BELIEF, beliefParams)
+    end
   end
 
   return true
 end
-
 -- Ends the current turn.
 -- @param force (optional) If true, forces end turn (Shift+Enter equivalent).
 function EndTurn(force)
@@ -903,12 +913,31 @@ end
 
 
 function PlaceDistrict(cityID, districtHash, plotX, plotY)
+  print("PlaceDistrict called with params - cityID: " .. tostring(cityID) .. 
+        ", districtHash: " .. tostring(districtHash) .. 
+        ", plotX: " .. tostring(plotX) .. 
+        ", plotY: " .. tostring(plotY))
+
   local pCity = CityManager.GetCity(Game.GetLocalPlayer(), cityID)
-  if not pCity then return false end
-  
+  if not pCity then 
+    print("ERROR: Could not get city object for cityID: " .. tostring(cityID))
+    return false 
+  end
+  print("Successfully got city object: " .. pCity:GetName())
+
   -- First check if we can actually produce this district
   local buildQueue = pCity:GetBuildQueue()
-  if not buildQueue:CanProduce(districtHash, true) then
+  if not buildQueue then
+    print("ERROR: Could not get build queue for city")
+    return false
+  end
+  print("Successfully got build queue")
+
+  -- Check if district can be produced
+  local canProduce = buildQueue:CanProduce(districtHash, true)
+  print("Can produce district check result: " .. tostring(canProduce))
+  if not canProduce then
+    print("ERROR: City cannot produce this district")
     return false
   end
 
@@ -918,9 +947,32 @@ function PlaceDistrict(cityID, districtHash, plotX, plotY)
   tParameters[CityOperationTypes.PARAM_Y] = plotY
   tParameters[CityOperationTypes.PARAM_DISTRICT_TYPE] = districtHash
   
+  print("Attempting to place district with parameters:")
+  print("- PARAM_X: " .. tostring(tParameters[CityOperationTypes.PARAM_X]))
+  print("- PARAM_Y: " .. tostring(tParameters[CityOperationTypes.PARAM_Y]))
+  print("- PARAM_DISTRICT_TYPE: " .. tostring(tParameters[CityOperationTypes.PARAM_DISTRICT_TYPE]))
+
+  -- Get plot to verify it exists and is valid
+  local plot = Map.GetPlot(plotX, plotY)
+  if not plot then
+    print("ERROR: Invalid plot coordinates")
+    return false
+  end
+  print("Plot exists at specified coordinates")
+
+  -- Verify plot can have district 
+  if not plot:CanHaveDistrict(districtHash, Game.GetLocalPlayer(), cityID) then
+    print("ERROR: District cannot be placed on this plot")
+    return false
+  end
+  print("Plot can have district")
+
   -- Request the build operation
-  CityManager.RequestOperation(pCity, CityOperationTypes.BUILD, tParameters)
-  return true
+  print("Requesting district build operation...")
+  local success = CityManager.RequestOperation(pCity, CityOperationTypes.BUILD, tParameters)
+  print("Build operation request result: " .. tostring(success))
+
+  return success
 end
 
 -- Establishes a trade route between two cities.
