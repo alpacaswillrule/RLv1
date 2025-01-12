@@ -137,7 +137,6 @@ function ActivateGreatPerson(actionParams)
       end
       
       UnitManager.RequestOperation(unit, GameInfo.UnitCommands['UNITCOMMAND_ACTIVATE_GREAT_PERSON'].Hash, tParameters)
-      --TODO JOHAN GOTTA FIGURE OUT HOW TO DO THIS
 
     end
   end
@@ -287,9 +286,6 @@ function EvangelizeBelief(params)
 end
 
 
-
-
-
 function FoundPantheon(actionParams)
   local tParameters = {};
   tParameters[PlayerOperations.PARAM_BELIEF_TYPE] = actionParams;
@@ -299,25 +295,49 @@ function FoundPantheon(actionParams)
 end
 
 function FoundReligion(params)
-  -- params should contain:
-  -- - ReligionHash: hash of chosen religion
-  -- - BeliefHashes: array of chosen belief hashes
-  -- - UnitID: ID of Great Prophet unit
+  -- Params should contain:
+  -- UnitID: ID of the Great Prophet
+  -- ReligionHash: Hash of chosen religion 
+  -- BeliefHashes: Table of chosen belief hashes
+  -- Custom name (optional)
   
+  local pUnit = UnitManager.GetUnit(Game.GetLocalPlayer(), params.UnitID)
+  if not pUnit then
+    return false
+  end
+
+  -- First activate the Great Prophet
   local tParameters = {}
-  tParameters[PlayerOperations.PARAM_RELIGION_TYPE] = params.ReligionHash
-  tParameters[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE
+  tParameters[UnitCommandTypes.PARAM_X] = pUnit:GetX()
+  tParameters[UnitCommandTypes.PARAM_Y] = pUnit:GetY()
   
+  UnitManager.RequestOperation(
+    pUnit,
+    GameInfo.UnitCommands["UNITCOMMAND_ACTIVATE_GREAT_PERSON"].Hash,
+    tParameters
+  )
+
+  -- Set up religion founding parameters
+  local foundParams = {}
+  foundParams[PlayerOperations.PARAM_RELIGION_TYPE] = params.ReligionHash
+  foundParams[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE
+  
+  if params.CustomName then
+    foundParams[PlayerOperations.PARAM_RELIGION_CUSTOM_NAME] = params.CustomName
+  end
+
   -- Found the religion
-  UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.FOUND_RELIGION, tParameters)
-  
-  -- Add each belief
+  UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.FOUND_RELIGION, foundParams)
+
+  -- Add each chosen belief
   for _, beliefHash in ipairs(params.BeliefHashes) do
     local beliefParams = {}
     beliefParams[PlayerOperations.PARAM_BELIEF_TYPE] = beliefHash
     beliefParams[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE
     UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.ADD_BELIEF, beliefParams)
   end
+
+  return true
 end
 
 -- Ends the current turn.

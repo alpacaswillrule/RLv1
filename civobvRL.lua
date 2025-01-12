@@ -444,7 +444,71 @@ function GetVisibleTileData(playerID)
 --EVERYTHING BELOW THIS MARKER IS FOR FINDING ACTIONS, ALL POSSIBLE ACTIONS
 
 
-
+function GetReligionFoundingOptions(player)
+    local options = nil
+    
+    -- First find Great Prophet at Holy Site
+    for i, unit in player:GetUnits():Members() do
+      local unitType = GameInfo.Units[unit:GetUnitType()]
+      if unitType.UnitType == "UNIT_GREAT_PROPHET" then
+        local plot = Map.GetPlot(unit:GetX(), unit:GetY())
+        local district = CityManager.GetDistrictAt(plot)
+        
+        if district and GameInfo.Districts[district:GetType()].DistrictType == "DISTRICT_HOLY_SITE" then
+          -- Found valid prophet - gather religion/belief options
+          options = {
+            UnitID = unit:GetID(),
+            AvailableReligions = {},
+            RequiredBeliefs = {},
+            OptionalBeliefs = {}
+          }
+          
+          -- Get available religions
+          for religion in GameInfo.Religions() do
+            if not religion.Pantheon and not Game.GetReligion():HasBeenFounded(religion.Index) then
+              table.insert(options.AvailableReligions, {
+                Type = religion.ReligionType,
+                Name = Locale.Lookup(religion.Name),
+                Hash = religion.Hash,
+                Color = religion.Color
+              })
+            end
+          end
+  
+          -- Get available beliefs by type
+          local pGameReligion = Game.GetReligion()
+          for belief in GameInfo.Beliefs() do
+            -- Skip pantheon beliefs and already taken beliefs
+            if belief.BeliefClassType ~= "BELIEF_CLASS_PANTHEON" and
+               not pGameReligion:IsInSomePantheon(belief.Index) and  
+               not pGameReligion:IsInSomeReligion(belief.Index) then
+  
+              local beliefData = {
+                Type = belief.BeliefType,
+                Name = Locale.Lookup(belief.Name),
+                Description = Locale.Lookup(belief.Description), 
+                Hash = belief.Hash
+              }
+              
+              -- Organize beliefs by required vs optional
+              if belief.BeliefClassType == "BELIEF_CLASS_FOUNDER" or
+                 belief.BeliefClassType == "BELIEF_CLASS_FOLLOWER" then
+                options.RequiredBeliefs[belief.BeliefClassType] = options.RequiredBeliefs[belief.BeliefClassType] or {}
+                table.insert(options.RequiredBeliefs[belief.BeliefClassType], beliefData)
+              else
+                options.OptionalBeliefs[belief.BeliefClassType] = options.OptionalBeliefs[belief.BeliefClassType] or {}
+                table.insert(options.OptionalBeliefs[belief.BeliefClassType], beliefData)
+              end
+            end
+          end
+          
+          break -- Found our prophet, no need to keep looking
+        end
+      end
+    end
+  
+    return options
+  end
 
 -- Determines all possible actions for the player in the current state.
 -- Helper function to get valid district plots
@@ -997,71 +1061,7 @@ for i, unit in player:GetUnits():Members() do
 end
 
   print("GetPossibleActions: Checking for Great Prophet and Religion actions...")
-
-  -- First check if we have a Great Prophet and if they're at a Holy Site
-  for i, unit in player:GetUnits():Members() do
-    local unitType = GameInfo.Units[unit:GetUnitType()]
-    if unitType.UnitType == "UNIT_GREAT_PROPHET" then
-        -- Check if unit is at a Holy Site
-        local plot = Map.GetPlot(unit:GetX(), unit:GetY())
-        local district = CityManager.GetDistrictAt(plot)
-        if district and GameInfo.Districts[district:GetType()].DistrictType == "DISTRICT_HOLY_SITE" then
-            -- Structure the religions and beliefs into actionable format
-        local foundingChoices = {}
-            
-          -- Get available religions
-          for row in GameInfo.Religions() do
-            if row.Pantheon == false and not Game.GetReligion():HasBeenFounded(row.Index) then
-              -- Create a new founding choice entry for each possible religion
-              table.insert(foundingChoices, {
-                ReligionHash = row.Hash,
-                UnitID = unit:GetID(),
-                BeliefHashes = {} -- Will be populated with valid belief combinations
-              })
-            end
-          end
-        
-  
-          -- Get possible beliefs, organized by class
-          local beliefsByClass = {}
-          for row in GameInfo.Beliefs() do
-            if row.BeliefClassType ~= "BELIEF_CLASS_PANTHEON" and
-               not Game.GetReligion():IsInSomePantheon(row.Index) and
-               not Game.GetReligion():IsInSomeReligion(row.Index) then
-              
-              if not beliefsByClass[row.BeliefClassType] then
-                beliefsByClass[row.BeliefClassType] = {}
-              end
-              table.insert(beliefsByClass[row.BeliefClassType], row.Hash)
-            end
-          end
-  
-          -- Add valid belief combinations to each religion choice
-          for _, foundingChoice in ipairs(foundingChoices) do
-            -- Add belief hash arrays based on requirement pattern
-            -- First always need a Founder belief
-            if beliefsByClass["BELIEF_CLASS_FOUNDER"] then
-              -- Add Follower and Worship beliefs if available
-              if beliefsByClass["BELIEF_CLASS_FOLLOWER"] and
-                 beliefsByClass["BELIEF_CLASS_WORSHIP"] then
-                foundingChoice.BeliefHashes = {
-                  beliefsByClass["BELIEF_CLASS_FOUNDER"][1],
-                  beliefsByClass["BELIEF_CLASS_FOLLOWER"][1],
-                  beliefsByClass["BELIEF_CLASS_WORSHIP"][1]
-                }
-              end
-            end
-          end
-  
-          -- Only add valid combinations to possible actions
-          for _, foundingChoice in ipairs(foundingChoices) do
-            if #foundingChoice.BeliefHashes > 0 then
-              table.insert(possibleActions.FoundReligion, foundingChoice)
-            end
-          end
-        end
-      end
-    end
+  GetReligionFoundingOptions(player)
 
 
 -- Add this section after the Great Prophet checks:
