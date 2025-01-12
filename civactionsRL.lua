@@ -138,11 +138,21 @@ function ActivateGreatPerson(actionParams)
               tParameters[UnitOperationTypes.PARAM_Y] = plot:GetY()
           end
       end
-      
-      UnitManager.RequestOperation(unit, GameInfo.UnitCommands['UNITCOMMAND_ACTIVATE_GREAT_PERSON'].Hash, tParameters)
 
-    end
+      -- Looking at the UnitCommands table data, we can see the Hash is 374670040
+      -- for UNITCOMMAND_ACTIVATE_GREAT_PERSON
+      local activateGPHash = 374670040
+
+      if UnitManager.CanStartCommand(unit, activateGPHash, tParameters) then
+          UnitManager.RequestCommand(unit, activateGPHash, tParameters)
+          return true
+      else
+          print("Cannot activate great person at current location")
+          return false
+      end
   end
+  return false
+end
 -- Purchase unit (standard formation)
 function PurchaseUnit(cityID, unitHash, yieldType)
   local city = CityManager.GetCity(Game.GetLocalPlayer(), cityID)
@@ -316,12 +326,13 @@ function FoundReligion(params)
   activateParams[UnitOperationTypes.PARAM_Y] = pUnit:GetY()
 
   -- Important: We need to verify the unit can be activated here
-  
-  if UnitManager.CanStartOperation(unit, GameInfo.UnitCommands['UNITCOMMAND_ACTIVATE_GREAT_PERSON'].Hash, activateParams) then
-    UnitManager.RequestOperation(unit, GameInfo.UnitCommands['UNITCOMMAND_ACTIVATE_GREAT_PERSON'].Hash, activateParams)
+
+  local activateGPHash = 374670040
+  if UnitManager.CanStartCommand(pUnit, activateGPHash, activateParams) then
+      UnitManager.RequestCommand(pUnit, activateGPHash, activateParams)
   else
     print("Error: Cannot activate Great Prophet at current location")
-    return false
+    return false;
   end
 
   -- Set up religion founding parameters
@@ -964,8 +975,10 @@ function PlaceDistrict(cityID, districtHash, plotX, plotY)
   end
   print("Plot exists at specified coordinates")
 
-  -- Verify plot can have district 
-  if not plot:CanHaveDistrict(districtHash, Game.GetLocalPlayer(), cityID) then
+  -- Verify plot can have district
+  -- Note: We need to use the district's Index, not Hash, for CanHaveDistrict
+  local districtIndex = GameInfo.Districts[districtHash].Index
+  if not plot:CanHaveDistrict(districtIndex, Game.GetLocalPlayer(), cityID) then
     print("ERROR: District cannot be placed on this plot")
     return false
   end

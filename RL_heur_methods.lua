@@ -63,10 +63,10 @@ function SelectPrioritizedAction(possibleActions)
     -- Check for highest priority actions first
     
     -- Priority 1: Found Religion if possible
-    if possibleActions.FoundReligion and #possibleActions.FoundReligion > 0 then
-        print("Found religion action available - selecting it")
-        return "FoundReligion", possibleActions.FoundReligion[1]
-    end
+    -- if possibleActions.FoundReligion and #possibleActions.FoundReligion > 0 then
+    --     print("Found religion action available - selecting it")
+    --     return "FoundReligion", possibleActions.FoundReligion[1]
+    -- end
 
     -- Priority 2: District Construction
     if possibleActions.CityProduction then

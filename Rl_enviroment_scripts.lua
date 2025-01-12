@@ -135,7 +135,6 @@ function InitializeRL()
     SendRLNotification("Agent initialized successfully!");
     print("RLv1: Agent initialized successfully!");
 end
-
 function RLv1.OnTurnBegin()
     print("=== TURN BEGIN FUNCTION START ===")
     
@@ -152,15 +151,7 @@ function RLv1.OnTurnBegin()
     SendRLNotification("Turn " .. tostring(m_currentGameTurn) .. " beginning");
     print("RL Turn " .. tostring(m_currentGameTurn) .. " Begin");
 
-    -- Wrap the action execution in pcall to catch errors
-    local status, possibleActions = pcall(function() 
-        return GetPossibleActions()
-    end)
-    
-    if not status then
-        print("Error getting possible actions:", possibleActions)
-        return
-    end
+    local possibleActions = GetPossibleActions()
     
     if not possibleActions then
         print("No possible actions available")
@@ -174,41 +165,18 @@ function RLv1.OnTurnBegin()
     for i = 1, numActionsToTake do
         print("Starting action iteration " .. i)
         
-        local status, actionType, actionParams = pcall(function()
-            return SelectPrioritizedAction(possibleActions)
-        end)
-        
-        if not status then
-            print("Error selecting action:", actionType) -- actionType will contain error message
-            break
-        end
+        local actionType, actionParams = SelectPrioritizedAction(possibleActions)
         
         if actionType then
             print("Selected action:", actionType)
             print("Action params:", actionParams and table.concat(actionParams, ", ") or "nil")
             
-            local execStatus, execError = pcall(function()
-                RLv1.ExecuteAction(actionType, actionParams)
-            end)
-            
-            if not execStatus then
-                print("Error executing action:", execError)
-                break
-            end
-            
+            RLv1.ExecuteAction(actionType, actionParams)
             print("Action execution completed")
             
             -- Update possible actions after each execution to maintain accuracy
-            local updateStatus, newActions = pcall(function()
-                return GetPossibleActions()
-            end)
+            possibleActions = GetPossibleActions()
             
-            if not updateStatus then
-                print("Error updating possible actions:", newActions)
-                break
-            end
-            
-            possibleActions = newActions
             if not possibleActions then 
                 print("No more possible actions after update")
                 break 

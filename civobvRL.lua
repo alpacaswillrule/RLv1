@@ -699,16 +699,23 @@ for _, city in player:GetCities():Members() do
         end
     end
 
-    -- Check district purchases
+-- Check district purchases
+local pCityDistricts = city:GetDistricts()
+local currentDistrictCount = pCityDistricts:GetNumZonedDistrictsRequiringPopulation()
+local maxAllowedDistricts = pCityDistricts:GetNumAllowedDistrictsRequiringPopulation()
+
+-- Only proceed if we haven't hit the district limit
+if currentDistrictCount < maxAllowedDistricts then
     for row in GameInfo.Districts() do
-        if row and row.Hash then
+        -- Skip districts that don't require population or aren't valid
+        if row and row.Hash and row.RequiresPopulation then
             local tParameters = {}
             tParameters[CityCommandTypes.PARAM_DISTRICT_TYPE] = row.Hash
 
             -- Check gold purchase
             tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_GOLD"].Index
             if CityManager.CanStartCommand(city, CityCommandTypes.PURCHASE, tParameters) then
-                local goldCost = city:GetGold():GetPurchaseCost( "YIELD_GOLD", row.Hash )
+                local goldCost = city:GetGold():GetPurchaseCost("YIELD_GOLD", row.Hash)
                 -- Get valid plots for this district
                 local validPlots = GetValidDistrictPlots(city, row.Hash)
                 if playerTreasury:GetGoldBalance() >= goldCost and #validPlots > 0 then
@@ -726,7 +733,7 @@ for _, city in player:GetCities():Members() do
             -- Check faith purchase
             tParameters[CityCommandTypes.PARAM_YIELD_TYPE] = GameInfo.Yields["YIELD_FAITH"].Index
             if CityManager.CanStartCommand(city, CityCommandTypes.PURCHASE, tParameters) then
-                local faithCost = city:GetGold():GetPurchaseCost( "YIELD_FAITH", row.Hash )
+                local faithCost = city:GetGold():GetPurchaseCost("YIELD_FAITH", row.Hash)
                 -- Get valid plots for this district
                 local validPlots = GetValidDistrictPlots(city, row.Hash)
                 if playerReligion:GetFaithBalance() >= faithCost and #validPlots > 0 then
@@ -743,7 +750,6 @@ for _, city in player:GetCities():Members() do
         end
     end
 end
-
   --print("GetPossibleActions: Checking pantheon options...")
   local playerReligion = player:GetReligion()
   if playerReligion:CanCreatePantheon() then
@@ -903,25 +909,29 @@ for _, city in player:GetCities():Members() do
     end
 
     -- Check Districts 
-    ----print("\nChecking Available Districts:")
+local pCityDistricts = city:GetDistricts()
+local currentDistrictCount = pCityDistricts:GetNumZonedDistrictsRequiringPopulation()
+local maxAllowedDistricts = pCityDistricts:GetNumAllowedDistrictsRequiringPopulation()
+
+-- Only proceed if we haven't hit the district limit
+if currentDistrictCount < maxAllowedDistricts then
     for row in GameInfo.Districts() do
         if row and row.Hash and buildQueue:CanProduce(row.Hash, true) then
-            ----print("- Checking district: " .. tostring(row.DistrictType))
-            local validPlots = GetValidDistrictPlots(city, row.Hash)
-            ----print("  Number of valid plots: " .. #validPlots)
-            
-            if #validPlots > 0 then
-                --print("  Adding district to possibilities")
-                -- Insert into possibleActions
-                table.insert(possibleActions.CityProduction, {
-                    CityID = cityID,
-                    ProductionHash = row.Hash,
-                    ProductionType = "Districts",
-                    Name = row.DistrictType,
-                    Cost = buildQueue:GetDistrictCost(row.Index),
-                    Turns = buildQueue:GetTurnsLeft(row.DistrictType),
-                    ValidPlots = validPlots
-                })
+            -- Skip districts that don't require population (like City Center)
+            if row.RequiresPopulation then
+                local validPlots = GetValidDistrictPlots(city, row.Hash)
+                
+                if #validPlots > 0 then
+                    table.insert(possibleActions.CityProduction, {
+                        CityID = cityID,
+                        ProductionHash = row.Hash,
+                        ProductionType = "Districts",
+                        Name = row.DistrictType,
+                        Cost = buildQueue:GetDistrictCost(row.Index),
+                        Turns = buildQueue:GetTurnsLeft(row.DistrictType),
+                        ValidPlots = validPlots
+                    })
+                end
             end
         end
     end
