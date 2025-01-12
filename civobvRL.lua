@@ -123,7 +123,7 @@ function GetPlayerData(playerID)
 
   print("GetPlayerData: Gathering unit data...")
   -- Add unit data
-  for unit in player:GetUnits():Members() do
+  for _, unit in player:GetUnits():Members() do
     table.insert(data.Units, GetUnitData(unit));
   end
 
