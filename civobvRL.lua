@@ -1549,14 +1549,6 @@ function QueueUnitPath(unit, plotIndex)
     })
 end
 
-function RequestBuildImprovement(unit, improvementHash)
-    if not unit or not improvementHash then return false end
-    local plot = Map.GetPlot(unit:GetX(), unit:GetY())
-    if not plot then return false end
-    return UnitManager.CanStartOperation(unit, UnitOperationTypes.BUILD_IMPROVEMENT, nil, {
-        [UnitOperationTypes.PARAM_IMPROVEMENT_TYPE] = improvementHash
-    })
-end  -- Only one end needed for the function block
 
   -- Return the table of possible actions
   print("got possible actions")

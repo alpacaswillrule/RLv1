@@ -53,24 +53,16 @@ function RLv1.ExecuteAction(actionType, actionParams)
     elseif actionType == "MoveUnit" then
         actionParams = {actionParams.UnitID, actionParams.X, actionParams.Y};
         MoveUnit(actionParams[1], actionParams[2], actionParams[3]);
-    elseif actionType == "SelectUnit" then
-        SelectUnit(actionParams[1])
+    -- elseif actionType == "SelectUnit" then
+    --     SelectUnit(actionParams[1])
     elseif actionType == "UnitRangedAttack" then
         UnitRangedAttack(actionParams[1], actionParams[2], actionParams[3]);
     elseif actionType == "UnitAirAttack" then
         UnitAirAttack(actionParams[1], actionParams[2], actionParams[3]);
-    elseif actionType == "FormUnit" then
-        FormUnitFormation(actionParams[1], actionParams[2], actionParams[3]);
-    elseif actionType == "RebaseUnit" then
-        UnitRebase(actionParams[1], actionParams[2], actionParams[3]);
-    elseif actionType == "WMDStrike" then
-        UnitWMDStrike(actionParams[1], actionParams[2], actionParams[3], actionParams[4]);
-    elseif actionType == "QueueUnitPath" then
-        QueueUnitPath(actionParams[1], actionParams[2], actionParams[3]);
-    elseif actionType == "BuildImprovement" then
-        BuildImprovement(actionParams[1], actionParams[2]);
-    elseif actionType == "EnterFormation" then
-        EnterFormation(actionParams[1], actionParams[2]);
+    -- elseif actionType == "FormUnit" then
+    --     FormUnitFormation(actionParams[1], actionParams[2], actionParams[3]);
+    -- elseif actionType == "RebaseUnit" then
+    --     UnitRebase(actionParams[1], actionParams[2], actionParams[3]);
     elseif actionType == "FoundCity" then
         FoundCity(actionParams[1]);
     elseif actionType == "PromoteUnit" then
@@ -93,6 +85,22 @@ function RLv1.ExecuteAction(actionType, actionParams)
       EvangelizeBelief(actionParams)
     elseif actionType == "FoundReligion" then
       FoundReligion(actionParams)
+    elseif actionType == "HarvestResource" then
+      HarvestResource(actionParams.UnitID)
+    elseif actionType == "Fortify" then
+      Fortify(actionParams.UnitID)
+    elseif actionType == "BuildImprovement" then
+        BuildImprovement(actionParams.UnitID, actionParams.ImprovementHash)
+    elseif actionType == "AirAttack" then
+        UnitAirAttack(actionParams.UnitID, actionParams.X, actionParams.Y)
+    elseif actionType == "FormCorps" then
+        FormCorps(actionParams.UnitID)
+    elseif actionType == "FormArmy" then
+        FormArmy(actionParams.UnitID)
+    elseif actionType == "Wake" then
+        WakeUnit(actionParams.UnitID)
+    elseif actionType == "Repair" then
+      RepairImprovement(actionParams.UnitID)
     elseif actionType == "EstablishTradeRoute" then
         EstablishTradeRoute(actionParams[1], actionParams[2]);
     elseif actionType == "PurchaseWithGold" then
@@ -707,25 +715,6 @@ function UnitAirAttack(unit, targetPlotID)
   return false;
 end
 
--- Forms a unit into a corps or army.
--- @param unitID The ID of the unit forming up.
--- @param targetUnitID The ID of the unit to join.
--- @param formationType "CORPS" or "ARMY".
--- Fix recursive call in FormUnitFormation
-function FormUnitFormation(unit, targetUnit, formationType)
-  local tParameters = {};
-  tParameters[UnitCommandTypes.PARAM_UNIT_PLAYER] = targetUnit:GetOwner();
-  tParameters[UnitCommandTypes.PARAM_UNIT_ID] = targetUnit:GetID();
-  
-  local operationType = (formationType == "CORPS") and 
-      UnitCommandTypes.FORM_CORPS or UnitCommandTypes.FORM_ARMY;
-  
-  if UnitManager.CanStartCommand(unit, operationType, tParameters) then
-      UnitManager.RequestCommand(unit, operationType, tParameters);
-      return true;
-  end
-  return false;
-end
 
 function HarvestResource(unitID)
   local unit = GetUnit(Game.GetLocalPlayer(), unitID)
