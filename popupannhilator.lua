@@ -30,26 +30,72 @@ function CloseNaturalDisasterPopup()
     end
 end
 
+function CloseDiplomacyPopups()
+    print("CloseDiplomacyPopups: Attempting to close diplomacy views");
+    
+    -- Close any open popup dialog first
+    if m_PopupDialog and m_PopupDialog:IsOpen() then
+        print("CloseDiplomacyPopups: Closing popup dialog");
+        m_PopupDialog:Close();
+    end
+
+    -- Try to get the diplomacy context
+    local pContext = ContextPtr:LookUpControl("/InGame/DiplomacyActionView");
+    if pContext and not pContext:IsHidden() then
+        print("CloseDiplomacyPopups: Found open diplomacy view, closing");
+        
+        -- Stop music and sound effects
+        UI.PlaySound("Stop_Leader_Music");
+        
+        -- Stop modder music if playing
+        local playerConfig = PlayerConfigurations[Game.GetLocalPlayer()];
+        if playerConfig then
+            local civID = playerConfig:GetCivilizationTypeID();
+            if UI.ShouldCivPlayModMusic(civID) then
+                UI.StopModCivLeaderMusic(Game.GetLocalPlayer());
+            end
+        end
+
+        -- Reset sound state
+        UI.SetSoundStateValue("Game_Views", "Normal_View");
+        
+        -- Clean up view
+        if pContext.UninitializeView then
+            pContext:UninitializeView();
+        end
+        
+        -- Hide the context
+        pContext:SetHide(true);
+        
+        -- Fire events
+        LuaEvents.DiploScene_SceneClosed();
+        LuaEvents.DiplomacyActionView_ShowIngameUI();
+    end
+end
+
 -- ===========================================================================
 -- Function to close all popups (using events as before)
 -- ===========================================================================
 function CloseAllPopups()
     print("CloseAllPopups: Attempting to close all popups.");
+    
+    -- Close standard popups
     LuaEvents.LaunchBar_CloseGreatPeoplePopup();
     LuaEvents.LaunchBar_CloseGreatWorksOverview();
     LuaEvents.LaunchBar_CloseReligionPanel();
     
-    -- Check for government open state using a global or accessible variable (replace with your actual method)
     if g_isGovernmentOpen then 
-        print("CloseAllPopups: Closing Government Panel.");
         LuaEvents.LaunchBar_CloseGovernmentPanel();
     end
 
     LuaEvents.LaunchBar_CloseTechTree();
     LuaEvents.LaunchBar_CloseCivicsTree();
     CloseNaturalDisasterPopup();
-    BulkHide(false, "CloseAllPopups_Restore");
 
+    -- Add diplomacy popup handling
+    CloseDiplomacyPopups();
+    
+    BulkHide(false, "CloseAllPopups_Restore");
 end
 
 -- ===========================================================================
@@ -100,9 +146,10 @@ end
 function OnGameCoreEventPlaybackComplete()
     print("OnGameCoreEventPlaybackComplete: m_isAgentEnabled:", m_isAgentEnabled);
     if m_isAgentEnabled then
-        print("OnGameCoreEventPlaybackComplete: Agent is enabled. Setting g_closePopups to true.");
+        print("OnGameCoreEventPlaybackComplete: Agent is enabled. Closing popups.");
         g_closePopups = true;
-
+        
+        -- Close all popups including diplomacy
         CloseAllPopups();
     end
 end

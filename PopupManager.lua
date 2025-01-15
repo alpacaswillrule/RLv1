@@ -81,7 +81,7 @@ ExclusivePopupManager =
 		if self.m_eventID ~= 0 then
 			UI.ReleaseEventID( self.m_eventID );	-- Release engine hold.
 		end
-		self.m_eventID = UI.ReferenceCurrentEvent();	
+		--self.m_eventID = UI.ReferenceCurrentEvent();	
 	end,
 
 	-- ===========================================================================
