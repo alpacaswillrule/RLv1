@@ -193,6 +193,8 @@ function GetUnitData(unit)
       MaxMoves = unit:GetMaxMoves(),
       UnitType = unit:GetUnitType(),
       Formation = unit:GetMilitaryFormation(),
+      ActionCharges = unit:GetActionCharges(),
+      Buildcharges = unit:GetBuildCharges(),
       Experience = unit:GetExperience():GetExperiencePoints(),
       Level = unit:GetExperience():GetLevel(),
       Position = {
@@ -443,72 +445,81 @@ function GetVisibleTileData(playerID)
 
 --EVERYTHING BELOW THIS MARKER IS FOR FINDING ACTIONS, ALL POSSIBLE ACTIONS
 
-
 function GetReligionFoundingOptions(player)
+    -- First check if player has already founded a religion
+    local playerReligion = player:GetReligion()
+    local foundedReligionType = playerReligion:GetReligionTypeCreated()
+    
+    -- If player has already founded a religion (foundedReligionType >= 0), return nil
+    if foundedReligionType >= 0 then
+        return nil
+    end
+
     local options = nil
     
-    -- First find Great Prophet at Holy Site
+    -- Look for Great Prophet at Holy Site
     for i, unit in player:GetUnits():Members() do
-      local unitType = GameInfo.Units[unit:GetUnitType()]
-      if unitType.UnitType == "UNIT_GREAT_PROPHET" then
-        local plot = Map.GetPlot(unit:GetX(), unit:GetY())
-        local district = CityManager.GetDistrictAt(plot)
-        
-        if district and GameInfo.Districts[district:GetType()].DistrictType == "DISTRICT_HOLY_SITE" then
-          -- Found valid prophet - gather religion/belief options
-          options = {
-            UnitID = unit:GetID(),
-            AvailableReligions = {},
-            RequiredBeliefs = {},
-            OptionalBeliefs = {}
-          }
-          
-          -- Get available religions
-          for religion in GameInfo.Religions() do
-            if not religion.Pantheon and not Game.GetReligion():HasBeenFounded(religion.Index) then
-              table.insert(options.AvailableReligions, {
-                Type = religion.ReligionType,
-                Name = Locale.Lookup(religion.Name),
-                Hash = religion.Hash,
-                Color = religion.Color
-              })
+        local unitType = GameInfo.Units[unit:GetUnitType()]
+        if unitType.UnitType == "UNIT_GREAT_PROPHET" then
+            local plot = Map.GetPlot(unit:GetX(), unit:GetY())
+            local district = CityManager.GetDistrictAt(plot)
+            
+            if district and GameInfo.Districts[district:GetType()].DistrictType == "DISTRICT_HOLY_SITE" then
+                -- Found valid prophet - gather religion/belief options
+                options = {
+                    UnitID = unit:GetID(),
+                    AvailableReligions = {},
+                    RequiredBeliefs = {},
+                    OptionalBeliefs = {}
+                }
+                
+                -- Get available religions
+                for religion in GameInfo.Religions() do
+                    if not religion.Pantheon and not Game.GetReligion():HasBeenFounded(religion.Index) then
+                        table.insert(options.AvailableReligions, {
+                            Type = religion.ReligionType,
+                            Name = Locale.Lookup(religion.Name),
+                            Hash = religion.Hash,
+                            Color = religion.Color
+                        })
+                    end
+                end
+
+                -- Get available beliefs by type
+                local pGameReligion = Game.GetReligion()
+                for belief in GameInfo.Beliefs() do
+                    -- Skip pantheon beliefs and already taken beliefs
+                    if belief.BeliefClassType ~= "BELIEF_CLASS_PANTHEON" and
+                       not pGameReligion:IsInSomePantheon(belief.Index) and  
+                       not pGameReligion:IsInSomeReligion(belief.Index) and
+                       not pGameReligion:IsTooManyForReligion(belief.Index, foundedReligionType) then -- Add this check
+                        
+                        local beliefData = {
+                            Type = belief.BeliefType,
+                            Name = Locale.Lookup(belief.Name),
+                            Description = Locale.Lookup(belief.Description), 
+                            Hash = belief.Hash
+                        }
+                        
+                        -- Organize beliefs by required vs optional
+                        if belief.BeliefClassType == "BELIEF_CLASS_FOUNDER" or
+                           belief.BeliefClassType == "BELIEF_CLASS_FOLLOWER" then
+                            options.RequiredBeliefs[belief.BeliefClassType] = options.RequiredBeliefs[belief.BeliefClassType] or {}
+                            table.insert(options.RequiredBeliefs[belief.BeliefClassType], beliefData)
+                        else
+                            options.OptionalBeliefs[belief.BeliefClassType] = options.OptionalBeliefs[belief.BeliefClassType] or {}
+                            table.insert(options.OptionalBeliefs[belief.BeliefClassType], beliefData)
+                        end
+                    end
+                end
+                
+                break -- Found our prophet, no need to keep looking
             end
-          end
-  
-          -- Get available beliefs by type
-          local pGameReligion = Game.GetReligion()
-          for belief in GameInfo.Beliefs() do
-            -- Skip pantheon beliefs and already taken beliefs
-            if belief.BeliefClassType ~= "BELIEF_CLASS_PANTHEON" and
-               not pGameReligion:IsInSomePantheon(belief.Index) and  
-               not pGameReligion:IsInSomeReligion(belief.Index) then
-  
-              local beliefData = {
-                Type = belief.BeliefType,
-                Name = Locale.Lookup(belief.Name),
-                Description = Locale.Lookup(belief.Description), 
-                Hash = belief.Hash
-              }
-              
-              -- Organize beliefs by required vs optional
-              if belief.BeliefClassType == "BELIEF_CLASS_FOUNDER" or
-                 belief.BeliefClassType == "BELIEF_CLASS_FOLLOWER" then
-                options.RequiredBeliefs[belief.BeliefClassType] = options.RequiredBeliefs[belief.BeliefClassType] or {}
-                table.insert(options.RequiredBeliefs[belief.BeliefClassType], beliefData)
-              else
-                options.OptionalBeliefs[belief.BeliefClassType] = options.OptionalBeliefs[belief.BeliefClassType] or {}
-                table.insert(options.OptionalBeliefs[belief.BeliefClassType], beliefData)
-              end
-            end
-          end
-          
-          break -- Found our prophet, no need to keep looking
         end
-      end
     end
-  
+
     return options
-  end
+end
 
 -- Determines all possible actions for the player in the current state.
 -- Helper function to get valid district plots
@@ -1115,13 +1126,11 @@ end
 for i, unit in player:GetUnits():Members() do
     local unitType = GameInfo.Units[unit:GetUnitType()]
     
-    -- Check for Missionaries and Apostles
-    if unitType.UnitType == "UNIT_MISSIONARY" or unitType.UnitType == "UNIT_APOSTLE" then
-        local plot = Map.GetPlot(unit:GetX(), unit:GetY())
-        
-        -- Check valid spread targets in range
-        local range = unit:GetRange()
+    -- Check for religious units
+    if unitType.ReligiousStrength > 0 then
+        -- Check for spread religion capability
         local validSpreadTargets = {}
+        local range = unit:GetRange()
         
         for dx = -range, range do
             for dy = -range, range do
@@ -1129,16 +1138,22 @@ for i, unit in player:GetUnits():Members() do
                 local targetY = unit:GetY() + dy
                 
                 if Map.IsPlot(targetX, targetY) then
-                    local targetPlot = Map.GetPlot(targetX, targetY)
-                    local targetCity = Cities.GetCityInPlot(targetX, targetY)
+                    local tParameters = {}
+                    tParameters[UnitOperationTypes.PARAM_X] = targetX
+                    tParameters[UnitOperationTypes.PARAM_Y] = targetY
                     
-                    if targetCity then
-                        -- Check if we can spread religion to this city
-                        local tParameters = {}
-                        tParameters[UnitOperationTypes.PARAM_X] = targetX
-                        tParameters[UnitOperationTypes.PARAM_Y] = targetY
-                        
-                        if UnitManager.CanStartOperation(unit, UnitOperationTypes.SPREAD_RELIGION, nil, tParameters) then
+                    -- Check if we can spread religion to this location
+                    local bCanStart, tResults = UnitManager.CanStartOperation(
+                        unit, 
+                        UnitOperationTypes.SPREAD_RELIGION,
+                        nil,
+                        tParameters,
+                        true -- Get additional info
+                    )
+                    
+                    if bCanStart then
+                        local targetCity = Cities.GetCityInPlot(targetX, targetY)
+                        if targetCity then
                             table.insert(validSpreadTargets, {
                                 UnitID = unit:GetID(),
                                 CityID = targetCity:GetID(),
@@ -1152,7 +1167,7 @@ for i, unit in player:GetUnits():Members() do
             end
         end
         
-        -- If we found valid targets, add them to possible actions
+        -- If we found valid spread targets, add them
         if #validSpreadTargets > 0 then
             table.insert(possibleActions.SpreadReligion, {
                 UnitID = unit:GetID(),
@@ -1160,42 +1175,41 @@ for i, unit in player:GetUnits():Members() do
             })
         end
         
-        -- For Apostles, check if they can evangelize belief
-        if unitType.UnitType == "UNIT_APOSTLE" then
-            -- Check if unit has evangelize ability and charges remaining
-            local canEvangelize = false
-            for i = 0, unit:GetAbilityCount() - 1 do
-                local abilityInfo = GameInfo.UnitAbilities[unit:GetAbilityByIndex(i)]
-                if abilityInfo and abilityInfo.UnitAbilityType == "ABILITY_EVANGELIZE_BELIEF" then
-                    canEvangelize = true
-                    break
+        -- Check evangelize belief capability
+        -- No need to check for specific unit type or ability - let CanStartOperation handle it
+        local bCanEvangelize, tResults = UnitManager.CanStartOperation(
+            unit,
+            UnitOperationTypes.EVANGELIZE_BELIEF,
+            nil,
+            nil,
+            true -- Get additional info
+        )
+        
+        if bCanEvangelize then
+            -- Get available beliefs
+            local availableBeliefs = {}
+            
+            -- Get beliefs from operation results
+            if tResults and tResults[UnitOperationResults.BELIEFS] then
+                for _, belief in ipairs(tResults[UnitOperationResults.BELIEFS]) do
+                    table.insert(availableBeliefs, {
+                        BeliefType = belief.Type,
+                        Hash = belief.Hash,
+                        Name = Locale.Lookup(belief.Name),
+                        Description = Locale.Lookup(belief.Description)
+                    })
                 end
             end
             
-            if canEvangelize and unit:GetReligiousStrength() > 0 then
-                -- Get available beliefs we can evangelize
-                local availableBeliefs = {}
-                for row in GameInfo.Beliefs() do
-                    if row.BeliefClassType == "BELIEF_CLASS_ENHANCEMENT" and
-                       not Game.GetReligion():IsInSomeReligion(row.Index) then
-                        table.insert(availableBeliefs, {
-                            BeliefType = row.BeliefType,
-                            Hash = row.Hash
-                        })
-                    end
-                end
-                
-                if #availableBeliefs > 0 then
-                    table.insert(possibleActions.EvangelizeBelief, {
-                        UnitID = unit:GetID(),
-                        AvailableBeliefs = availableBeliefs
-                    })
-                end
+            if #availableBeliefs > 0 then
+                table.insert(possibleActions.EvangelizeBelief, {
+                    UnitID = unit:GetID(),
+                    AvailableBeliefs = availableBeliefs
+                })
             end
         end
     end
 end
-
 
  -- Helper function to get all possible actions for a single unit
 -- Helper function to get all possible actions for a single unit

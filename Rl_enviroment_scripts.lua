@@ -175,6 +175,7 @@ function RLv1.OnTurnBegin()
             print("Action execution completed")
             
             -- Update possible actions after each execution to maintain accuracy
+            ContextPtr:RequestRefresh()
             possibleActions = GetPossibleActions()
             
             if not possibleActions then 

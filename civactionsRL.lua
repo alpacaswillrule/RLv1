@@ -6,6 +6,12 @@ end
 include("Civ6Common"); -- Make sure this path matches your file structure.
 include("InstanceManager");
 include( "SupportFunctions" );
+include( "UnitSupport" );
+include( "Colors" );
+include( "CombatInfo" );
+include( "PopupDialog" );
+include( "EspionageSupport" );
+include("GameCapabilities");
 --------------------------------------------------
 -- ACTION FUNCTIONS
 --------------------------------------------------
@@ -265,37 +271,63 @@ function PurchaseUnitArmy(cityID, unitHash, yieldType)
 end
 
 
-
 function SpreadReligion(params)
-  -- params contains:
-  -- - UnitID: ID of religious unit
-  -- - X, Y: target coordinates
-  
-  local unit = Players[Game.GetLocalPlayer()]:GetUnits():FindID(params.UnitID)
-  if unit then
-      local tParameters = {}
-      tParameters[UnitOperationTypes.PARAM_X] = params.X
-      tParameters[UnitOperationTypes.PARAM_Y] = params.Y
-      
-      UnitManager.RequestOperation(unit, UnitOperationTypes.SPREAD_RELIGION, tParameters)
+  -- Validate parameters
+  if not params.UnitID or not params.X or not params.Y then
+      print("ERROR: Missing required parameters for SpreadReligion")  
+      return false
   end
+
+  local player = Players[Game.GetLocalPlayer()]
+  if not player then return false end
+
+  local unit = player:GetUnits():FindID(params.UnitID)
+  if not unit then 
+      print("ERROR: Could not find unit with ID " .. tostring(params.UnitID))
+      return false 
+  end
+
+  -- Set up parameters for spreading religion
+  local tParameters = {}
+  tParameters[UnitOperationTypes.PARAM_X] = params.X
+  tParameters[UnitOperationTypes.PARAM_Y] = params.Y
+
+  -- Request the operation
+  if UnitManager.CanStartOperation(unit, UnitOperationTypes.SPREAD_RELIGION, nil, tParameters) then
+      UnitManager.RequestOperation(unit, UnitOperationTypes.SPREAD_RELIGION, tParameters)
+      return true
+  end
+
+  return false
 end
 
 function EvangelizeBelief(params)
-  -- params contains:
-  -- - UnitID: ID of apostle unit
-  -- - BeliefHash: hash of chosen belief
-  
-  local unit = Players[Game.GetLocalPlayer()]:GetUnits():FindID(params.UnitID)
-  if unit then
-      local tParameters = {}
-      UnitManager.RequestOperation(unit, UnitOperationTypes.EvangelizeBelief, tParameters)
-      
-      tParameters[PlayerOperations.PARAM_BELIEF_TYPE] = params.BeliefHash;
-      tParameters[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE
-      
-      UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.ADD_BELIEF, tParameters)
+  -- Validate parameters
+  if not params.UnitID or not params.BeliefHash then
+      print("ERROR: Missing required parameters for EvangelizeBelief")
+      return false
   end
+
+  local player = Players[Game.GetLocalPlayer()]
+  if not player then return false end
+
+  local unit = player:GetUnits():FindID(params.UnitID)
+  if not unit then 
+      print("ERROR: Could not find unit with ID " .. tostring(params.UnitID))
+      return false 
+  end
+
+  -- Set up parameters for evangelizing belief
+  local tParameters = {}
+  tParameters[UnitOperationTypes.PARAM_BELIEF_TYPE] = params.BeliefHash
+
+  -- Request the operation
+  if UnitManager.CanStartOperation(unit, UnitOperationTypes.EVANGELIZE_BELIEF, nil, tParameters) then
+      UnitManager.RequestOperation(unit, UnitOperationTypes.EVANGELIZE_BELIEF, tParameters)
+      return true
+  end
+
+  return false
 end
 
 
@@ -307,56 +339,39 @@ function FoundPantheon(actionParams)
 
 end
 
+
 function FoundReligion(params)
-  -- Params should contain:
-  -- UnitID: ID of the Great Prophet
-  -- ReligionHash: Hash of chosen religion 
-  -- BeliefHashes: Table of chosen belief hashes
-  
-  local playerID = Game.GetLocalPlayer()
-  local pUnit = UnitManager.GetUnit(playerID, params.UnitID)
-  if not pUnit then
-    print("Error: Could not find Great Prophet unit")
-    return false
+  -- Validate required parameters
+  if not params.UnitID or not params.ReligionHash or not params.BeliefHashes then
+      print("ERROR: Missing required parameters for FoundReligion")
+      return false
   end
 
-  -- First activate the Great Prophet in place
-  local activateParams = {}
-  activateParams[UnitOperationTypes.PARAM_X] = pUnit:GetX()
-  activateParams[UnitOperationTypes.PARAM_Y] = pUnit:GetY()
+  local player = Players[Game.GetLocalPlayer()]
+  if not player then return false end
 
-  -- Important: We need to verify the unit can be activated here
-
-  local activateGPHash = 374670040
-  --if UnitManager.CanStartCommand(pUnit, UnitOperationTypes.FOUND_RELIGION, activateParams) then
-  UnitManager.RequestCommand(pUnit, activateGPHash, activateParams)
-  DeleteUnit(pUnit:GetID())
-  -- Set up religion founding parameters
-  local foundParams = {}
-  foundParams[PlayerOperations.PARAM_RELIGION_TYPE] = params.ReligionHash
-  foundParams[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE
-
-  -- Get the religion data to check if we need a custom name
-  local religionData = GameInfo.Religions[params.ReligionHash]
-  if religionData and religionData.RequiresCustomName then
-    -- Generate a default custom name if none provided
-    local defaultName = "Religion_" .. tostring(playerID) .. "_" .. os.time()
-    foundParams[PlayerOperations.PARAM_RELIGION_CUSTOM_NAME] = defaultName
+  local unit = player:GetUnits():FindID(params.UnitID)
+  if not unit then 
+      print("ERROR: Could not find unit with ID " .. tostring(params.UnitID))
+      return false
   end
 
-  -- Found the religion
-  print("Founding religion with hash: " .. tostring(params.ReligionHash))
-  UI.RequestPlayerOperation(playerID, PlayerOperations.FOUND_RELIGION, foundParams)
+  -- Set up the parameters for founding religion
+  local tParameters = {}
+  tParameters[PlayerOperations.PARAM_RELIGION_TYPE] = params.ReligionHash
+  tParameters[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE
 
-  -- Add each chosen belief
+  -- Request the operation to found the religion
+  UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.FOUND_RELIGION, tParameters)
+
+  -- Add each belief
   for _, beliefHash in ipairs(params.BeliefHashes) do
-    if beliefHash then  -- Skip nil belief hashes
-      local beliefParams = {}
-      beliefParams[PlayerOperations.PARAM_BELIEF_TYPE] = beliefHash
-      beliefParams[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE
-      print("Adding belief with hash: " .. tostring(beliefHash))
-      UI.RequestPlayerOperation(playerID, PlayerOperations.ADD_BELIEF, beliefParams)
-    end
+      if beliefHash then -- Skip nil beliefs
+          local beliefParameters = {}
+          beliefParameters[PlayerOperations.PARAM_BELIEF_TYPE] = beliefHash
+          beliefParameters[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE
+          UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.ADD_BELIEF, beliefParameters)
+      end
   end
 
   return true
