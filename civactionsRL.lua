@@ -368,7 +368,8 @@ function FoundReligion(params)
   local tParameters = {}
   tParameters[PlayerOperations.PARAM_RELIGION_TYPE] = params.ReligionHash
   tParameters[PlayerOperations.PARAM_INSERT_MODE] = PlayerOperations.VALUE_EXCLUSIVE
-
+  local foundreligionhash = -953161477
+  UnitManager.RequestOperation(unit, foundreligionhash , tParameters);
   -- Request the operation to found the religion
   UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.FOUND_RELIGION, tParameters)
 
