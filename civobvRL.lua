@@ -1211,211 +1211,197 @@ for i, unit in player:GetUnits():Members() do
     end
 end
 
- -- Helper function to get all possible actions for a single unit
--- Helper function to get all possible actions for a single unit
-function GetPossibleUnitActions(unitID, player)
-  local unit = player:GetUnits():FindID(unitID)
-  if not unit then return nil end
-  
-  local actions = {}
-  local plotX = unit:GetX()
-  local plotY = unit:GetY()
-  
-  -- Check movement possibilities
-  if unit:IsReadyToMove() then
-      local movementRange = {}
-      local range = unit:GetMovesRemaining()
-      
-      -- Get plots within range manually
-      for dx = -range, range do
-          for dy = -range, range do
-              local newX = plotX + dx
-              local newY = plotY + dy
-              if Map.IsPlot(newX, newY) then
-                  local targetPlot = Map.GetPlot(newX, newY)
-                  if targetPlot then
-                      -- Check if unit can move to this plot
-                      local tParameters = {}
-                      tParameters[UnitOperationTypes.PARAM_X] = newX
-                      tParameters[UnitOperationTypes.PARAM_Y] = newY
-                      if UnitManager.CanStartOperation(unit, UnitOperationTypes.MOVE_TO, nil, tParameters) then
-                          table.insert(movementRange, {
-                              UnitID = unitID,
-                              X = newX,
-                              Y = newY
-                          })
-                      end
-                  end
-              end
-          end
-      end
-      if #movementRange > 0 then
-          actions.MoveUnit = movementRange
-      end
-  end
-
-  -- Check ranged attack capability
-  local rangedCombat = unit:GetRangedCombat()
-  if rangedCombat > 0 then
-      local rangeTargets = {}
-      local range = unit:GetRange()
-      for dx = -range, range do
-          for dy = -range, range do
-              local newX = plotX + dx
-              local newY = plotY + dy
-              if Map.IsPlot(newX, newY) then
-                  local tParameters = {}
-                  tParameters[UnitOperationTypes.PARAM_X] = newX
-                  tParameters[UnitOperationTypes.PARAM_Y] = newY
-                  if UnitManager.CanStartOperation(unit, UnitOperationTypes.RANGE_ATTACK, nil, tParameters) then
-                      table.insert(rangeTargets, {
-                          UnitID = unitID,
-                          X = newX,
-                          Y = newY
-                      })
-                  end
-              end
-          end
-      end
-      if #rangeTargets > 0 then
-          actions.UnitRangedAttack = rangeTargets
-      end
-  end
-
-  -- Always add the SelectUnit action
-  actions.SelectUnit = { { UnitID = unitID } }
-
-  -- Check if unit can found a city
-  if unit:GetUnitType() == GameInfo.Units["UNIT_SETTLER"].Index then
-      if UnitManager.CanStartOperation(unit, UnitOperationTypes.FOUND_CITY, nil) then
-          actions.FoundCity = { { UnitID = unitID } }
-      end
-  end
-
--- Check if unit can be promoted
-if unit:GetExperience() and unit:GetExperience():GetLevel() > 0 then
-  local availablePromotions = {}
-  -- Only need 4 arguments: unit, actionHash, testOnly(true), isFirstCheck(true)
-  local bCanStart, tResults = UnitManager.CanStartCommand(
-      unit,
-      UnitCommandTypes.PROMOTE,
-      true,
-      true
-  );
-
-  if bCanStart and tResults and tResults[UnitCommandResults.PROMOTIONS] then
-      for _, promotion in ipairs(tResults[UnitCommandResults.PROMOTIONS]) do
-          table.insert(availablePromotions, {
-              UnitID = unitID,
-              PromotionType = promotion.Hash
-          })
-      end
-  end
-  if #availablePromotions > 0 then
-      actions.PromoteUnit = availablePromotions
-  end
-end
-
-  -- Check if unit can be upgraded
-  if UnitManager.CanStartCommand(unit, UnitCommandTypes.UPGRADE) then
-      actions.UpgradeUnit = { { UnitID = unitID } }
-  end
-
-  -- Unit can always be deleted
-  actions.DeleteUnit = { { UnitID = unitID } }
-
-  return actions
-end
-
 -- Main function to integrate with the observation system
 function GetAllUnitActions(player)
-  local unitActions = {
-      MoveUnit = {},
-      SelectUnit = {},
-      UnitRangedAttack = {},
-      FoundCity = {},
-      PromoteUnit = {},
-      DeleteUnit = {},
-      UpgradeUnit = {}
-  }
-
-  --print("=== BEGIN UNIT DISCOVERY ===")
+    local unitActions = {
+        MoveUnit = {},
+        SelectUnit = {},
+        UnitRangedAttack = {},
+        FoundCity = {},
+        PromoteUnit = {},
+        DeleteUnit = {},
+        UpgradeUnit = {},
+        -- Add new action categories
+        HarvestResource = {},
+        Fortify = {},
+        BuildImprovement = {},
+        AirAttack = {},
+        FormCorps = {},
+        FormArmy = {},
+        Wake = {},
+        Repair = {}
+    }
   
-  local pPlayerUnits:table = player:GetUnits();
-  local militaryUnits:table = {};
-  local civilianUnits:table = {};
+    print("=== BEGIN UNIT DISCOVERY ===")
+    
+    local pPlayerUnits:table = player:GetUnits();
+    local militaryUnits:table = {};
+    local civilianUnits:table = {};
+    
+    -- First sort units into categories (keeping original logic)
+    for i, pUnit in pPlayerUnits:Members() do
+        local unitInfo:table = GameInfo.Units[pUnit:GetUnitType()];
+        
+        if pUnit:GetCombat() == 0 and pUnit:GetRangedCombat() == 0 then
+            -- if we have no attack strength we must be civilian
+            table.insert(civilianUnits, pUnit);
+        else
+            table.insert(militaryUnits, pUnit);
+        end
+    end
   
-  -- First sort units into categories
-  for i, pUnit in pPlayerUnits:Members() do
-      ----print("Found unit: " .. tostring(i))
-      local unitInfo:table = GameInfo.Units[pUnit:GetUnitType()];
-      ----print("Unit type: " .. unitInfo.UnitType)
-      
-      if pUnit:GetCombat() == 0 and pUnit:GetRangedCombat() == 0 then
-          -- if we have no attack strength we must be civilian
-          ----print("Adding to civilian units")
-          table.insert(civilianUnits, pUnit);
-      else
-          ----print("Adding to military units")
-          table.insert(militaryUnits, pUnit);
-      end
+    -- Process military units (keeping original logic)
+    for _, pUnit in ipairs(militaryUnits) do
+        local unitInfo:table = GameInfo.Units[pUnit:GetUnitType()];
+        local unitID = pUnit:GetID()
+        
+        -- Check movement (original logic)
+        local movesRemaining = pUnit:GetMovesRemaining()
+        if movesRemaining > 0 then
+            local moves = GetValidMoveLocations(pUnit)
+            for _, move in ipairs(moves) do
+                table.insert(unitActions.MoveUnit, {
+                    UnitID = unitID,
+                    X = move.x,
+                    Y = move.y
+                })
+            end
+        end
+  
+        -- Add base actions (original logic)
+        table.insert(unitActions.SelectUnit, { UnitID = unitID })
+        table.insert(unitActions.DeleteUnit, { UnitID = unitID })
+  
+        -- NEW CHECKS for military units
+        -- Check for FORTIFY
+        if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.FORTIFY, nil) then
+            table.insert(unitActions.Fortify, {
+                UnitID = unitID
+            })
+        end
+  
+        -- Check for AIR_ATTACK
+        if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.AIR_ATTACK, nil) then
+            local validTargets = {}
+            local range = pUnit:GetRange()
+            local unitX = pUnit:GetX()
+            local unitY = pUnit:GetY()
+            
+            for dx = -range, range do
+                for dy = -range, range do
+                    local targetX = unitX + dx
+                    local targetY = unitY + dy
+                    if Map.IsPlot(targetX, targetY) then
+                        local tParameters = {
+                            [UnitOperationTypes.PARAM_X] = targetX,
+                            [UnitOperationTypes.PARAM_Y] = targetY
+                        }
+                        if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.AIR_ATTACK, nil, tParameters) then
+                            table.insert(validTargets, {X = targetX, Y = targetY})
+                        end
+                    end
+                end
+            end
+            
+            if #validTargets > 0 then
+                table.insert(unitActions.AirAttack, {
+                    UnitID = unitID,
+                    ValidTargets = validTargets
+                })
+            end
+        end
+  
+        -- Check for FORM_CORPS and FORM_ARMY
+        if UnitManager.CanStartCommand(pUnit, UnitCommandTypes.FORM_CORPS) then
+            table.insert(unitActions.FormCorps, {
+                UnitID = unitID
+            })
+        end
+  
+        if UnitManager.CanStartCommand(pUnit, UnitCommandTypes.FORM_ARMY) then
+            table.insert(unitActions.FormArmy, {
+                UnitID = unitID
+            })
+        end
+  
+        -- Check for WAKE
+        if UnitManager.CanStartCommand(pUnit, UnitCommandTypes.WAKE) then
+            table.insert(unitActions.Wake, {
+                UnitID = unitID
+            })
+        end
+    end
+  
+    -- Process civilian units (keeping original logic)
+    for _, pUnit in ipairs(civilianUnits) do
+        local unitInfo:table = GameInfo.Units[pUnit:GetUnitType()];
+        local unitID = pUnit:GetID()
+        
+        -- Check if unit is a settler (original logic)
+        if unitInfo.FoundCity then
+            if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.FOUND_CITY, nil) then
+                table.insert(unitActions.FoundCity, { UnitID = unitID })
+            end
+        end
+  
+        -- Check movement (original logic)
+        local movesRemaining = pUnit:GetMovesRemaining()
+        if movesRemaining > 0 then
+            local moves = GetValidMoveLocations(pUnit)
+            for _, move in ipairs(moves) do
+                table.insert(unitActions.MoveUnit, {
+                    UnitID = unitID,
+                    X = move.x,
+                    Y = move.y
+                })
+            end
+        end
+  
+        -- Add base actions (original logic)
+        table.insert(unitActions.SelectUnit, { UnitID = unitID })
+  
+        -- NEW CHECKS for civilian units
+        -- Check for HARVEST_RESOURCE
+        if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.HARVEST_RESOURCE, nil) then
+            table.insert(unitActions.HarvestResource, {
+                UnitID = unitID,
+                PlotX = pUnit:GetX(),
+                PlotY = pUnit:GetY()
+            })
+        end
+  
+        -- Check for BUILD_IMPROVEMENT
+        if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.BUILD_IMPROVEMENT, nil) then
+            local validImprovements = {}
+            for improvement in GameInfo.Improvements() do
+                local tParameters = {
+                    [UnitOperationTypes.PARAM_IMPROVEMENT_TYPE] = improvement.Hash
+                }
+                if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.BUILD_IMPROVEMENT, nil, tParameters) then
+                    table.insert(validImprovements, improvement.Hash)
+                end
+            end
+            
+            if #validImprovements > 0 then
+                table.insert(unitActions.BuildImprovement, {
+                    UnitID = unitID,
+                    ValidImprovements = validImprovements
+                })
+            end
+        end
+  
+        -- Check for REPAIR
+        if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.REPAIR, nil) then
+            table.insert(unitActions.Repair, {
+                UnitID = unitID,
+                PlotX = pUnit:GetX(),
+                PlotY = pUnit:GetY()
+            })
+        end
+    end
+  
+    return unitActions
   end
-
-  -- Process military units
-  for _, pUnit in ipairs(militaryUnits) do
-      ----print("Processing military unit")
-      local unitInfo:table = GameInfo.Units[pUnit:GetUnitType()];
-      
-      -- Check movement
-      local movesRemaining = pUnit:GetMovesRemaining()
-      if movesRemaining > 0 then
-          local moves = GetValidMoveLocations(pUnit)
-          for _, move in ipairs(moves) do
-              table.insert(unitActions.MoveUnit, {
-                  UnitID = pUnit:GetID(),
-                  X = move.x,
-                  Y = move.y
-              })
-          end
-      end
-      
-      -- Add delete action
-      table.insert(unitActions.DeleteUnit, { UnitID = pUnit:GetID() })
-  end
-
-  -- Process civilian units
-  for _, pUnit in ipairs(civilianUnits) do
-      --print("Processing civilian unit")
-      local unitInfo:table = GameInfo.Units[pUnit:GetUnitType()];
-      
-      -- Check if unit is a settler
-      if unitInfo.FoundCity then
-          --print("Found settler!")
-          if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.FOUND_CITY, nil) then
-              --print("Settler can found city")
-              table.insert(unitActions.FoundCity, { UnitID = pUnit:GetID() })
-          end
-      end
-
-      -- Check movement
-      local movesRemaining = pUnit:GetMovesRemaining()
-      if movesRemaining > 0 then
-          local moves = GetValidMoveLocations(pUnit)
-          for _, move in ipairs(moves) do
-              table.insert(unitActions.MoveUnit, {
-                  UnitID = pUnit:GetID(),
-                  X = move.x,
-                  Y = move.y
-              })
-          end
-      end
-
-      -- Add delete action
-      --table.insert(unitActions.DeleteUnit, { UnitID = pUnit:GetID() }) --TODO can reinsert delete
-  end
-
-  return unitActions
-end
 
 -- Helper function to get valid move locations for a unit
 function GetValidMoveLocations(unit)

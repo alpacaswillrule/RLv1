@@ -727,98 +727,79 @@ function FormUnitFormation(unit, targetUnit, formationType)
   return false;
 end
 
--- Rebase a unit to a target plot.
--- @param unitID The ID of the unit to rebase.
--- @param targetPlotX The X coordinate of the target plot.
--- @param targetPlotY The Y coordinate of the target plot.
-function UnitRebase(unitID, targetPlotX, targetPlotY)
-  local playerID = Game.GetLocalPlayer();
-  local player = Players[playerID];
-  local unit = player:GetUnits():FindID(unitID);
-    if unit == nil then
-      print("Unit with ID " .. unitID .. " not found.");
-      return false;
+function HarvestResource(unitID)
+  local unit = GetUnit(Game.GetLocalPlayer(), unitID)
+  if unit then
+      return UnitManager.RequestOperation(unit, UnitOperationTypes.HARVEST_RESOURCE)
   end
-  local targetPlot = Map.GetPlot(targetPlotX, targetPlotY);
-    if not targetPlot then
-      print("Invalid target plot coordinates.");
-      return false;
-  end
-  return UnitRebase(unit, targetPlot:GetIndex());
+  return false
 end
 
--- Performs a nuclear strike on a target plot.
--- @param unitID The ID of the unit performing the strike.
--- @param targetPlotX The X coordinate of the target plot.
--- @param targetPlotY The Y coordinate of the target plot.
--- @param wmdType The type of WMD (e.g., "WMD_NUCLEAR").
-function UnitWMDStrike(unitID, targetPlotX, targetPlotY, wmdType)
-  local playerID = Game.GetLocalPlayer();
-  local player = Players[playerID];
-  local unit = player:GetUnits():FindID(unitID);
-    if unit == nil then
-      print("Unit with ID " .. unitID .. " not found.");
-      return false;
+function Fortify(unitID)
+  local unit = GetUnit(Game.GetLocalPlayer(), unitID)
+  if unit then
+      return UnitManager.RequestOperation(unit, UnitOperationTypes.FORTIFY)
   end
-  local targetPlot = Map.GetPlot(targetPlotX, targetPlotY);
-    if not targetPlot then
-      print("Invalid target plot coordinates.");
-      return false;
-  end
-  return UnitWMDStrike(unit, targetPlot:GetIndex(), GameInfo.UnitWmdTypes[wmdType].Hash);
+  return false
 end
 
--- Queues a unit path to a target plot.
--- @param unitID The ID of the unit.
--- @param targetPlotX The X coordinate of the target plot.
--- @param targetPlotY The Y coordinate of the target plot.
-function QueueUnitPath(unitID, targetPlotX, targetPlotY)
-  local playerID = Game.GetLocalPlayer();
-  local player = Players[playerID];
-  local unit = player:GetUnits():FindID(unitID);
-    if unit == nil then
-      print("Unit with ID " .. unitID .. " not found.");
-      return false;
+function BuildImprovement(unitID, improvementHash)
+  local unit = GetUnit(Game.GetLocalPlayer(), unitID)
+  if unit then
+      local tParameters = {}
+      tParameters[UnitOperationTypes.PARAM_IMPROVEMENT_TYPE] = improvementHash
+      return UnitManager.RequestOperation(unit, UnitOperationTypes.BUILD_IMPROVEMENT, tParameters)
   end
-  local targetPlot = Map.GetPlot(targetPlotX, targetPlotY);
-    if not targetPlot then
-      print("Invalid target plot coordinates.");
-      return false;
-  end
-  return QueueUnitPath(unit, targetPlot:GetIndex());
+  return false
 end
 
--- Builds an improvement with a unit.
--- @param unitID The ID of the unit (e.g., Builder).
--- @param improvementName The name of the improvement (e.g., "IMPROVEMENT_FARM").
-function BuildImprovement(unitID, improvementName)
-  local playerID = Game.GetLocalPlayer();
-  local player = Players[playerID];
-  local unit = player:GetUnits():FindID(unitID);
-    if unit == nil then
-      print("Unit with ID " .. unitID .. " not found.");
-      return false;
+function FormCorps(unitID)
+  local unit = GetUnit(Game.GetLocalPlayer(), unitID)
+  if unit then
+      return UnitManager.RequestCommand(unit, UnitCommandTypes.FORM_CORPS)
   end
-  return RequestBuildImprovement(unit, GameInfo.Improvements[improvementName].Hash);
+  return false
 end
 
--- Enters a unit into a formation with another unit.
--- @param unitID The ID of the unit entering the formation.
--- @param targetUnitID The ID of the unit to form with.
-function EnterFormation(unitID, targetUnitID)
-  local playerID = Game.GetLocalPlayer();
-  local player = Players[playerID];
-  local unit = player:GetUnits():FindID(unitID);
-  local targetUnit = player:GetUnits():FindID(targetUnitID);
-    if unit == nil then
-      print("Unit with ID " .. unitID .. " not found.");
+function FormArmy(unitID)
+  local unit = GetUnit(Game.GetLocalPlayer(), unitID)
+  if unit then
+      return UnitManager.RequestCommand(unit, UnitCommandTypes.FORM_ARMY)
+  end
+  return false
+end
+
+function WakeUnit(unitID)
+  local unit = GetUnit(Game.GetLocalPlayer(), unitID)
+  if unit then
+      return UnitManager.RequestCommand(unit, UnitCommandTypes.WAKE)
+  end
+  return false
+end
+
+function RepairImprovement(unitID)
+  local unit = GetUnit(Game.GetLocalPlayer(), unitID)
+  if unit then
+      return UnitManager.RequestOperation(unit, UnitOperationTypes.REPAIR)
+  end
+  return false
+end
+
+
+-- Requests a settler to found a city
+-- @param unit The settler unit
+function RequestFoundCity(unit)
+  if unit:GetUnitType() ~= GameInfo.Units["UNIT_SETTLER"].Index then
+      print("Unit must be a settler to found city");
       return false;
   end
-    if targetUnit == nil then
-      print("Unit with ID " .. targetUnitID .. " not found.");
-      return false;
+  
+  if UnitManager.CanStartOperation(unit, UnitOperationTypes.FOUND_CITY, nil) then
+      UnitManager.RequestOperation(unit, UnitOperationTypes.FOUND_CITY);
+      return true;
   end
-  return RequestEnterFormation(unit, targetUnit);
+  print("Cannot found city at current location");
+  return false;
 end
 
 -- Founds a city with a unit.
@@ -1046,20 +1027,6 @@ function GetTraderInCity(city)
     end
     return nil
 end
--- Example usage for policy changes:
--- local policyChanges = {
---   [0] = "POLICY_AGOGE",        -- Military slot 0
---   [2] = "POLICY_CARAVANSARIES" -- Economic slot 2
--- }
--- ChangePolicies(policyChanges);
-
---[[ Add more action functions here, such as:
-    - Constructing districts/buildings (more complex, requires production queue handling).
-    - Researching along a specific path (requires more sophisticated logic).
-    - Declaring war.
-    - Making peace.
-    - ...
---]]
 
 --------------------------------------------------
 -- UTILITY FUNCTIONS (Place in Civ6Common.lua if you prefer)
@@ -1134,13 +1101,7 @@ function GetLocalPlayer()
   return Game.GetLocalPlayer();
 end
 
-function GetPlayerVisibility(playerID)
-  return PlayersVisibility[playerID];
-end
 
-function GetPlayerColors(playerID)
-  return UI.GetPlayerColors(playerID);
-end
 
 function CanChangeGovernment()
     local playerID = Game.GetLocalPlayer()
@@ -1169,69 +1130,6 @@ function CanChangePolicies()
     return false
 end
 
-
-function QueueUnitPath(unit, targetPlotID)
-  local plot = Map.GetPlotByIndex(targetPlotID);
-  local tParameters = {};
-  tParameters[UnitOperationTypes.PARAM_X] = plot:GetX();
-  tParameters[UnitOperationTypes.PARAM_Y] = plot:GetY();
-  
-  if UnitManager.CanStartOperation(unit, UnitOperationTypes.MOVE_TO, nil, tParameters) then
-      UnitManager.RequestOperation(unit, UnitOperationTypes.MOVE_TO, tParameters);
-      return true;
-  end
-  return false;
-end
-
-
--- Requests a unit to build an improvement
--- @param unit The unit object
--- @param improvementHash The hash of the improvement type
-function RequestBuildImprovement(unit, improvementHash)
-  local tParameters = {};
-  tParameters[UnitOperationTypes.PARAM_IMPROVEMENT_TYPE] = improvementHash;
-  tParameters[UnitOperationTypes.PARAM_X] = unit:GetX();
-  tParameters[UnitOperationTypes.PARAM_Y] = unit:GetY();
-  
-  if UnitManager.CanStartOperation(unit, UnitOperationTypes.BUILD_IMPROVEMENT, nil, tParameters) then
-      UnitManager.RequestOperation(unit, UnitOperationTypes.BUILD_IMPROVEMENT, tParameters);
-      return true;
-  end
-  print("Cannot build improvement at current location");
-  return false;
-end
-
--- Requests a unit to enter formation with another unit
--- @param unit The unit entering formation
--- @param targetUnit The unit to form up with
-function RequestEnterFormation(unit, targetUnit)
-  local tParameters = {};
-  tParameters[UnitCommandTypes.PARAM_UNIT_PLAYER] = targetUnit:GetOwner();
-  tParameters[UnitCommandTypes.PARAM_UNIT_ID] = targetUnit:GetID();
-  
-  if UnitManager.CanStartCommand(unit, UnitCommandTypes.ENTER_FORMATION, nil, tParameters) then
-      UnitManager.RequestCommand(unit, UnitCommandTypes.ENTER_FORMATION, tParameters);
-      return true;
-  end
-  print("Cannot enter formation with target unit");
-  return false;
-end
-
--- Requests a settler to found a city
--- @param unit The settler unit
-function RequestFoundCity(unit)
-  if unit:GetUnitType() ~= GameInfo.Units["UNIT_SETTLER"].Index then
-      print("Unit must be a settler to found city");
-      return false;
-  end
-  
-  if UnitManager.CanStartOperation(unit, UnitOperationTypes.FOUND_CITY, nil) then
-      UnitManager.RequestOperation(unit, UnitOperationTypes.FOUND_CITY);
-      return true;
-  end
-  print("Cannot found city at current location");
-  return false;
-end
 
 -- Requests a unit promotion
 -- @param unit The unit to promote
