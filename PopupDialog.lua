@@ -65,16 +65,6 @@ PopupDialog.COMMAND_CANCEL				= "_CMD_CANCEL";
 PopupDialog.COMMAND_CONFIRM				= "_CMD_CONFIRM";
 PopupDialog.COMMAND_DEFAULT				= "_CMD_DEFAULT";
 
--- Add at the top with other variables
-local m_isAgentEnabled = false;
-
--- Add the event listener
-LuaEvents.RLAgentToggled.Add(function(isEnabled)
-    print("PopupSuppressor: Agent toggle state changed to: " .. tostring(isEnabled));
-    m_isAgentEnabled = isEnabled;
-end);
-
-
 -- ===========================================================================
 --	PopupDialog Constructor
 --
@@ -343,57 +333,23 @@ function PopupDialog:SetSize( width:number, height:number )
 	self.Controls.PopupStack:SetSizeVal(width,height);
 end
 
-
-
+-- ===========================================================================
 function PopupDialog:Open( optionalID:string )
-    -- If agent is enabled and this is an AI popup, auto-handle it
-    print("JOHAN PopupSuppressor: Open called with ID: " .. tostring(optionalID));
-    if m_isAgentEnabled then
-        -- Check if this is an AI-initiated popup 
-        if ms_InitiatedByPlayerID and ms_InitiatedByPlayerID ~= Game.GetLocalPlayer() then
-            print("PopupSuppressor: Auto-handling AI popup");
-            
-            -- Find any default/confirm button and trigger its callback
-            for _, control in ipairs(self.PopupControls) do
-                if control.Type == "Button" then
-                    -- Prefer "negative" responses to AI requests when agent is enabled
-                    if control.Command == PopupDialog.COMMAND_CANCEL then
-                        print("PopupSuppressor: Auto-selecting Cancel option");
-                        if control.Callback then 
-                            control.Callback();
-                        end
-                        return;
-                    end
-                end
-            end
-            
-            -- If no cancel button found, look for any callback to execute
-            for _, control in ipairs(self.PopupControls) do
-                if control.Type == "Button" and control.Callback then
-                    print("PopupSuppressor: Auto-selecting first available option");
-                    control.Callback();
-                    return;
-                end
-            end
-            
-            return; -- Exit without showing popup if no callbacks found
-        end
-    end
-    
-    -- Original popup open code follows...
-    if self:IsOpen() then
-        local ID:string = optionalID and optionalID or self.ID;
-        UI.DataError("Attempt to open a popup dialog that is already open. ID: '" .. ID .. "'");
-    end
-    
-    self.Controls.PopupRoot:SetHide(false);
+	
+	if self:IsOpen() then
+		local ID:string = optionalID and optionalID or self.ID;
+		UI.DataError("Attempt to open a popup dialog that is already open. ID: '" .. ID .. "'");
+	end
+	
+	self.Controls.PopupRoot:SetHide(false);
 
-    for _,pAnimationControl in ipairs( self.AnimsOnOpen ) do
-        pAnimationControl:SetToBeginning();
-        pAnimationControl:Play();
-    end
+	-- If animation controls are set to play on open, now is the time...
+	for _,pAnimationControl in ipairs( self.AnimsOnOpen ) do
+		pAnimationControl:SetToBeginning();
+		pAnimationControl:Play();
+	end
 
-    self.Controls.PopupStack:CalculateSize();
+	self.Controls.PopupStack:CalculateSize();
 end
 
 -- ===========================================================================
@@ -517,10 +473,10 @@ end
 --	For customized popups, create them in XML and use PopupDialog instead.
 --
 -- ===========================================================================
--- Similarly modify PopupDialogInGame:Open
-function PopupDialogInGame:Open()
-	LuaEvents.OnRaisePopupInGame(self.ID, self.m_options);
-	self.m_options = {};
+function PopupDialogInGame:new( id:string )	
+	self.ID			= id;
+	self.m_options	= {};
+	return self;
 end
 
 -- ===========================================================================
