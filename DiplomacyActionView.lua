@@ -2113,7 +2113,7 @@ function InitializeView()
 
 		if not m_LiteMode then
 			if m_eventID == 0 then
-				--m_eventID = UI.ReferenceCurrentEvent();	-- lock engine
+				m_eventID = UI.ReferenceCurrentEvent();	-- lock engine
 			else
 				UI.DataError("Attempt to obtain lock ID but m_eventID already has ID: "..tostring(m_eventID));
 			end		
