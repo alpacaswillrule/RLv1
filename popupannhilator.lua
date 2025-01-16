@@ -90,6 +90,7 @@ function CloseDiplomacyPopups()
         pDealView:SetHide(true);
         LuaEvents.DiploBasePopup_HideUI(false);
     end
+    UIManager:DequeuePopup( ContextPtr );
 
     -- Reset game view
     UI.SetSoundStateValue("Game_Views", "Normal_View");

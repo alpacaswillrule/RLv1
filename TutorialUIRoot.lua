@@ -2125,7 +2125,7 @@ end
 function OnDiplomacyDeclareWar(actingPlayer, reactingPlayer)
 	local localPlayer = Game.GetLocalPlayer();
 	if (actingPlayer == localPlayer or reactingPlayer == localPlayer) then
-		--TutorialCheck("TutorialWarDeclared");
+		TutorialCheck("TutorialWarDeclared");
 	end
 end
 
@@ -2133,7 +2133,7 @@ end
 function OnDiplomacyStatement(actingPlayer, reactingPlayer, values)
 	-- TODO(asherburne): Ensure values["StatementType"] == DENOUNCE
 	print("diplo stmt type="..values["StatementType"])
-	--TutorialCheck("DiplomacyStatement")
+	TutorialCheck("DiplomacyStatement")
 end
 
 -- ===========================================================================
@@ -2150,7 +2150,7 @@ end
 
 -- ===========================================================================
 function OnDiplomacyMeetMajors()
-	--TutorialCheck("DiplomacyMeetMajors")
+	TutorialCheck("DiplomacyMeetMajors")
 end
 
 -- ===========================================================================
