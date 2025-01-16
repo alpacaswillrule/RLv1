@@ -13,6 +13,14 @@ include( "LeaderIcon" );
 include( "PopupDialog" );
 include( "CivilizationIcon" );
 
+local m_isAgentEnabled = false; 
+
+LuaEvents.RLAgentToggled.Add(OnRLAgentToggled);
+
+function OnRLAgentToggled(isEnabled)
+    print("PopupSuppressor: Agent toggle state changed to: " .. tostring(isEnabled));
+    m_isAgentEnabled = isEnabled;
+end
 
 -- ===========================================================================
 --	GLOBALS

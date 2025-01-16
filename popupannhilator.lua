@@ -31,48 +31,82 @@ function CloseNaturalDisasterPopup()
 end
 
 function CloseDiplomacyPopups()
-    print("CloseDiplomacyPopups: Attempting to close diplomacy views");
+    print("CloseDiplomacyPopups: Attempting to close diplomacy views")
     
-    -- Close any open popup dialog first
-    if m_PopupDialog and m_PopupDialog:IsOpen() then
-        print("CloseDiplomacyPopups: Closing popup dialog");
-        m_PopupDialog:Close();
-    end
+    -- Get both potential diplomacy views
+    local pActionView = ContextPtr:LookUpControl("/InGame/DiplomacyActionView") 
+    local pDealView = ContextPtr:LookUpControl("/InGame/DiplomacyDealView")
 
-    -- Try to get the diplomacy context
-    local pContext = ContextPtr:LookUpControl("/InGame/DiplomacyActionView");
-    if pContext and not pContext:IsHidden() then
-        print("CloseDiplomacyPopups: Found open diplomacy view, closing");
-        
-        -- Stop music and sound effects
-        UI.PlaySound("Stop_Leader_Music");
-        
-        -- Stop modder music if playing
-        local playerConfig = PlayerConfigurations[Game.GetLocalPlayer()];
-        if playerConfig then
-            local civID = playerConfig:GetCivilizationTypeID();
-            if UI.ShouldCivPlayModMusic(civID) then
-                UI.StopModCivLeaderMusic(Game.GetLocalPlayer());
+    if pActionView and not pActionView:IsHidden() then
+        print("CloseDiplomacyPopups: Found open diplomacy action view")
+
+        -- Handle popup dialog if open
+        local pActionContext = ContextPtr:LookUpControl("/InGame/DiplomacyActionView/PopupDialog")
+        if pActionContext and not pActionContext:IsHidden() then
+            pActionContext:SetHide(true)
+        end
+
+        -- Get the specific session ID between players
+        local localPlayerID = Game.GetLocalPlayer()
+        local otherPlayerID = -1
+        if pActionView.ms_OtherPlayerID then
+            otherPlayerID = pActionView.ms_OtherPlayerID
+        end
+
+        -- Close the specific session
+        if otherPlayerID ~= -1 then
+            local sessionID = DiplomacyManager.FindOpenSessionID(localPlayerID, otherPlayerID)
+            if sessionID then
+                DiplomacyManager.CloseSession(sessionID)
             end
         end
 
-        -- Reset sound state
-        UI.SetSoundStateValue("Game_Views", "Normal_View");
-        
-        -- Clean up view
-        if pContext.UninitializeView then
-            pContext:UninitializeView();
-        end
-        
-        -- Hide the context
-        pContext:SetHide(true);
-        
-        -- Fire events
-        LuaEvents.DiploScene_SceneClosed();
-        LuaEvents.DiplomacyActionView_ShowIngameUI();
-    end
-end
+        -- Stop leader animations and music
+        Events.HideLeaderScreen()
+        UI.PlaySound("Stop_Leader_Music")
 
+        -- Release engine lock 
+        if pActionView.m_eventID and pActionView.m_eventID ~= 0 then
+            UI.ReleaseEventID(pActionView.m_eventID)
+            pActionView.m_eventID = 0
+        end
+
+        -- Cleanup view state
+        if pActionView.UninitializeView then
+            pActionView:UninitializeView()
+        end
+
+        -- Hide view and restore UI
+        pActionView:SetHide(true)
+        LuaEvents.DiploScene_SceneClosed()
+        LuaEvents.DiplomacyActionView_ShowIngameUI()
+    end
+
+    if pDealView and not pDealView:IsHidden() then
+        print("CloseDiplomacyPopups: Found open diplomacy deal view")
+        
+        -- Close any active deal sessions
+        local localPlayerID = Game.GetLocalPlayer()
+        if pDealView.ms_OtherPlayerID then
+            local sessionID = DiplomacyManager.FindOpenSessionID(localPlayerID, pDealView.ms_OtherPlayerID)
+            if sessionID then
+                DiplomacyManager.CloseSession(sessionID)
+            end
+        end
+
+        -- Clear working deals
+        DealManager.ClearWorkingDeal(DealDirection.OUTGOING, localPlayerID, -1)
+        DealManager.ClearWorkingDeal(DealDirection.INCOMING, localPlayerID, -1)
+
+        -- Hide view
+        pDealView:SetHide(true)
+        LuaEvents.DiploBasePopup_HideUI(false)
+    end
+
+    -- Reset game view state
+    UI.SetSoundStateValue("Game_Views", "Normal_View")
+    UI.PlaySound("Exit_Leader_Screen")
+end
 -- ===========================================================================
 -- Function to close all popups (using events as before)
 -- ===========================================================================
