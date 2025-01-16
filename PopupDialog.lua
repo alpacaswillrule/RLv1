@@ -346,15 +346,41 @@ end
 
 
 function PopupDialog:Open( optionalID:string )
-    -- If agent is enabled and this is an AI popup, ignore it
+    -- If agent is enabled and this is an AI popup, auto-handle it
+    print("JOHAN PopupSuppressor: Open called with ID: " .. tostring(optionalID));
     if m_isAgentEnabled then
-        -- Check if this is an AI-initiated popup by looking at relevant flags
+        -- Check if this is an AI-initiated popup 
         if ms_InitiatedByPlayerID and ms_InitiatedByPlayerID ~= Game.GetLocalPlayer() then
-            print("PopupSuppressor: Blocking AI popup");
-            return; -- Exit without showing popup
+            print("PopupSuppressor: Auto-handling AI popup");
+            
+            -- Find any default/confirm button and trigger its callback
+            for _, control in ipairs(self.PopupControls) do
+                if control.Type == "Button" then
+                    -- Prefer "negative" responses to AI requests when agent is enabled
+                    if control.Command == PopupDialog.COMMAND_CANCEL then
+                        print("PopupSuppressor: Auto-selecting Cancel option");
+                        if control.Callback then 
+                            control.Callback();
+                        end
+                        return;
+                    end
+                end
+            end
+            
+            -- If no cancel button found, look for any callback to execute
+            for _, control in ipairs(self.PopupControls) do
+                if control.Type == "Button" and control.Callback then
+                    print("PopupSuppressor: Auto-selecting first available option");
+                    control.Callback();
+                    return;
+                end
+            end
+            
+            return; -- Exit without showing popup if no callbacks found
         end
     end
     
+    -- Original popup open code follows...
     if self:IsOpen() then
         local ID:string = optionalID and optionalID or self.ID;
         UI.DataError("Attempt to open a popup dialog that is already open. ID: '" .. ID .. "'");
@@ -362,7 +388,6 @@ function PopupDialog:Open( optionalID:string )
     
     self.Controls.PopupRoot:SetHide(false);
 
-    -- If animation controls are set to play on open, now is the time...
     for _,pAnimationControl in ipairs( self.AnimsOnOpen ) do
         pAnimationControl:SetToBeginning();
         pAnimationControl:Play();
@@ -494,23 +519,8 @@ end
 -- ===========================================================================
 -- Similarly modify PopupDialogInGame:Open
 function PopupDialogInGame:Open()
-    -- If agent is enabled and this is an AI popup, ignore it  
-    if m_isAgentEnabled then
-        -- Check if this is an AI-initiated popup
-        if self.m_options and #self.m_options > 0 then
-            -- Look for indicators this is an AI popup like diplomatic messages
-            for _,option in ipairs(self.m_options) do
-                if option.Type == "Text" and option.Content and 
-                   (string.find(option.Content, "LOC_DIPLO_") or string.find(option.Content, "LOC_DIPLOACTION_")) then
-                    print("PopupSuppressor: Blocking AI ingame popup");
-                    return;
-                end
-            end
-        end
-    end
-
-    LuaEvents.OnRaisePopupInGame(self.ID, self.m_options);
-    self.m_options = {};
+	LuaEvents.OnRaisePopupInGame(self.ID, self.m_options);
+	self.m_options = {};
 end
 
 -- ===========================================================================
