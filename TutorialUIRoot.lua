@@ -13,6 +13,15 @@ include("popupannhilator");
 --	DEBUGGING
 -- ===========================================================================
 
+local m_isAgentEnabled = false;
+LuaEvents.RLAgentToggled.Add(OnRLAgentToggled);
+
+function OnRLAgentToggled(isEnabled)
+    print("PopupSuppressor: Agent toggle state changed to: " .. tostring(isEnabled));
+    m_isAgentEnabled = isEnabled;
+end
+
+
 local isDebugInfoShowing		:boolean = (not UI.IsFinalRelease());	-- (false in retail builds) Set to true if working on building/debugging the tutorial for more information prompts around the screen
 local isDebugVerbose			:boolean = false;						-- (false) when true, lots of logging will be output
 
@@ -2133,10 +2142,13 @@ end
 function OnDiplomacyStatement(actingPlayer, reactingPlayer, values)
 	-- TODO(asherburne): Ensure values["StatementType"] == DENOUNCE
 	print("diplo stmt type="..values["StatementType"])
-    CloseDiplomacyPopups()
+    if m_isAgentEnabled then
+        CloseDiplomacyPopups()
+    end
 	TutorialCheck("DiplomacyStatement")
-    print("tutorialcheck diplostatement done")
-    CloseDiplomacyPopups()
+    if m_isAgentEnabled then
+        CloseDiplomacyPopups()
+    end
 end
 
 -- ===========================================================================
