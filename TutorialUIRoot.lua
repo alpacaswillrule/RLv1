@@ -8,7 +8,7 @@
 g_TutorialLoaders = {};
 include("TutorialScenarioBase");	-- The base tutorial scenario.
 include("TutorialLoader_", true);	-- Additional tutorial event handlers.
-
+include("popupannhilator");
 -- ===========================================================================
 --	DEBUGGING
 -- ===========================================================================
@@ -2133,7 +2133,10 @@ end
 function OnDiplomacyStatement(actingPlayer, reactingPlayer, values)
 	-- TODO(asherburne): Ensure values["StatementType"] == DENOUNCE
 	print("diplo stmt type="..values["StatementType"])
+    CloseDiplomacyPopups()
 	TutorialCheck("DiplomacyStatement")
+    print("tutorialcheck diplostatement done")
+    CloseDiplomacyPopups()
 end
 
 -- ===========================================================================

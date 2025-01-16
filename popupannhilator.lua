@@ -31,74 +31,15 @@ function CloseNaturalDisasterPopup()
 end
 
 function CloseDiplomacyPopups()
-    print("CloseDiplomacyPopups: Attempting to close diplomacy views");
-    
-    -- Try to get both diplomacy contexts
-    local pActionView = ContextPtr:LookUpControl("/InGame/DiplomacyActionView");
-    local pDealView = ContextPtr:LookUpControl("/InGame/DiplomacyDealView");
-    
-    if pActionView and not pActionView:IsHidden() then
-        print("CloseDiplomacyPopups: Found open diplomacy action view");
-        
-        -- Handle any open popup dialog
-        local pActionContext = ContextPtr:LookUpControl("/InGame/DiplomacyActionView/PopupDialog");
-        if pActionContext and not pActionContext:IsHidden() then
-            pActionContext:SetHide(true);
-        end
-
-        -- Simulate ESC handling to ensure proper cleanup
-        local sessionID = DiplomacyManager.FindOpenSessionID(Game.GetLocalPlayer(), -1);
+    local localPlayerID = Game.GetLocalPlayer();
+    -- Loop through all players
+    for playerID = 0, GameDefines.MAX_PLAYERS-1 do
+        local sessionID = DiplomacyManager.FindOpenSessionID(localPlayerID, playerID);
         if sessionID then
             DiplomacyManager.CloseSession(sessionID);
+            break; -- Found and closed the session
         end
-
-        -- Stop music and graphics
-        UI.PlaySound("Stop_Leader_Music");
-        Events.HideLeaderScreen();
-
-        -- Release any engine lock
-        if pActionView.m_eventID and pActionView.m_eventID ~= 0 then
-            UI.ReleaseEventID(pActionView.m_eventID);
-            pActionView.m_eventID = 0;
-        end
-
-        -- Hide the view and restore UI
-        pActionView:SetHide(true);
-        LuaEvents.DiploScene_SceneClosed();
-        LuaEvents.DiplomacyActionView_ShowIngameUI();
     end
-
-    if pDealView and not pDealView:IsHidden() then
-        print("CloseDiplomacyPopups: Found open diplomacy deal view");
-        
-        -- Handle any open popup dialog in deal view
-        local pDealContext = ContextPtr:LookUpControl("/InGame/DiplomacyDealView/PopupDialog"); 
-        if pDealContext and not pDealContext:IsHidden() then
-            pDealContext:SetHide(true);
-        end
-
-        -- Close active deal session if any
-        local sessionID = DiplomacyManager.FindOpenSessionID(Game.GetLocalPlayer(), -1);
-        if sessionID then
-            DiplomacyManager.CloseSession(sessionID);
-        end
-
-        -- Clean up deal manager state
-        DealManager.ClearWorkingDeal(DealDirection.OUTGOING, Game.GetLocalPlayer(), -1);
-
-        -- Hide the view
-        pDealView:SetHide(true);
-        LuaEvents.DiploBasePopup_HideUI(false);
-    end
-    UIManager:DequeuePopup( ContextPtr );
-
-    -- Reset game view
-    UI.SetSoundStateValue("Game_Views", "Normal_View");
-    UI.PlaySound("Exit_Leader_Screen");
-end
-
--- In our popup suppressor
-function EnhancedCloseDiplomacyPopups()
     local pContext = ContextPtr:LookUpControl("/InGame/DiplomacyActionView");
     if pContext then
         -- Try using ESC handler first
@@ -106,11 +47,9 @@ function EnhancedCloseDiplomacyPopups()
             pContext.HandleESC();
             return;
         end
-        
-        -- Fall back to direct cleanup
-        CloseDiplomacyPopups();
     end
 end
+
 -- ===========================================================================
 -- Function to close all popups (using events as before)
 -- ===========================================================================
