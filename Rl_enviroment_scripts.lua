@@ -169,7 +169,7 @@ function RLv1.OnTurnBegin()
         
         if actionType then
             print("Selected action:", actionType)
-            print("Action params:", actionParams and table.concat(actionParams, ", ") or "nil")
+            --print("Action params:", actionParams and table.concat(actionParams, ", ") or "nil")
             
             RLv1.ExecuteAction(actionType, actionParams)
             print("Action execution completed")
