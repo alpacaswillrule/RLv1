@@ -1707,7 +1707,7 @@ if playerTrade:GetNumOutgoingRoutes() < playerTrade:GetOutgoingRouteCapacity() t
 end
 
 
-  -- Return the table of possible actions
+-- Return the table of possible actions
   print("got possible actions")
   return possibleActions;
 
