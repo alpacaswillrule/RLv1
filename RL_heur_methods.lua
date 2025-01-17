@@ -11,6 +11,68 @@ include("civactionsRL");
 
 -- Function to select which action to take based on priorities
 function SelectPrioritizedAction(possibleActions)
+    
+        -- Priority 0: Builder Actions (Improvements and Harvests)
+        if possibleActions.BuildImprovement and #possibleActions.BuildImprovement > 0 then
+            -- Look for builders that can make improvements
+            for _, builderAction in ipairs(possibleActions.BuildImprovement) do
+                if builderAction.ValidImprovements and #builderAction.ValidImprovements > 0 then
+                    -- Randomly select one of the possible improvements
+                    local randomImprovement = builderAction.ValidImprovements[math.random(#builderAction.ValidImprovements)]
+                    print("Builder can construct improvement - selecting random improvement")
+                    return "BuildImprovement", {
+                        UnitID = builderAction.UnitID,
+                        ImprovementHash = randomImprovement
+                    }
+                end
+            end
+        end
+    
+        -- Check for harvest actions
+        if possibleActions.HarvestResource and #possibleActions.HarvestResource > 0 then
+            -- Randomly select one of the possible harvest actions
+            local randomHarvest = possibleActions.HarvestResource[math.random(#possibleActions.HarvestResource)]
+            print("Builder can harvest resource - selecting random harvest")
+            return "HarvestResource", randomHarvest
+        end
+    
+    -- First check for available governor titles
+    if possibleActions.AssignGovernorTitle and #possibleActions.AssignGovernorTitle > 0 then
+        print("\n=== AVAILABLE GOVERNOR ACTIONS ===")
+        
+        -- First look for initial appointments
+        for _, govAction in ipairs(possibleActions.AssignGovernorTitle) do
+            if govAction.IsInitialAppointment then
+                print("Can appoint new governor: " .. govAction.GovernorName)
+                return "AssignGovernorTitle", govAction
+            end
+        end
+
+        -- Then look for promotions
+        for _, govAction in ipairs(possibleActions.AssignGovernorTitle) do
+            if not govAction.IsInitialAppointment then
+                print(string.format("Can promote %s with: %s (%s)", 
+                    govAction.GovernorName,
+                    govAction.PromotionName,
+                    govAction.Description))
+                return "AssignGovernorTitle", govAction
+            end
+        end
+    end
+
+    -- Then check for available city assignments
+    if possibleActions.AssignGovernorToCity and #possibleActions.AssignGovernorToCity > 0 then
+        print("\n=== AVAILABLE GOVERNOR ASSIGNMENTS ===")
+        for _, assignment in ipairs(possibleActions.AssignGovernorToCity) do
+            print(string.format("Can assign %s to city: %s", 
+                assignment.GovernorName,
+                assignment.CityName))
+            -- Only take unassigned governors
+            if not assignment.CurrentlyAssigned then
+                return "AssignGovernorToCity", assignment
+            end
+        end
+    end
     -- Check for highest priority actions first
         -- Priority 1: Establish highest-yield trade route if available
         if possibleActions.EstablishTradeRoute and #possibleActions.EstablishTradeRoute > 0 then

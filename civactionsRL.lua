@@ -95,10 +95,20 @@ function RLv1.ExecuteAction(actionType, actionParams)
       Fortify(actionParams.UnitID)
     elseif actionType == "BuildImprovement" then
         BuildImprovement(actionParams.UnitID, actionParams.ImprovementHash)
+    elseif actionType == "AssignGovernorTitle" then
+        if actionParams.IsInitialAppointment then
+          AppointNewGovernor(actionParams)
+        else
+          AssignGovernorPromotion(actionParams)
+        end
+    elseif actionType == "AssignGovernorToCity" then
+        AssignGovernorToCity(actionParams)
     elseif actionType == "AirAttack" then
         UnitAirAttack(actionParams.UnitID, actionParams.X, actionParams.Y)
     elseif actionType == "FormCorps" then
         FormCorps(actionParams.UnitID)
+    elseif actionType == "RemoveFeature" then
+        RemoveFeature(actionParams);
     elseif actionType == "FormArmy" then
         FormArmy(actionParams.UnitID)
     elseif actionType == "Wake" then
@@ -143,6 +153,60 @@ function RLv1.ExecuteAction(actionType, actionParams)
 
     return true;
 end
+
+
+function RemoveFeature(params)
+  -- Validate parameters
+  if not params.UnitID then
+      print("ERROR: Missing required UnitID parameter for RemoveFeature");
+      return false;
+  end
+
+  local player = Players[Game.GetLocalPlayer()];
+  if not player then return false; end
+
+  local unit = player:GetUnits():FindID(params.UnitID);
+  if not unit then
+      print("ERROR: Could not find unit with ID " .. tostring(params.UnitID));
+      return false;
+  end
+
+  -- Set up parameters for removing feature
+  local tParameters = {};
+  tParameters[UnitOperationTypes.PARAM_X] = unit:GetX();
+  tParameters[UnitOperationTypes.PARAM_Y] = unit:GetY();
+
+  -- Request the operation
+  if UnitManager.CanStartOperation(unit, UnitOperationTypes.REMOVE_FEATURE, nil, tParameters) then
+      UnitManager.RequestOperation(unit, UnitOperationTypes.REMOVE_FEATURE, tParameters);
+      return true;
+  end
+
+  print("ERROR: Cannot remove feature at current location");
+  return false;
+end
+
+function AppointNewGovernor(params)
+  local tParameters = {}
+  tParameters[PlayerOperations.PARAM_GOVERNOR_TYPE] = params.GovernorType
+  return UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.APPOINT_GOVERNOR, tParameters)
+end
+
+function AssignGovernorPromotion(params)
+  local tParameters = {}
+  tParameters[PlayerOperations.PARAM_GOVERNOR_TYPE] = params.GovernorType
+  tParameters[PlayerOperations.PARAM_GOVERNANCE_TYPE] = params.PromotionHash
+  return UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.ASSIGN_GOVERNOR_PROMOTION, tParameters)
+end
+
+function AssignGovernorToCity(params)
+  local tParameters = {}
+  tParameters[PlayerOperations.PARAM_GOVERNOR_TYPE] = params.GovernorType
+  tParameters[PlayerOperations.PARAM_PLAYER_ONE] = params.CityOwner
+  tParameters[PlayerOperations.PARAM_CITY_DEST] = params.CityID
+  return UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.ASSIGN_GOVERNOR, tParameters)
+end
+
 
 -- In civactionsRL.lua, update the EstablishTradeRoute function:
 

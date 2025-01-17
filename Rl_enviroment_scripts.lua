@@ -41,6 +41,21 @@ local m_localPlayerID = -1;
 local m_currentState = nil;
 local m_lastReward = 0;
 
+-- Victory types as defined in the game
+local VICTORY_TYPES = {
+    "VICTORY_DEFAULT",
+    "VICTORY_SCORE", 
+    "VICTORY_TECHNOLOGY",
+    "VICTORY_CULTURE",
+    "VICTORY_CONQUEST",
+    "VICTORY_RELIGIOUS"
+};
+
+-- Configuration variables
+local TURN_LIMIT = 400;
+local AUTO_RESTART_ENABLED = true;
+
+
 -- Helper function to send notifications
 function SendRLNotification(message)
     if m_localPlayerID ~= -1 then
@@ -130,6 +145,8 @@ function InitializeRL()
     -- Register turn events
     Events.LocalPlayerTurnBegin.Add(RLv1.OnTurnBegin);
     Events.LocalPlayerTurnEnd.Add(RLv1.OnTurnEnd);
+    Events.TeamVictory.Add(OnTeamVictory);
+    Events.PlayerDefeat.Add(OnPlayerDefeat);
 
     m_isInitialized = true;
     SendRLNotification("Agent initialized successfully!");
@@ -152,6 +169,7 @@ function RLv1.OnTurnBegin()
     end
     
     m_currentGameTurn = Game.GetCurrentGameTurn();
+
     SendRLNotification("Turn " .. tostring(m_currentGameTurn) .. " beginning");
     print("RL Turn " .. tostring(m_currentGameTurn) .. " Begin");
 
@@ -201,10 +219,62 @@ function RLv1.OnTurnBegin()
     print("=== TURN BEGIN FUNCTION END ===")
 end
 
-function RLv1.OnTurnEnd()
-end
+
 
 -- -- Register our load handler
 Events.LoadGameViewStateDone.Add(OnLoadGameViewStateDone);
 
+function RLv1.OnTurnEnd()
+    local currentTurn = Game.GetCurrentGameTurn();
+    if currentTurn >= TURN_LIMIT and AUTO_RESTART_ENABLED then
+        print(string.format("Turn limit %d reached at turn %d. Initiating restart...", 
+            TURN_LIMIT, currentTurn));
+        AutoRestartGame();
+    end
+end
 
+
+-- Get player's team ID
+function GetPlayerTeamID(playerID)
+    if playerID ~= nil and playerID >= 0 then
+        local pPlayer = Players[playerID];
+        if pPlayer ~= nil then
+            return pPlayer:GetTeam();
+        end
+    end
+    return -1;
+end
+
+-- Enhanced auto restart with confirmation
+function AutoRestartGame()
+    if not AUTO_RESTART_ENABLED then return end;
+    
+    print("Initiating game restart...");
+    Network.RestartGame();
+end
+
+-- Handle team victory events
+function OnTeamVictory(team, victory, eventID)
+    local localPlayer = Game.GetLocalPlayer();
+    if (localPlayer and localPlayer >= 0) then
+        local localTeamID = GetPlayerTeamID(localPlayer);
+        print(string.format("Team %d achieved victory type %s! Local team: %d", 
+            team, victory, localTeamID));
+        
+        -- Restart regardless of which team won
+        AutoRestartGame();
+    end
+end
+
+-- Handle player defeat events
+function OnPlayerDefeat(player, defeat, eventID)
+    local localPlayer = Game.GetLocalPlayer();
+    if (localPlayer and localPlayer >= 0) then
+        -- Was it the local player that was defeated?
+        if (localPlayer == player) then
+            print(string.format("Local player (ID: %d) was defeated! Reason: %s", 
+                player, defeat));
+            AutoRestartGame();
+        end
+    end
+end

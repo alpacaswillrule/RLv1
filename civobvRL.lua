@@ -686,9 +686,10 @@ function GetPossibleActions()
     EvangelizeBelief = {},
     PurchaseWithGold = {},
     PurchaseWithFaith = {},
-    ActivateGreatPerson = {}
-  };
-  
+    ActivateGreatPerson = {},
+    AssignGovernorTitle = {},
+    AssignGovernorToCity = {}
+  };  
 
 -- Add this section where we check city production options:
 --print("GetPossibleActions: Checking purchase options...")
@@ -1055,7 +1056,6 @@ end
 -- Getting possible actions
     local envoyTargets = GetPossibleEnvoyTargets() 
     if envoyTargets and #envoyTargets > 0 then
-    possibleActions.SendEnvoy = {}
     for _, target in ipairs(envoyTargets) do
         table.insert(possibleActions.SendEnvoy, target.PlayerID)
     end
@@ -1305,7 +1305,8 @@ function GetAllUnitActions(player)
         FormCorps = {},
         FormArmy = {},
         Wake = {},
-        Repair = {}
+        Repair = {},
+        RemoveFeature = {},
     }
   
     print("=== BEGIN UNIT DISCOVERY ===")
@@ -1446,25 +1447,57 @@ function GetAllUnitActions(player)
             })
         end
   
-        -- Check for BUILD_IMPROVEMENT
-        if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.BUILD_IMPROVEMENT, nil) then
-            local validImprovements = {}
-            for improvement in GameInfo.Improvements() do
-                local tParameters = {
-                    [UnitOperationTypes.PARAM_IMPROVEMENT_TYPE] = improvement.Hash
-                }
-                if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.BUILD_IMPROVEMENT, nil, tParameters) then
-                    table.insert(validImprovements, improvement.Hash)
-                end
-            end
-            
-            if #validImprovements > 0 then
-                table.insert(unitActions.BuildImprovement, {
-                    UnitID = unitID,
-                    ValidImprovements = validImprovements
-                })
+    -- Check for BUILD_IMPROVEMENT
+        local validImprovements = {}
+        for improvement in GameInfo.Improvements() do
+            local tParameters = {
+                [UnitOperationTypes.PARAM_IMPROVEMENT_TYPE] = improvement.Hash,
+                [UnitOperationTypes.PARAM_X] = pUnit:GetX(),
+                [UnitOperationTypes.PARAM_Y] = pUnit:GetY()
+            }
+            if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.BUILD_IMPROVEMENT, nil, tParameters) then
+                table.insert(validImprovements, improvement.Hash)
             end
         end
+        
+        if #validImprovements > 0 then
+            table.insert(unitActions.BuildImprovement, {
+                UnitID = unitID,
+                ValidImprovements = validImprovements
+            })
+        end
+        -- Check for REMOVE_FEATURE
+        if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.REMOVE_FEATURE, nil) then
+            local validFeatureRemovals = {};
+            local plot = Map.GetPlot(pUnit:GetX(), pUnit:GetY());
+            
+            -- Check if the current plot has a removable feature
+            if plot and plot:GetFeatureType() >= 0 then
+                local featureInfo = GameInfo.Features[plot:GetFeatureType()];
+                -- Check if feature can be removed
+                if featureInfo and featureInfo.Removable then
+                    local tParameters = {};
+                    tParameters[UnitOperationTypes.PARAM_X] = pUnit:GetX();
+                    tParameters[UnitOperationTypes.PARAM_Y] = pUnit:GetY();
+                    
+                    if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.REMOVE_FEATURE, nil, tParameters) then
+                        table.insert(validFeatureRemovals, {
+                            PlotX = pUnit:GetX(),
+                            PlotY = pUnit:GetY(),
+                            FeatureType = featureInfo.FeatureType,
+                            FeatureHash = featureInfo.Hash
+                        });
+                    end
+                end
+            end
+    
+    if #validFeatureRemovals > 0 then
+        table.insert(unitActions.RemoveFeature, {
+            UnitID = pUnit:GetID(),
+            ValidRemovals = validFeatureRemovals
+        });
+    end
+end
   
         -- Check for REPAIR
         if UnitManager.CanStartOperation(pUnit, UnitOperationTypes.REPAIR, nil) then
@@ -1583,7 +1616,7 @@ function GetAvailablePromotions(unit)
     return #promotions > 0 and promotions or nil
 end
 
-function UnitRangeAttack(unit, plotIndex)
+function CanUnitRangeAttack(unit, plotIndex)
     if not unit or not plotIndex then return false end
     return UnitManager.CanStartCommand(unit, UnitCommandTypes.RANGE_ATTACK, nil, {
         [UnitOperationTypes.PARAM_X] = Map.GetPlotByIndex(plotIndex):GetX(),
@@ -1591,7 +1624,7 @@ function UnitRangeAttack(unit, plotIndex)
     })
 end
 
-function UnitAirAttack(unit, plotIndex)
+function CanUnitAirAttack(unit, plotIndex)
     if not unit or not plotIndex then return false end
     return UnitManager.CanStartCommand(unit, UnitCommandTypes.AIR_ATTACK, nil, {
         [UnitOperationTypes.PARAM_X] = Map.GetPlotByIndex(plotIndex):GetX(),
@@ -1607,7 +1640,7 @@ function UnitRebase(unit, plotIndex)
     })
 end
 
-function UnitWMDStrike(unit, plotIndex, wmdType)
+function CanUnitWMDStrike(unit, plotIndex, wmdType)
     if not unit or not plotIndex or not wmdType then return false end
     return UnitManager.CanStartCommand(unit, UnitCommandTypes.WMD_STRIKE, nil, {
         [UnitOperationTypes.PARAM_WMD_TYPE] = wmdType,
@@ -1702,6 +1735,120 @@ if playerTrade:GetNumOutgoingRoutes() < playerTrade:GetOutgoingRouteCapacity() t
                                   b.Yields.Science + b.Yields.Culture + b.Yields.Faith
                 return totalYieldA > totalYieldB
             end)
+        end
+    end
+end
+
+-- Then add this section where we check governor actions:
+print("GetPossibleActions: Checking governor actions...")
+local playerGovernors = player:GetGovernors()
+-- Get number of available/unspent titles
+local titlesAvailable = playerGovernors:GetGovernorPoints() - playerGovernors:GetGovernorPointsSpent()
+
+if titlesAvailable > 0 then
+    local hasGovernors, governorList = playerGovernors:GetGovernorList()
+    
+    -- Check each governor
+    if hasGovernors then
+        for _, governor in ipairs(governorList) do
+            local governorDef = GameInfo.Governors[governor:GetType()]
+            
+            -- Check available promotions for this governor
+            for promo in GameInfo.GovernorPromotionSets() do
+                if promo.GovernorType == governorDef.GovernorType then
+                    local promoInfo = GameInfo.GovernorPromotions[promo.GovernorPromotion]
+                    -- Check if promotion can be assigned
+                    if not governor:HasPromotion(promoInfo.Index) then
+                        table.insert(possibleActions.AssignGovernorTitle, {
+                            GovernorType = governorDef.Index,
+                            GovernorName = Locale.Lookup(governorDef.Name),
+                            PromotionHash = promoInfo.Hash,
+                            PromotionType = promoInfo.GovernorPromotionType,
+                            PromotionName = Locale.Lookup(promoInfo.Name),
+                            Description = Locale.Lookup(promoInfo.Description)
+                        })
+                    end
+                end
+            end
+        end
+    end
+
+    -- Check for unassigned governors that could be initially appointed
+    for governor in GameInfo.Governors() do
+        if playerGovernors:CanEverAppointGovernor(governor.Index) then
+            -- Check if governor is already appointed
+            local isAppointed = false
+            if hasGovernors then
+                for _, existingGovernor in ipairs(governorList) do
+                    if existingGovernor:GetType() == governor.Index then
+                        isAppointed = true
+                        break
+                    end
+                end
+            end
+            
+            -- If not appointed and can be appointed, add to possibilities
+            if not isAppointed and playerGovernors:CanAppointGovernor(governor.Index) then
+                table.insert(possibleActions.AssignGovernorTitle, {
+                    GovernorType = governor.Index,
+                    GovernorName = Locale.Lookup(governor.Name),
+                    IsInitialAppointment = true
+                })
+            end
+        end
+    end
+end
+
+-- Check for possible city assignments (separate from title assignments)
+local hasGovernors, governorList = playerGovernors:GetGovernorList()
+if hasGovernors then
+    for _, city in player:GetCities():Members() do
+        local assignedGovernor = city:GetAssignedGovernor()
+        local cityID = city:GetID()
+        local cityOwner = city:GetOwner()
+        
+        for _, governor in ipairs(governorList) do
+            local governorDef = GameInfo.Governors[governor:GetType()]
+            
+            -- Only suggest reassignment if:
+            -- 1. City has no governor OR
+            -- 2. City has a different governor AND governor isn't assigned elsewhere
+            local canAssign = false
+            
+            if not assignedGovernor then
+                -- City has no governor
+                canAssign = true
+            else
+                -- Check if this governor is already assigned somewhere
+                local isAssignedElsewhere = false
+                for _, otherCity in player:GetCities():Members() do
+                    local otherCityGovernor = otherCity:GetAssignedGovernor()
+                    if otherCityGovernor and 
+                       otherCityGovernor:GetType() == governor:GetType() and
+                       otherCity:GetID() ~= cityID then
+                        isAssignedElsewhere = true
+                        break
+                    end
+                end
+                
+                if not isAssignedElsewhere and 
+                   assignedGovernor:GetType() ~= governor:GetType() then
+                    canAssign = true
+                end
+            end
+
+            if canAssign then
+                table.insert(possibleActions.AssignGovernorToCity, {
+                    GovernorType = governorDef.Index,
+                    GovernorName = Locale.Lookup(governorDef.Name),
+                    CityID = cityID,
+                    CityName = city:GetName(),
+                    CityOwner = cityOwner,
+                    X = city:GetX(),
+                    Y = city:GetY(),
+                    CurrentlyAssigned = (assignedGovernor ~= nil)
+                })
+            end
         end
     end
 end
