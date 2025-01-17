@@ -37,7 +37,7 @@ function RLv1.ExecuteAction(actionType, actionParams)
     elseif actionType == "EncampmentRangedAttack" then
         EncampmentRangedAttack(actionParams[1]);
     elseif actionType == "SendEnvoy" then
-        SendEnvoy(actionParams[1]);
+        SendEnvoy(actionParams);
     elseif actionType == "MakePeace" then
         MakePeaceWithCityState(actionParams[1]);
     elseif actionType == "LevyMilitary" then
@@ -85,6 +85,10 @@ function RLv1.ExecuteAction(actionType, actionParams)
       EvangelizeBelief(actionParams)
     elseif actionType == "FoundReligion" then
       FoundReligion(actionParams)
+    elseif actionType == "EstablishTradeRoute" then
+      return EstablishTradeRoute(actionParams);
+    elseif actionType == "SendEnvoy" then
+      return SendEnvoy(actionParams);
     elseif actionType == "HarvestResource" then
       HarvestResource(actionParams.UnitID)
     elseif actionType == "Fortify" then
@@ -139,6 +143,49 @@ function RLv1.ExecuteAction(actionType, actionParams)
 
     return true;
 end
+
+-- In civactionsRL.lua, update the EstablishTradeRoute function:
+
+function EstablishTradeRoute(actionParams)
+  print("Establishing trade route with parameters:")
+  print("- Trader Unit ID: " .. tostring(actionParams.TraderUnitID))
+  print("- Destination City: " .. tostring(actionParams.DestinationCityName))
+  
+  -- Get the trader unit
+  local playerID = Game.GetLocalPlayer()
+  local player = Players[playerID]
+  local unit = player:GetUnits():FindID(actionParams.TraderUnitID)
+  
+  if not unit then
+      print("ERROR: Could not find trader unit")
+      return false
+  end
+  
+  -- Get destination city 
+  local destCity = Cities.GetCity(actionParams.DestinationPlayerID, actionParams.DestinationCityID)
+  if not destCity then
+      print("ERROR: Could not find destination city")
+      return false
+  end
+
+  -- Set up parameters for the trade route
+  local tParameters = {}
+  tParameters[UnitOperationTypes.PARAM_X0] = destCity:GetX()
+  tParameters[UnitOperationTypes.PARAM_Y0] = destCity:GetY()
+  tParameters[UnitOperationTypes.PARAM_X1] = unit:GetX()
+  tParameters[UnitOperationTypes.PARAM_Y1] = unit:GetY()
+
+  -- Request the trade route operation
+  if UnitManager.CanStartOperation(unit, UnitOperationTypes.MAKE_TRADE_ROUTE, nil, tParameters) then
+      UnitManager.RequestOperation(unit, UnitOperationTypes.MAKE_TRADE_ROUTE, tParameters)
+      print("Trade route establishment requested successfully")
+      return true
+  end
+
+  print("ERROR: Cannot establish trade route")
+  return false
+end
+
 
 function ActivateGreatPerson(actionParams)
   local unit = Players[Game.GetLocalPlayer()]:GetUnits():FindID(actionParams.UnitID)
@@ -514,27 +561,16 @@ end
 
 -- Sends an envoy to a city-state.
 -- @param cityStateName The name of the city-state (e.g., "CITY_STATE_ZANZIBAR").
-function SendEnvoy(cityStateName)
-    local playerID = Game.GetLocalPlayer();
-    local player = Players[playerID];
-    local influence = player:GetInfluence();
-    
-    if not influence:CanGiveInfluence() then
-        print("Player cannot give influence at this time.");
-        return false;
-    end
+function SendEnvoy(targetCityStateID)
+  print("Sending envoy to city-state with ID: " .. targetCityStateID)
+  local localPlayerID = Game.GetLocalPlayer()
+  
+  -- Set up parameters
+  local parameters = {}
+  parameters[PlayerOperations.PARAM_PLAYER_ONE] = targetCityStateID
 
-    local cityStateID = GameInfo.MinorCivs[cityStateName].Index;
-
-    if not influence:CanGiveTokensToPlayer(cityStateID) then
-        print("Cannot send envoy to " .. cityStateName);
-        return false;
-    end
-
-    local parameters = {};
-    parameters[PlayerOperations.PARAM_PLAYER_ONE] = cityStateID;
-    UI.RequestPlayerOperation(playerID, PlayerOperations.GIVE_INFLUENCE_TOKEN, parameters);
-    return true;
+  -- Request the operation
+  UI.RequestPlayerOperation(localPlayerID, PlayerOperations.GIVE_INFLUENCE_TOKEN, parameters)
 end
 
 -- Makes peace with a city-state.
@@ -977,45 +1013,44 @@ end
 -- Establishes a trade route between two cities.
 -- @param originCityID The ID of the origin city.
 -- @param destinationCityID The ID of the destination city.
-function EstablishTradeRoute(originCityID, destinationCityID)
-  local playerID = Game.GetLocalPlayer();
-  local player = Players[playerID];
-    local originCity = player:GetCities():FindID(originCityID);
-    local destinationCity = player:GetCities():FindID(destinationCityID);
-    if not originCity then
-        print("Origin city with ID " .. originCityID .. " not found.");
-        return false;
-    end
-    if not destinationCity then
-        print("Destination city with ID " .. destinationCityID .. " not found.");
-        return false;
-    end
-    local traderUnit = GetTraderInCity(originCity)
-    if not traderUnit then
-        print("No available trader in the origin city.");
-        return false
-    end
-    
-    UI.SelectUnit(traderUnit)
-    
-    local params = {}
-    params[UnitOperationTypes.PARAM_X0] = destinationCity:GetX()
-    params[UnitOperationTypes.PARAM_Y0] = destinationCity:GetY()
-    params[UnitOperationTypes.PARAM_X1] = traderUnit:GetX() 
-    params[UnitOperationTypes.PARAM_Y1] = traderUnit:GetY()
-    
-    return UnitManager.RequestOperation(traderUnit, UnitOperationTypes.MAKE_TRADE_ROUTE, params)
-end
+function EstablishTradeRoute(actionParams)
+  print("Establishing trade route with parameters:")
+  print("- Trader Unit ID: " .. tostring(actionParams.TraderUnitID))
+  print("- Destination City: " .. tostring(actionParams.DestinationCityName))
+  
+  -- Get the trader unit directly using the ID
+  local player = Players[Game.GetLocalPlayer()]
+  local unit = player:GetUnits():FindID(actionParams.TraderUnitID)
+  
+  if not unit then
+      print("ERROR: Could not find trader unit")
+      return false
+  end
+  
+  -- Get destination city using the player's city list
+  local destPlayer = Players[actionParams.DestinationPlayerID]
+  local destCity = destPlayer:GetCities():FindID(actionParams.DestinationCityID)
+  if not destCity then
+      print("ERROR: Could not find destination city")
+      return false
+  end
 
--- Helper function to find trader in city
-function GetTraderInCity(city)
-    local units = city:GetUnits()
-    for i, unit in units:Members() do
-        if unit:GetUnitType() == GameInfo.Units["UNIT_TRADER"].Index then
-            return unit
-        end
-    end
-    return nil
+  -- Set up parameters for the trade route
+  local tParameters = {}
+  tParameters[UnitOperationTypes.PARAM_X0] = destCity:GetX()
+  tParameters[UnitOperationTypes.PARAM_Y0] = destCity:GetY()
+  tParameters[UnitOperationTypes.PARAM_X1] = unit:GetX()
+  tParameters[UnitOperationTypes.PARAM_Y1] = unit:GetY()
+
+  -- Request the trade route operation
+  if UnitManager.CanStartOperation(unit, UnitOperationTypes.MAKE_TRADE_ROUTE, nil, tParameters) then
+      UnitManager.RequestOperation(unit, UnitOperationTypes.MAKE_TRADE_ROUTE, tParameters)
+      print("Trade route establishment requested successfully")
+      return true
+  end
+
+  print("ERROR: Cannot establish trade route")
+  return false
 end
 
 --------------------------------------------------

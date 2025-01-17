@@ -61,31 +61,84 @@ end
 -- Function to select which action to take based on priorities
 function SelectPrioritizedAction(possibleActions)
     -- Check for highest priority actions first
-    
-    -- Priority 1: Found Religion if possible
-    if possibleActions.FoundReligion and #possibleActions.FoundReligion > 0 then
-        print("Found religion action available - selecting it")
-        return "FoundReligion", possibleActions.FoundReligion[1]
-    end
-
-    -- Priority 2: District Construction
-    if possibleActions.CityProduction then
-        for _, production in ipairs(possibleActions.CityProduction) do
-            if production.ProductionType == "Districts" then
-                print("District construction available - selecting it")
-                -- Pick a random valid plot from the ValidPlots list
-                local plotIndex = math.random(#production.ValidPlots)
-                local plot = production.ValidPlots[plotIndex]
-                return "CityProduction", {
-                    CityID = production.CityID,
-                    ProductionType = "Districts",
-                    ProductionHash = production.ProductionHash,
-                    PlotX = plot.X or plot.x,  -- Handle different possible key names
-                    PlotY = plot.Y or plot.y
-                }
+        -- Priority 1: Establish highest-yield trade route if available
+        if possibleActions.EstablishTradeRoute and #possibleActions.EstablishTradeRoute > 0 then
+            -- Find trade route with highest total yield
+            local bestRoute = possibleActions.EstablishTradeRoute[1]
+            local bestYieldValue = 0
+            
+            -- Calculate initial best yield
+            bestYieldValue = bestRoute.Yields.Food + bestRoute.Yields.Production + 
+                            bestRoute.Yields.Gold + bestRoute.Yields.Science + 
+                            bestRoute.Yields.Culture + bestRoute.Yields.Faith
+            
+            -- Compare with other routes
+            for _, route in ipairs(possibleActions.EstablishTradeRoute) do
+                local totalYield = route.Yields.Food + route.Yields.Production + 
+                                 route.Yields.Gold + route.Yields.Science + 
+                                 route.Yields.Culture + route.Yields.Faith
+                
+                -- Prefer routes with trading posts (20% yield bonus)
+                if route.HasTradingPost then
+                    totalYield = totalYield * 1.2
+                end
+                
+                
+                if totalYield > bestYieldValue then
+                    bestYieldValue = totalYield
+                    bestRoute = route
+                end
             end
+            
+            print("Found optimal trade route to " .. bestRoute.DestinationCityName .. 
+                  " with total yield value: " .. bestYieldValue)
+            return "EstablishTradeRoute", bestRoute
         end
-    end
+
+        -- Priority 2: Send Envoys to City States
+        if possibleActions.SendEnvoy and #possibleActions.SendEnvoy > 0 then
+            -- First look for city states where we're close to becoming suzerain
+            for _, cityStateID in ipairs(possibleActions.SendEnvoy) do
+                local cityState = Players[cityStateID]
+                local envoyCount = cityState:GetInfluence():GetTokensReceived(Game.GetLocalPlayer())
+                -- If we're one envoy away from becoming suzerain (6 envoys needed)
+                if envoyCount == 5 then
+                    print("Prioritizing envoy to city-state near suzerain status")
+                    return "SendEnvoy", cityStateID
+                end
+            end
+            
+            -- Otherwise, just pick a random city state to send envoy to
+            local randomCityState = possibleActions.SendEnvoy[math.random(#possibleActions.SendEnvoy)]
+            print("Sending envoy to random city-state")
+            return "SendEnvoy", randomCityState
+        end
+
+
+    -- Priority 1: Found Religion if possible
+    -- if possibleActions.FoundReligion and #possibleActions.FoundReligion > 0 then
+    --     print("Found religion action available - selecting it")
+    --     return "FoundReligion", possibleActions.FoundReligion[1]
+    -- end
+
+    -- -- Priority 2: District Construction
+    -- if possibleActions.CityProduction then
+    --     for _, production in ipairs(possibleActions.CityProduction) do
+    --         if production.ProductionType == "Districts" then
+    --             print("District construction available - selecting it")
+    --             -- Pick a random valid plot from the ValidPlots list
+    --             local plotIndex = math.random(#production.ValidPlots)
+    --             local plot = production.ValidPlots[plotIndex]
+    --             return "CityProduction", {
+    --                 CityID = production.CityID,
+    --                 ProductionType = "Districts",
+    --                 ProductionHash = production.ProductionHash,
+    --                 PlotX = plot.X or plot.x,  -- Handle different possible key names
+    --                 PlotY = plot.Y or plot.y
+    --             }
+    --         end
+    --     end
+    -- end
 
     -- Priority 3: Activate Great People
     if possibleActions.ActivateGreatPerson and #possibleActions.ActivateGreatPerson > 0 then
@@ -98,41 +151,41 @@ function SelectPrioritizedAction(possibleActions)
         return "ActivateGreatPerson", greatPerson
     end
 
-    -- Priority 4: Found Cities
-    if possibleActions.FoundCity and #possibleActions.FoundCity > 0 then
-        return "FoundCity", possibleActions.FoundCity[1]
-    end
+    -- -- Priority 4: Found Cities
+    -- if possibleActions.FoundCity and #possibleActions.FoundCity > 0 then
+    --     return "FoundCity", possibleActions.FoundCity[1]
+    -- end
 
-    -- Priority 5: Building Construction
-    if possibleActions.CityProduction then
-        local buildingProductions = {}
-        for _, production in ipairs(possibleActions.CityProduction) do
-            if production.ProductionType == "Buildings" then
-                table.insert(buildingProductions, production)
-            end
-        end
-        if #buildingProductions > 0 then
-            return "CityProduction", buildingProductions[math.random(#buildingProductions)]
-        end
-    end
+    -- -- Priority 5: Building Construction
+    -- if possibleActions.CityProduction then
+    --     local buildingProductions = {}
+    --     for _, production in ipairs(possibleActions.CityProduction) do
+    --         if production.ProductionType == "Buildings" then
+    --             table.insert(buildingProductions, production)
+    --         end
+    --     end
+    --     if #buildingProductions > 0 then
+    --         return "CityProduction", buildingProductions[math.random(#buildingProductions)]
+    --     end
+    -- end
 
-    -- Priority 6: Unit Production
-    if possibleActions.CityProduction then
-        local unitProductions = {}
-        for _, production in ipairs(possibleActions.CityProduction) do
-            if production.ProductionType == "Units" then
-                table.insert(unitProductions, production)
-            end
-        end
-        if #unitProductions > 0 then
-            return "CityProduction", unitProductions[math.random(#unitProductions)]
-        end
-    end
+    -- -- Priority 6: Unit Production
+    -- if possibleActions.CityProduction then
+    --     local unitProductions = {}
+    --     for _, production in ipairs(possibleActions.CityProduction) do
+    --         if production.ProductionType == "Units" then
+    --             table.insert(unitProductions, production)
+    --         end
+    --     end
+    --     if #unitProductions > 0 then
+    --         return "CityProduction", unitProductions[math.random(#unitProductions)]
+    --     end
+    -- end
 
-    -- Priority 7: Move Units if available
-    if possibleActions.MoveUnit and #possibleActions.MoveUnit > 0 then
-        return "MoveUnit", possibleActions.MoveUnit[math.random(#possibleActions.MoveUnit)]
-    end
+    -- -- Priority 7: Move Units if available
+    -- if possibleActions.MoveUnit and #possibleActions.MoveUnit > 0 then
+    --     return "MoveUnit", possibleActions.MoveUnit[math.random(#possibleActions.MoveUnit)]
+    -- end
 
     -- Priority 8: Any remaining action (random selection)
     local availableActions = {}

@@ -13,10 +13,44 @@ include( "SupportFunctions" );
 include("civactionsRL"); -- or whatever your actions file is named
 include("DiplomacyStatementSupport")
 include("CitySupport")
+include("TradeSupport")
 --------------------------------------------------
 -- OBSERVATION FUNCTIONS
 --------------------------------------------------
 
+function GetPossibleEnvoyTargets()
+    local possibleTargets = {}
+    
+    -- Get local player
+    local localPlayerID = Game.GetLocalPlayer()
+    local localPlayer = Players[localPlayerID]
+    
+    -- Get influence info and check if we have envoys to give
+    local playerInfluence = localPlayer:GetInfluence()
+    if not playerInfluence or not playerInfluence:CanGiveInfluence() then
+      return possibleTargets
+    end
+    
+    local envoyTokens = playerInfluence:GetTokensToGive()
+    if envoyTokens <= 0 then
+      return possibleTargets
+    end
+  
+    -- Check each minor civ/city state
+    for _, pPlayer in ipairs(PlayerManager.GetAliveMinors()) do
+      local cityStateID = pPlayer:GetID()
+      
+      -- Check if we can give envoys to this city state
+      if playerInfluence:CanGiveTokensToPlayer(cityStateID) then
+        table.insert(possibleTargets, {
+          PlayerID = cityStateID,
+          Name = PlayerConfigurations[cityStateID]:GetCivilizationShortDescription()
+        })
+      end
+    end
+  
+    return possibleTargets
+  end
 
 -- Helper function to get diplomatic status with other players
 function GetDiplomaticStatuses(player)
@@ -110,8 +144,42 @@ function GetPlayerData(playerID)
     CurrentPolicies = {},
     GreatPeoplePoints = {},
     GreatPeoplePointsPerTurn = {},
+    TradeRoutes = {
+        Active = 0,    -- Number of active trade routes
+        Capacity = 0,  -- Maximum number of trade routes possible
+        IdleTraders = 0  -- Number of idle trade units available
+    }
   };
   
+  local playerTrade = player:GetTrade();
+  if playerTrade then
+      data.TradeRoutes.Active = playerTrade:GetNumOutgoingRoutes();
+      data.TradeRoutes.Capacity = playerTrade:GetOutgoingRouteCapacity();
+      
+      -- Count idle trade units
+      local idleTraders = 0;
+      for i, unit in player:GetUnits():Members() do
+          local unitInfo = GameInfo.Units[unit:GetUnitType()];
+          if unitInfo.MakeTradeRoute then
+              -- Check if unit has active route
+              local hasRoute = false;
+              for _, city in player:GetCities():Members() do
+                  local routes = city:GetTrade():GetOutgoingRoutes();
+                  for _, route in ipairs(routes) do
+                      if route.TraderUnitID == unit:GetID() then
+                          hasRoute = true;
+                          break;
+                      end
+                  end
+                  if hasRoute then break end
+              end
+              if not hasRoute then
+                  idleTraders = idleTraders + 1;
+              end
+          end
+      end
+      data.TradeRoutes.IdleTraders = idleTraders;
+  end
 
   --print("GetPlayerData: Gathering city data...")
   -- Add city data
@@ -984,21 +1052,14 @@ end
   --print("Finished checking districts")
 
   --print("GetPossibleActions: Checking envoy actions...")
-  -- SEND ENVOY
-  local influence = player:GetInfluence()
-  if influence:CanGiveInfluence() then
-      -- Get all players and filter for minor civs (city states)
-      for _, cityState in ipairs(PlayerManager.GetAlive()) do
-          local cityStatePlayer = Players[cityState]
-          -- Check if this is a city state
-          if cityStatePlayer and cityStatePlayer:IsCityState() then
-              if influence:CanGiveTokensToPlayer(cityState) then
-                  --print("GetPossibleActions: Adding send envoy action for city-state ID: " .. tostring(cityState))
-                  table.insert(possibleActions.SendEnvoy, cityState)
-              end
-          end
-      end
-  end
+-- Getting possible actions
+    local envoyTargets = GetPossibleEnvoyTargets() 
+    if envoyTargets and #envoyTargets > 0 then
+    possibleActions.SendEnvoy = {}
+    for _, target in ipairs(envoyTargets) do
+        table.insert(possibleActions.SendEnvoy, target.PlayerID)
+    end
+    end
 
   --print("GetPossibleActions: Checking make peace actions...")
   -- MAKE PEACE WITH CITY-STATE
@@ -1060,25 +1121,40 @@ for i, unit in player:GetUnits():Members() do
             -- Get valid activation plots
             local activationPlots = unitGreatPerson:GetActivationHighlightPlots()
             
-            if #activationPlots > 0 then
-                -- Add as possible action with plot options
+            -- Check if unit's current plot is in activation plots
+            local unitPlotIndex = Map.GetPlot(unit:GetX(), unit:GetY()):GetIndex()
+            local canActivateHere = false
+            
+            for _, plotIndex in ipairs(activationPlots) do
+                if plotIndex == unitPlotIndex then
+                    canActivateHere = true
+                    break
+                end
+            end
+            
+            if canActivateHere then
+                -- Unit is on valid plot, add as possible action
                 table.insert(possibleActions.ActivateGreatPerson, {
                     UnitID = unit:GetID(),
                     IndividualID = unitGreatPerson:GetIndividual(),
                     IndividualType = greatPersonInfo.GreatPersonIndividualType,
-                    ValidPlots = activationPlots,
+                    ValidPlots = {unitPlotIndex}, -- Only include current plot
                     Name = Locale.Lookup(greatPersonInfo.Name)
                 })
             end
         else
-            -- Great person can activate without plot selection
-            table.insert(possibleActions.ActivateGreatPerson, {
-                UnitID = unit:GetID(),
-                IndividualID = unitGreatPerson:GetIndividual(),
-                IndividualType = greatPersonInfo.GreatPersonIndividualType,
-                ValidPlots = nil,
-                Name = Locale.Lookup(greatPersonInfo.Name)
-            })
+            -- For great people that don't require plot selection, 
+            -- still check if they can activate where they are
+            local pUnit = Players[player:GetID()]:GetUnits():FindID(unit:GetID())
+            if pUnit and UnitManager.CanStartCommand(pUnit, UnitCommandTypes.ACTIVATE_GREAT_PERSON, true) then
+                table.insert(possibleActions.ActivateGreatPerson, {
+                    UnitID = unit:GetID(),
+                    IndividualID = unitGreatPerson:GetIndividual(),
+                    IndividualType = greatPersonInfo.GreatPersonIndividualType,
+                    ValidPlots = nil,
+                    Name = Locale.Lookup(greatPersonInfo.Name)
+                })
+            end
         end
     end
 end
@@ -1547,6 +1623,87 @@ function QueueUnitPath(unit, plotIndex)
         [UnitOperationTypes.PARAM_X] = plot:GetX(),
         [UnitOperationTypes.PARAM_Y] = plot:GetY()
     })
+end
+
+function CheckTradeRoute(unit:table, city:table)
+	if city and unit then
+		local operationParams = {};
+		operationParams[UnitOperationTypes.PARAM_X0] = city:GetX();
+		operationParams[UnitOperationTypes.PARAM_Y0] = city:GetY();
+		operationParams[UnitOperationTypes.PARAM_X1] = unit:GetX();
+		operationParams[UnitOperationTypes.PARAM_Y1] = unit:GetY();
+		if (UnitManager.CanStartOperation(unit, UnitOperationTypes.MAKE_TRADE_ROUTE, nil, operationParams)) then
+			return true;
+		end
+	end
+
+	return false;
+end
+
+
+local player = Players[Game.GetLocalPlayer()]
+local playerTrade = player:GetTrade()
+
+-- Only check for trade routes if we have idle traders and available capacity
+if playerTrade:GetNumOutgoingRoutes() < playerTrade:GetOutgoingRouteCapacity() then
+    local idleTraders = GetIdleTradeUnits(Game.GetLocalPlayer())
+    
+    if #idleTraders > 0 then
+        possibleActions.EstablishTradeRoute = {}
+        
+        -- For each idle trader, find all possible trade routes
+        for _, traderUnit in ipairs(idleTraders) do
+            -- Get origin city
+            local originCity = Cities.GetCityInPlot(traderUnit:GetX(), traderUnit:GetY())
+            if originCity then
+                -- Check all players for possible destination cities
+                for _, otherPlayer in ipairs(PlayerManager.GetAlive()) do
+                    local otherCities = otherPlayer:GetCities()
+                    for _, destCity in otherCities:Members() do
+                        -- Check if we can make a trade route
+                        if CheckTradeRoute(traderUnit, destCity) then
+                            -- Calculate yields for this route
+                            local kRouteInfo = GetYieldsForRoute(originCity, destCity)
+                            
+                            -- Format yields into a readable structure
+                            local yields = {
+                                Food = kRouteInfo.kYieldValues[YieldTypes.FOOD + 1] or 0,
+                                Production = kRouteInfo.kYieldValues[YieldTypes.PRODUCTION + 1] or 0,
+                                Gold = kRouteInfo.kYieldValues[YieldTypes.GOLD + 1] or 0,
+                                Science = kRouteInfo.kYieldValues[YieldTypes.SCIENCE + 1] or 0,
+                                Culture = kRouteInfo.kYieldValues[YieldTypes.CULTURE + 1] or 0,
+                                Faith = kRouteInfo.kYieldValues[YieldTypes.FAITH + 1] or 0
+                            }
+
+                            -- Add route to possible actions
+                            table.insert(possibleActions.EstablishTradeRoute, {
+                                TraderUnitID = traderUnit:GetID(),
+                                OriginCityID = originCity:GetID(),
+                                OriginCityName = originCity:GetName(),
+                                DestinationCityID = destCity:GetID(),
+                                DestinationCityName = destCity:GetName(),
+                                DestinationPlayerID = destCity:GetOwner(),
+                                Yields = yields,
+                                HasTradingPost = destCity:GetTrade():HasActiveTradingPost(Game.GetLocalPlayer()),
+                                Distance = Map.GetPlotDistance(originCity:GetX(), originCity:GetY(), destCity:GetX(), destCity:GetY()),
+                            })
+                        end
+                    end
+                end
+            end
+        end
+
+        -- Sort trade routes by total yield value (optional)
+        if #possibleActions.EstablishTradeRoute > 0 then
+            table.sort(possibleActions.EstablishTradeRoute, function(a, b)
+                local totalYieldA = a.Yields.Food + a.Yields.Production + a.Yields.Gold + 
+                                  a.Yields.Science + a.Yields.Culture + a.Yields.Faith
+                local totalYieldB = b.Yields.Food + b.Yields.Production + b.Yields.Gold + 
+                                  b.Yields.Science + b.Yields.Culture + b.Yields.Faith
+                return totalYieldA > totalYieldB
+            end)
+        end
+    end
 end
 
 
