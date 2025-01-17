@@ -138,9 +138,6 @@ end
 function RLv1.OnTurnBegin()
     print("=== TURN BEGIN FUNCTION START ===")
     print("\n=== GAMEINFO PLAYER OPERATIONS ===") 
-    for row in GameInfo.PlayerOperations() do
-        print(string.format("%-30s Description: %s", row.OperationType, row.Description))
-    end
 
     local gameState = GetGameState()
     PrintGameStateSummary(gameState)
