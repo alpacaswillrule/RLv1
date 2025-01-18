@@ -197,23 +197,51 @@ function GetPlayerData(playerID)
     table.insert(data.Units, GetUnitData(unit));
   end
 
-  -- Add researched techs
-  print("GetPlayerData: Gathering researched techs...")
-  local playerTechs = player:GetTechs()
-  for tech in GameInfo.Technologies() do
-    if playerTechs:HasTech(tech.Hash) then
-      table.insert(data.TechsResearched, tech.TechnologyType)
-    end
-  end
+-- In GetPlayerData, replace the current civics and techs sections with:
+local playerTechs = player:GetTechs()
+local playerCulture = player:GetCulture()
 
-  -- Add researched civics
-  print("GetPlayerData: Gathering researched civics...")
-  local playerCulture = player:GetCulture()
-  for civic in GameInfo.Civics() do
-    if playerCulture:HasCivic(civic.Hash) then
-      table.insert(data.CivicsResearched, civic.CivicType)
+-- Get complete tech data
+for tech in GameInfo.Technologies() do
+    if playerTechs:HasTech(tech.Index) then
+        table.insert(data.TechsResearched, {
+            TechType = tech.TechnologyType,
+            Name = Locale.Lookup(tech.Name),
+            IsBoosted = playerTechs:HasBoostBeenTriggered(tech.Index),
+            IsBoostable = playerTechs:CanTriggerBoost(tech.Index),
+            Cost = playerTechs:GetResearchCost(tech.Index),
+            Progress = playerTechs:GetResearchProgress(tech.Index) / playerTechs:GetResearchCost(tech.Index),
+            TurnsLeft = playerTechs:GetTurnsToResearch(tech.Index),
+            IsUnlocked = playerTechs:HasTech(tech.Index),
+        })
     end
-  end
+end
+
+-- Sort techs by completion turn
+table.sort(data.TechsResearched, function(a,b) 
+    return a.CompletedTurn < b.CompletedTurn 
+end)
+
+-- Get complete civic data
+for civic in GameInfo.Civics() do
+        table.insert(data.CivicsResearched, {
+            CivicType = civic.CivicType,
+            Name = Locale.Lookup(civic.Name),
+            IsBoosted = playerCulture:HasBoostBeenTriggered(civic.Index),
+            IsBoostable = playerCulture:CanTriggerBoost(civic.Index),
+            Cost = playerCulture:GetCultureCost(civic.Index),
+            Progress = playerCulture:GetCulturalProgress(civic.Index) / playerCulture:GetCultureCost(civic.Index),
+            TurnsLeft = playerCulture:GetTurnsToProgressCivic(civic.Index),
+            IsUnlocked = playerCulture:HasCivic(civic.Index),
+
+        })
+end
+
+-- Sort civics by completion turn
+table.sort(data.CivicsResearched, function(a,b) 
+    return a.CompletedTurn < b.CompletedTurn 
+end)
+
 
   -- Get current government
   print("GetPlayerData: Getting current government...")
@@ -605,17 +633,42 @@ function GetVisibleTileData(playerID)
     -- Print diplomatic statuses
     if data.DiplomaticStatuses then
         print("\n=== DIPLOMATIC STATUSES ===")
-        for civID, status in pairs(data.DiplomaticStatuses) do
-            print(string.format("With Civ %d: %s", civID, status))
+        for civID, statusTable in pairs(data.DiplomaticStatuses) do
+            -- Print each field in the status table
+            print(string.format("Diplomatic status with Civ %d:", civID))
+            for key, value in pairs(statusTable) do
+                print(string.format("  %s: %s", tostring(key), tostring(value)))
+            end
         end
     end
 
-    -- Print city state relationships
     if data.CityStates then
         print("\n=== CITY STATE RELATIONSHIPS ===")
-        for _, cityState in pairs(data.CityStates) do
-            if cityState.Type and cityState.Relationship then
-                print(string.format("%s: %s", cityState.Type, cityState.Relationship))
+        for _, cityState in ipairs(data.CityStates) do
+            print(string.format("\nCity State: %s (%s)", 
+                cityState.Name,
+                cityState.Type))
+            print(string.format("Envoys: %d", cityState.Envoys))
+            print(string.format("Suzerain: %s", cityState.SuzerainName))
+            print(string.format("At War: %s", cityState.IsAtWar and "Yes" or "No"))
+            print(string.format("Can Levy Military: %s (Cost: %d)", 
+                cityState.CanLevyMilitary and "Yes" or "No",
+                cityState.LevyMilitaryCost or 0))
+            
+            -- Print active bonuses
+            local bonuses = {}
+            if cityState.HasFirstBonus then table.insert(bonuses, "First") end
+            if cityState.HasSecondBonus then table.insert(bonuses, "Second") end
+            if cityState.HasThirdBonus then table.insert(bonuses, "Third") end
+            if cityState.HasSuzerainBonus then table.insert(bonuses, "Suzerain") end
+            print("Active Bonuses: " .. table.concat(bonuses, ", "))
+            
+            -- Print active quests if any
+            if cityState.Quests and next(cityState.Quests) then
+                print("Active Quests:")
+                for questType, quest in pairs(cityState.Quests) do
+                    print(string.format("  - %s: %s", quest.Name, quest.Description))
+                end
             end
         end
     end
@@ -627,26 +680,50 @@ function GetVisibleTileData(playerID)
         print(string.format("%s: %d (%.1f per turn)", class, points, pointsPerTurn))
     end
 
-    -- Print some key technologies researched (up to 5)
+    -- In PrintPlayerSummary, update the tech and civic sections:
+    -- Print all researched technologies
     if #data.TechsResearched > 0 then
-        print("\n=== RECENT TECHNOLOGIES ===")
-        local count = 0
-        for i = #data.TechsResearched, math.max(1, #data.TechsResearched - 4), -1 do
-            print(data.TechsResearched[i])
-            count = count + 1
-            if count >= 5 then break end
+        print("\n=== ALL RESEARCHED TECHNOLOGIES ===")
+        print(string.format("Total Technologies: %d", #data.TechsResearched))
+        for _, tech in ipairs(data.TechsResearched) do
+            print(string.format("\n%s", tech.Name))
+            print(string.format("  Cost: %d", tech.Cost))
+            print(string.format("  Progress: %.1f%%", tech.Progress * 100))
+            print(string.format("  Turns Left: %d", tech.TurnsLeft))
+            print(string.format("  Unlocked: %s", tech.IsUnlocked and "Yes" or "No"))
+            if tech.IsBoosted then
+                print("  [BOOSTED] ")
+            elseif tech.IsBoostable then
+                print("  [BOOST AVAILABLE] ")
+            end
         end
     end
 
-    -- Print government and policy info if available
-    if data.CurrentGovernment then
-        print("\n=== GOVERNMENT ===")
-        print("Current Government:", data.CurrentGovernment)
-        print("Active Policies:", #data.CurrentPolicies)
+    -- Print all completed civics
+    if #data.CivicsResearched > 0 then
+        print("\n=== ALL COMPLETED CIVICS ===")
+        print(string.format("Total Civics: %d", #data.CivicsResearched))
+        for _, civic in ipairs(data.CivicsResearched) do
+            print(string.format("\n%s", civic.Name))
+            print(string.format("  Cost: %d", civic.Cost))
+            print(string.format("  Progress: %.1f%%", civic.Progress * 100))
+            print(string.format("  Turns Left: %d", civic.TurnsLeft))
+            print(string.format("  Unlocked: %s", civic.IsUnlocked and "Yes" or "No"))
+            if civic.IsBoosted then
+                print("  [BOOSTED] ")
+            elseif civic.IsBoostable then
+                print("  [BOOST AVAILABLE] ")
+            end
+        end
     end
-end
 
-
+        -- Print government and policy info if available
+        if data.CurrentGovernment then
+            print("\n=== GOVERNMENT ===")
+            print("Current Government:", data.CurrentGovernment)
+            print("Active Policies:", #data.CurrentPolicies)
+        end
+    end
 
 --EVERYTHING BELOW THIS MARKER IS FOR FINDING ACTIONS, ALL POSSIBLE ACTIONS
 
