@@ -52,6 +52,135 @@ function GetPossibleEnvoyTargets()
     return possibleTargets
   end
 
+-- New function to get visible tile data
+function GetVisibleTileData(playerID)
+    print("GetVisibleTileData: Starting for player: " .. tostring(playerID))
+    
+    local visibleTiles = {}
+    local player = Players[playerID]
+    if not player then
+        print("GetVisibleTileData: Error - Invalid player")
+        return visibleTiles
+    end
+    
+    local playerVisibility = PlayersVisibility[playerID]
+    if not playerVisibility then
+        print("GetVisibleTileData: Error - Cannot get player visibility")
+    
+    -- Loop through all plots on map
+    local mapWidth, mapHeight = Map.GetGridSize()
+    print(string.format("GetVisibleTileData: Scanning map of size %d x %d", mapWidth, mapHeight))
+    
+    local tilesChecked = 0
+    local tilesRevealed = 0
+    
+    for i = 0, (mapWidth * mapHeight) - 1, 1 do
+        local plot = Map.GetPlotByIndex(i)
+        if plot then
+            tilesChecked = tilesChecked + 1
+            -- Check if plot is visible or revealed
+            if plot:IsVisible(playerID) then  -- Changed this line
+                tilesRevealed = tilesRevealed + 1
+                
+                -- First verify the plot has a valid terrain type
+                local terrainType = plot:GetTerrainType()
+                if terrainType >= 0 and GameInfo.Terrains[terrainType] then
+                    -- Get yields
+                    local yields = {
+                        Food = plot:GetYield(YieldTypes.FOOD),
+                        Production = plot:GetYield(YieldTypes.PRODUCTION),
+                        Gold = plot:GetYield(YieldTypes.GOLD),
+                        Science = plot:GetYield(YieldTypes.SCIENCE),
+                        Culture = plot:GetYield(YieldTypes.CULTURE),
+                        Faith = plot:GetYield(YieldTypes.FAITH)
+                    }
+
+                    -- Safely get feature type
+                    local featureType = plot:GetFeatureType()
+                    local featureTypeName = nil
+                    if featureType >= 0 and GameInfo.Features[featureType] then
+                        featureTypeName = GameInfo.Features[featureType].FeatureType
+                    end
+
+                    -- Safely get resource type
+                    local resourceType = plot:GetResourceType()
+                    local resourceTypeName = nil
+                    if resourceType >= 0 and GameInfo.Resources[resourceType] then
+                        resourceTypeName = GameInfo.Resources[resourceType].ResourceType
+                    end
+
+                    -- Safely get improvement type
+                    local improvementType = plot:GetImprovementType()
+                    local improvementTypeName = nil
+                    if improvementType >= 0 and GameInfo.Improvements[improvementType] then
+                        improvementTypeName = GameInfo.Improvements[improvementType].ResourceType
+                    end
+
+                    -- Safely get district type
+                    local districtType = plot:GetDistrictType()
+                    local districtTypeName = nil
+                    if districtType >= 0 and GameInfo.Districts[districtType] then
+                        districtTypeName = GameInfo.Districts[districtType].DistrictType
+                    end
+
+                    local tileData = {
+                        X = plot:GetX(),
+                        Y = plot:GetY(),
+                        TerrainType = GameInfo.Terrains[terrainType].TerrainType,
+                        FeatureType = featureTypeName,
+                        ResourceType = resourceTypeName,
+                        ImprovementType = improvementTypeName,
+                        DistrictType = districtTypeName,
+                        IsVisible = plot:IsVisible(playerID),
+                        IsRevealed = plot:IsRevealed(playerID, TeamTypes.NO_TEAM),
+                        OwnerID = plot:GetOwner(),
+                        Appeal = plot:GetAppeal(),
+                        IsWater = plot:IsWater(),
+                        IsImpassable = plot:IsImpassable(),
+                        MovementCost = plot:GetMovementCost(),
+                        Yields = yields,
+                        IsCity = plot:IsCity(),
+                        IsPillaged = plot:IsImprovementPillaged(),
+                        HasRemovableFeature = featureType >= 0 and 
+                            GameInfo.Features[featureType] and 
+                            GameInfo.Features[featureType].Removable,
+                        IsWorked = plot:GetWorkerCount() > 0
+                    }
+
+                    -- Add district info if present
+                    if districtTypeName then
+                        local district = CityManager.GetDistrictAt(plot)
+                        if district then
+                            tileData.DistrictInfo = {
+                                IsPillaged = district:IsPillaged(),
+                                IsComplete = district:IsComplete(),
+                                DistrictYields = {
+                                    Food = district:GetYield(YieldTypes.FOOD),
+                                    Production = district:GetYield(YieldTypes.PRODUCTION),
+                                    Gold = district:GetYield(YieldTypes.GOLD),
+                                    Science = district:GetYield(YieldTypes.SCIENCE),
+                                    Culture = district:GetYield(YieldTypes.CULTURE),
+                                    Faith = district:GetYield(YieldTypes.FAITH)
+                                }
+                            }
+                        end
+                    end
+
+                    table.insert(visibleTiles, tileData)
+                end
+            end
+        end
+    end
+    
+    print(string.format("GetVisibleTileData: Checked %d tiles, found %d revealed tiles", 
+        tilesChecked, tilesRevealed))
+    print(string.format("GetVisibleTileData: Returning data for %d tiles", #visibleTiles))
+    
+    return visibleTiles
+end
+end
+
+
 -- Helper function to get diplomatic status with other players
 function GetDiplomaticStatuses(player)
     local diplomaticStatuses = {}
@@ -217,11 +346,6 @@ for tech in GameInfo.Technologies() do
     end
 end
 
--- Sort techs by completion turn
-table.sort(data.TechsResearched, function(a,b) 
-    return a.CompletedTurn < b.CompletedTurn 
-end)
-
 -- Get complete civic data
 for civic in GameInfo.Civics() do
         table.insert(data.CivicsResearched, {
@@ -237,31 +361,101 @@ for civic in GameInfo.Civics() do
         })
 end
 
--- Sort civics by completion turn
-table.sort(data.CivicsResearched, function(a,b) 
-    return a.CompletedTurn < b.CompletedTurn 
-end)
-
 
   -- Get current government
-  print("GetPlayerData: Getting current government...")
-  local governmentIndex = playerCulture:GetCurrentGovernment()
-  if governmentIndex then
-    data.CurrentGovernment = GameInfo.Governments[governmentIndex].GovernmentType
-  end
+-- In GetPlayerData function, modify the government/policies section:
+local pPlayerCulture = player:GetCulture()
+data.CurrentGovernment = nil
+data.CurrentPolicies = {}
 
-  -- Get current policies
-  print("GetPlayerData: Getting current policies...")
-  local currentPolicies = GetCurrentPolicies(playerID, player)
-  for slotIndex, policyData in pairs(currentPolicies) do
-    --print(string.format("Slot %d: %s", slotIndex, policyData.PolicyType))
-    data.CurrentPolicies[slotIndex] = {
-        SlotIndex = slotIndex,
-        PolicyType = policyData.PolicyType,
-        PolicyHash = policyData.Hash,
-        PolicyData = policyData
+-- Get current government if there is one
+local governmentIndex = pPlayerCulture:GetCurrentGovernment()
+if governmentIndex ~= -1 then
+    local government = GameInfo.Governments[governmentIndex]
+    if government then
+        data.CurrentGovernment = {
+            Type = government.GovernmentType,
+            Name = Locale.Lookup(government.Name),
+            Index = governmentIndex
+        }
+        
+        -- Get active policies for each slot
+        local numSlots = pPlayerCulture:GetNumPolicySlots()
+        for slotIndex = 0, numSlots-1 do
+            local policyId = pPlayerCulture:GetSlotPolicy(slotIndex)
+            if policyId ~= -1 then
+                local policy = GameInfo.Policies[policyId]
+                if policy then
+                    table.insert(data.CurrentPolicies, {
+                        SlotIndex = slotIndex,
+                        PolicyType = policy.PolicyType,
+                        Name = Locale.Lookup(policy.Name),
+                        Description = Locale.Lookup(policy.Description),
+                        SlotType = pPlayerCulture:GetSlotType(slotIndex)
+                    })
+                end
+            end
+        end
+    end
+end
+
+-- Add governor information
+data.Governors = {}
+local playerGovernors = player:GetGovernors()
+if playerGovernors then
+    -- Get available/unspent titles
+    data.GovernorPoints = {
+        Available = playerGovernors:GetGovernorPoints(),
+        Spent = playerGovernors:GetGovernorPointsSpent()
     }
-  end
+    
+    local hasGovernors, governorList = playerGovernors:GetGovernorList()
+    if hasGovernors then
+        for _, governor in ipairs(governorList) do
+            local governorType = governor:GetType()
+            local governorDef = GameInfo.Governors[governorType]
+            
+            -- Get governor's assigned city if any
+            local assignedCity = nil
+            if governor:IsEstablished() then
+                for _, city in player:GetCities():Members() do
+                    local cityGovernor = city:GetAssignedGovernor()
+                    if cityGovernor and cityGovernor:GetType() == governorType then
+                        assignedCity = {
+                            ID = city:GetID(),
+                            Name = city:GetName(),
+                            X = city:GetX(),
+                            Y = city:GetY()
+                        }
+                        break
+                    end
+                end
+            end
+            
+            -- Get governor's promotions
+            local promotions = {}
+            for promotion in GameInfo.GovernorPromotions() do
+                if governor:HasPromotion(promotion.Index) then
+                    table.insert(promotions, {
+                        Type = promotion.GovernorPromotionType,
+                        Name = Locale.Lookup(promotion.Name),
+                        Description = Locale.Lookup(promotion.Description)
+                    })
+                end
+            end
+            
+            -- Add governor data
+            table.insert(data.Governors, {
+                Type = governorDef.GovernorType,
+                Name = Locale.Lookup(governorDef.Name),
+                Title = Locale.Lookup(governorDef.Title),
+                IsEstablished = governor:IsEstablished(),
+                AssignedCity = assignedCity,
+                Promotions = promotions
+            })
+        end
+    end
+end
 
   -- Get Great People points
   print("GetPlayerData: Getting Great People points...")
@@ -526,97 +720,6 @@ end
   end
   
 
-
--- New function to get visible tile data
-function GetVisibleTileData(playerID)
-    --print("GetVisibleTileData: Getting visible tiles for player: " .. tostring(playerID))
-    
-    local visibleTiles = {}
-    local player = Players[playerID]
-    local playerVisibility = PlayersVisibility[playerID]
-    
-    -- Loop through all plots on map
-    local mapWidth, mapHeight = Map.GetGridSize()
-    for i = 0, (mapWidth * mapHeight) - 1, 1 do
-      local plot = Map.GetPlotByIndex(i)
-      
-      -- Check if plot is visible or revealed
-      if playerVisibility:IsRevealed(plot:GetX(), plot:GetY()) then
-        -- Get yields
-        local yields = {
-          Food = plot:GetYield(YieldTypes.FOOD),
-          Production = plot:GetYield(YieldTypes.PRODUCTION),
-          Gold = plot:GetYield(YieldTypes.GOLD),
-          Science = plot:GetYield(YieldTypes.SCIENCE),
-          Culture = plot:GetYield(YieldTypes.CULTURE),
-          Faith = plot:GetYield(YieldTypes.FAITH)
-        }
-  
-        local tileData = {
-          X = plot:GetX(),
-          Y = plot:GetY(),
-          TerrainType = GameInfo.Terrains[plot:GetTerrainType()].TerrainType,
-          FeatureType = plot:GetFeatureType() >= 0 and GameInfo.Features[plot:GetFeatureType()].FeatureType or nil,
-          ResourceType = plot:GetResourceType() >= 0 and GameInfo.Resources[plot:GetResourceType()].ResourceType or nil,
-          ImprovementType = plot:GetImprovementType() >= 0 and GameInfo.Improvements[plot:GetImprovementType()].ImprovementType or nil,
-          DistrictType = plot:GetDistrictType() >= 0 and GameInfo.Districts[plot:GetDistrictType()].DistrictType or nil,
-          IsVisible = playerVisibility:IsVisible(plot:GetX(), plot:GetY()),
-          IsRevealed = true,
-          OwnerID = plot:GetOwner(),
-          Appeal = plot:GetAppeal(),
-          IsWater = plot:IsWater(),
-          IsImpassable = plot:IsImpassable(),
-          MovementCost = plot:GetMovementCost(),
-          -- Add yields
-          Yields = yields,
-          -- Additional useful yield-related info
-          IsCity = plot:IsCity(),
-          IsPillaged = plot:IsImprovementPillaged(),
-          HasRemovableFeature = plot:GetFeatureType() >= 0 and GameInfo.Features[plot:GetFeatureType()].Removable,
-          IsWorked = false -- Will be set below
-        }
-  
-        -- Check if tile is being worked by a city
-        if plot:GetWorkerCount() > 0 then
-          tileData.IsWorked = true
-          -- Get the city working this tile if owned
-          if plot:GetOwner() == playerID then
-            local city = Cities.GetPlotWorkingCity(plot:GetIndex())
-            if city then
-              tileData.WorkingCityID = city:GetID()
-            end
-          end
-        end
-  
-        -- If it's a district, get additional district info
-        if tileData.DistrictType then
-          local district = CityManager.GetDistrictAt(plot)
-          if district then
-            tileData.DistrictInfo = {
-              IsPillaged = district:IsPillaged(),
-              IsComplete = district:IsComplete(),
-              -- Add any district-specific yields
-              DistrictYields = {
-                Food = district:GetYield(YieldTypes.FOOD),
-                Production = district:GetYield(YieldTypes.PRODUCTION),
-                Gold = district:GetYield(YieldTypes.GOLD),
-                Science = district:GetYield(YieldTypes.SCIENCE),
-                Culture = district:GetYield(YieldTypes.CULTURE),
-                Faith = district:GetYield(YieldTypes.FAITH)
-              }
-            }
-          end
-        end
-  
-        table.insert(visibleTiles, tileData)
-      end
-    end
-    
-    --print("GetVisibleTileData: Found " .. #visibleTiles .. " visible/revealed tiles")
-    return visibleTiles
-  end
-
-
   function PrintPlayerSummary(data)
     if not data then
         print("No player data available")
@@ -683,7 +786,7 @@ function GetVisibleTileData(playerID)
     -- In PrintPlayerSummary, update the tech and civic sections:
     -- Print all researched technologies
     if #data.TechsResearched > 0 then
-        print("\n=== ALL RESEARCHED TECHNOLOGIES ===")
+        print("\n=== ALL TECHNOLOGIES ===")
         print(string.format("Total Technologies: %d", #data.TechsResearched))
         for _, tech in ipairs(data.TechsResearched) do
             print(string.format("\n%s", tech.Name))
@@ -701,7 +804,7 @@ function GetVisibleTileData(playerID)
 
     -- Print all completed civics
     if #data.CivicsResearched > 0 then
-        print("\n=== ALL COMPLETED CIVICS ===")
+        print("\n=== ALL CIVICS ===")
         print(string.format("Total Civics: %d", #data.CivicsResearched))
         for _, civic in ipairs(data.CivicsResearched) do
             print(string.format("\n%s", civic.Name))
@@ -716,14 +819,177 @@ function GetVisibleTileData(playerID)
             end
         end
     end
+-- In PrintPlayerSummary function, add these sections:
 
-        -- Print government and policy info if available
-        if data.CurrentGovernment then
-            print("\n=== GOVERNMENT ===")
-            print("Current Government:", data.CurrentGovernment)
-            print("Active Policies:", #data.CurrentPolicies)
+-- Print government and policies
+if data.CurrentGovernment then
+    print("\n=== GOVERNMENT ===")
+    print("Current Government: " .. data.CurrentGovernment.Name)
+    print("\nActive Policies:")
+    for _, policy in ipairs(data.CurrentPolicies) do
+        print(string.format("Slot %d (%s): %s", 
+            policy.SlotIndex, 
+            policy.SlotType, 
+            policy.Name))
+    end
+end
+
+-- Print governor information
+if data.Governors and #data.Governors > 0 then
+    print("\n=== GOVERNORS ===")
+    print(string.format("Governor Points: %d available, %d spent", 
+        data.GovernorPoints.Available, 
+        data.GovernorPoints.Spent))
+    
+    for _, governor in ipairs(data.Governors) do
+        print(string.format("\nGovernor: %s (%s)", 
+            governor.Name,
+            governor.Title))
+        print("Status: " .. (governor.IsEstablished and "Established" or "Not Established"))
+        
+        if governor.AssignedCity then
+            print(string.format("Assigned to: %s", governor.AssignedCity.Name))
+        end
+        
+        if #governor.Promotions > 0 then
+            print("Promotions:")
+            for _, promotion in ipairs(governor.Promotions) do
+                print("  - " .. promotion.Name)
+            end
         end
     end
+end
+--end of function
+end
+
+function PrintTileDataSummary(visibleTiles)
+    if not visibleTiles or #visibleTiles == 0 then
+        print("No visible tiles data available")
+        return
+    end
+
+    print("\n=== VISIBLE TILES SUMMARY ===")
+    
+    -- Count different terrain types
+    local terrainCounts = {}
+    local featureCounts = {}
+    local resourceCounts = {}
+    local improvementCounts = {}
+    local districtCounts = {}
+    
+    -- Track total yields
+    local totalYields = {
+        Food = 0,
+        Production = 0,
+        Gold = 0,
+        Science = 0,
+        Culture = 0,
+        Faith = 0
+    }
+    
+    -- Count owned vs unowned tiles
+    local ownedTiles = 0
+    local workedTiles = 0
+    
+    -- Process each tile
+    for _, tile in ipairs(visibleTiles) do
+        -- Count terrain types
+        terrainCounts[tile.TerrainType] = (terrainCounts[tile.TerrainType] or 0) + 1
+        
+        -- Count features if present
+        if tile.FeatureType then
+            featureCounts[tile.FeatureType] = (featureCounts[tile.FeatureType] or 0) + 1
+        end
+        
+        -- Count resources if present
+        if tile.ResourceType then
+            resourceCounts[tile.ResourceType] = (resourceCounts[tile.ResourceType] or 0) + 1
+        end
+        
+        -- Count improvements if present
+        if tile.ImprovementType then
+            improvementCounts[tile.ImprovementType] = (improvementCounts[tile.ImprovementType] or 0) + 1
+        end
+        
+        -- Count districts if present
+        if tile.DistrictType then
+            districtCounts[tile.DistrictType] = (districtCounts[tile.DistrictType] or 0) + 1
+        end
+        
+        -- Add up yields
+        if tile.Yields then
+            for yieldType, value in pairs(tile.Yields) do
+                totalYields[yieldType] = totalYields[yieldType] + value
+            end
+        end
+        
+        -- Count owned and worked tiles
+        if tile.OwnerID >= 0 then
+            ownedTiles = ownedTiles + 1
+            if tile.IsWorked then
+                workedTiles = workedTiles + 1
+            end
+        end
+    end
+    
+    -- Print summary
+    print(string.format("\nTotal Visible Tiles: %d", #visibleTiles))
+    print(string.format("Owned Tiles: %d", ownedTiles))
+    print(string.format("Worked Tiles: %d", workedTiles))
+    
+    -- Print terrain distribution
+    print("\nTerrain Distribution:")
+    for terrainType, count in pairs(terrainCounts) do
+        print(string.format("  %s: %d tiles", terrainType, count))
+    end
+    
+    -- Print features if any
+    if next(featureCounts) then
+        print("\nFeatures:")
+        for featureType, count in pairs(featureCounts) do
+            print(string.format("  %s: %d", featureType, count))
+        end
+    end
+    
+    -- Print resources if any
+    if next(resourceCounts) then
+        print("\nResources:")
+        for resourceType, count in pairs(resourceCounts) do
+            print(string.format("  %s: %d", resourceType, count))
+        end
+    end
+    
+    -- Print improvements if any
+    if next(improvementCounts) then
+        print("\nImprovements:")
+        for improvementType, count in pairs(improvementCounts) do
+            print(string.format("  %s: %d", improvementType, count))
+        end
+    end
+    
+    -- Print districts if any
+    if next(districtCounts) then
+        print("\nDistricts:")
+        for districtType, count in pairs(districtCounts) do
+            print(string.format("  %s: %d", districtType, count))
+        end
+    end
+    
+    -- Print total yields
+    print("\nTotal Yields from Visible Tiles:")
+    print(string.format("  Food: %.1f", totalYields.Food))
+    print(string.format("  Production: %.1f", totalYields.Production))
+    print(string.format("  Gold: %.1f", totalYields.Gold))
+    print(string.format("  Science: %.1f", totalYields.Science))
+    print(string.format("  Culture: %.1f", totalYields.Culture))
+    print(string.format("  Faith: %.1f", totalYields.Faith))
+
+    -- Print average yields per tile
+    print("\nAverage Yields per Tile:")
+    for yieldType, total in pairs(totalYields) do
+        print(string.format("  %s: %.2f", yieldType, total / #visibleTiles))
+    end
+end
 
 --EVERYTHING BELOW THIS MARKER IS FOR FINDING ACTIONS, ALL POSSIBLE ACTIONS
 

@@ -154,10 +154,10 @@ function InitializeRL()
 end
 function RLv1.OnTurnBegin()
     print("=== TURN BEGIN FUNCTION START ===")
-    print("\n=== GAMEINFO PLAYER OPERATIONS ===") 
 
     local playerState = GetPlayerData(Game.GetLocalPlayer())
-    PrintPlayerSummary(playerState)
+    --PrintPlayerSummary(playerState)
+    PrintTileDataSummary(playerState.VisibleTiles)
     
     if not m_isInitialized then 
         print("Not initialized, returning")
