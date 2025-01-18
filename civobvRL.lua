@@ -456,8 +456,7 @@ function GetUnitData(unit)
     return data;
   end
 
-
-  function GetCurrentPolicies(playerID,Player)
+function GetCurrentPolicies(playerID,Player)
     local pPlayer = Player
     local playerCulture = pPlayer:GetCulture()
     local currentPolicies = {}
@@ -562,9 +561,6 @@ function GetQuests( playerID:number )
 	return kQuests;
 end
 
--- New function to get city state information
--- Returns a table of information about all City States the player has met
--- Returns a table of information about all City States the player has met
 function GetCityStatesInfo(playerID:number)
     local localPlayer = Players[playerID];
     if localPlayer == nil then return {}; end
@@ -915,6 +911,137 @@ function PrintTileDataSummary(visibleTiles, revealedTiles)
     if #revealedTiles > 0 then analyzeTiles(revealedTiles, "REVEALED")
 end
 end
+end
+
+function PrintPlayerUnitsAndCities(playerData)
+    if not playerData then
+        print("No player data available")
+        return
+    end
+
+    -- Print Cities Information
+    print("\n=== CITIES SUMMARY ===")
+    if #playerData.Cities > 0 then
+        for _, city in ipairs(playerData.Cities) do
+            print(string.format("\nCity: %s %s", 
+                city.CityName,
+                city.IsCapital and "(Capital)" or ""
+            ))
+            
+            -- Basic City Stats
+            print("=== Basic Stats ===")
+            print(string.format("Population: %d", city.Population))
+            print(string.format("Defense: %d", city.Defense))
+            if city.IsUnderSiege then print("UNDER SIEGE") end
+            
+            -- Growth Information
+            print("\n=== Growth Info ===")
+            print(string.format("Housing: %.1f", city.Housing))
+            print(string.format("Food Per Turn: %.1f", city.FoodPerTurn))
+            print(string.format("Food Surplus: %.1f", city.FoodSurplus))
+            print(string.format("Turns Until Growth: %d", city.TurnsUntilGrowth))
+            
+            -- Yields
+            print("\n=== Yields Per Turn ===")
+            print(string.format("Science: %.1f", city.SciencePerTurn))
+            print(string.format("Culture: %.1f", city.CulturePerTurn))
+            print(string.format("Production: %.1f", city.ProductionPerTurn))
+            print(string.format("Gold: %.1f", city.GoldPerTurn))
+            print(string.format("Faith: %.1f", city.FaithPerTurn))
+            
+            -- Amenities
+            print("\n=== Amenities ===")
+            print(string.format("Total: %d (Need: %d)", 
+                city.AmenitiesNum,
+                city.AmenitiesRequiredNum
+            ))
+            print(string.format("From Luxuries: %d", city.AmenitiesFromLuxuries))
+            print(string.format("From Entertainment: %d", city.AmenitiesFromEntertainment))
+            
+            -- Districts
+            print(string.format("\nDistricts: %d/%d", 
+                city.DistrictsNum,
+                city.DistrictsPossibleNum
+            ))
+            
+            -- Current Production
+            if city.CurrentProductionName ~= "" then
+                print("\n=== Production ===")
+                print(string.format("Currently Producing: %s", city.CurrentProductionName))
+                print(string.format("Turns Left: %d", city.CurrentTurnsLeft))
+            end
+            
+            -- Buildings & Wonders
+            if #city.BuildingsAndDistricts > 0 then
+                print("\n=== Buildings & Districts ===")
+                for _, building in ipairs(city.BuildingsAndDistricts) do
+                    print(string.format("  %s", building.Name))
+                end
+            end
+            
+            if #city.Wonders > 0 then
+                print("\n=== Wonders ===")
+                for _, wonder in ipairs(city.Wonders) do
+                    print(string.format("  %s", wonder.Name))
+                end
+            end
+        end
+    else
+        print("No cities found")
+    end
+
+    -- Print Units Information
+    print("\n=== UNITS SUMMARY ===")
+    if #playerData.Units > 0 then
+        -- Group units by type for better organization
+        local unitsByType = {}
+        for _, unit in ipairs(playerData.Units) do
+            unitsByType[unit.UnitType] = unitsByType[unit.UnitType] or {}
+            table.insert(unitsByType[unit.UnitType], unit)
+        end
+        
+        for unitType, units in pairs(unitsByType) do
+            print(string.format("\nUnit Type: %s (Count: %d)", unitType, #units))
+            for _, unit in ipairs(units) do
+                print(string.format("\n  %s (Level %d)", unit.Name, unit.Level))
+                -- Combat Stats
+                if unit.Combat > 0 then
+                    print(string.format("    Combat Strength: %d", unit.Combat))
+                end
+                if unit.RangedCombat > 0 then
+                    print(string.format("    Ranged Combat: %d (Range: %d)", 
+                        unit.RangedCombat, unit.Range))
+                end
+                
+                -- Movement & Position
+                print(string.format("    Position: (%d, %d)", 
+                    unit.Position.X, unit.Position.Y))
+                print(string.format("    Moves: %.1f/%d", 
+                    unit.Moves, unit.MaxMoves))
+                
+                -- Additional Stats
+                if unit.Damage > 0 then
+                    print(string.format("    Damage: %d/%d", 
+                        unit.Damage, unit.MaxDamage))
+                end
+                
+                -- Special Properties
+                if unit.Formation ~= 0 then
+                    print("    In Formation")
+                end
+                
+                if unit.Experience > 0 then
+                    print(string.format("    XP: %d", unit.Experience))
+                end
+                
+                if unit.Buildcharges and unit.Buildcharges > 0 then
+                    print(string.format("    Build Charges: %d", unit.Buildcharges))
+                end
+            end
+        end
+    else
+        print("No units found")
+    end
 end
 
 --EVERYTHING BELOW THIS MARKER IS FOR FINDING ACTIONS, ALL POSSIBLE ACTIONS

@@ -157,7 +157,8 @@ function RLv1.OnTurnBegin()
 
     local playerState = GetPlayerData(Game.GetLocalPlayer())
     --PrintPlayerSummary(playerState)
-    PrintTileDataSummary(playerState.VisibleTiles,playerState.revealedTiles)
+    PrintPlayerUnitsAndCities(playerState)
+    --PrintTileDataSummary(playerState.VisibleTiles,playerState.revealedTiles)
     
     if not m_isInitialized then 
         print("Not initialized, returning")
