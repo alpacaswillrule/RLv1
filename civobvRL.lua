@@ -238,7 +238,8 @@ function GetPlayerData(playerID)
   -- Get Great People points
   print("GetPlayerData: Getting Great People points...")
   for class in GameInfo.GreatPersonClasses() do
-    data.GreatPeoplePoints[class.GreatPersonClassType] = player:GetGreatPeoplePoints():GetPointsTotal(class.Hash)
+    local classID = class.Index
+    data.GreatPeoplePoints[class.GreatPersonClassType] = player:GetGreatPeoplePoints():GetPointsTotal(classID)
     data.GreatPeoplePointsPerTurn[class.GreatPersonClassType] = player:GetGreatPeoplePoints():GetPointsPerTurn(classID)
   end
 
