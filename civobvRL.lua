@@ -150,6 +150,7 @@ function GetPlayerData(playerID)
         IdleTraders = 0  -- Number of idle trade units available
     }
   };
+  print("GetPlayerData: Gathering trade route data...")
   
   local playerTrade = player:GetTrade();
   if playerTrade then
@@ -181,7 +182,7 @@ function GetPlayerData(playerID)
       data.TradeRoutes.IdleTraders = idleTraders;
   end
 
-  --print("GetPlayerData: Gathering city data...")
+  print("GetPlayerData: Gathering city data...")
   -- Add city data
   for i, city in player:GetCities():Members() do
       local cityData = GetCityData(city);
@@ -190,14 +191,14 @@ function GetPlayerData(playerID)
       end
   end
 
-  --print("GetPlayerData: Gathering unit data...")
+  print("GetPlayerData: Gathering unit data...")
   -- Add unit data
   for _, unit in player:GetUnits():Members() do
     table.insert(data.Units, GetUnitData(unit));
   end
 
   -- Add researched techs
-  --print("GetPlayerData: Gathering researched techs...")
+  print("GetPlayerData: Gathering researched techs...")
   local playerTechs = player:GetTechs()
   for tech in GameInfo.Technologies() do
     if playerTechs:HasTech(tech.Hash) then
@@ -206,7 +207,7 @@ function GetPlayerData(playerID)
   end
 
   -- Add researched civics
-  --print("GetPlayerData: Gathering researched civics...")
+  print("GetPlayerData: Gathering researched civics...")
   local playerCulture = player:GetCulture()
   for civic in GameInfo.Civics() do
     if playerCulture:HasCivic(civic.Hash) then
@@ -215,14 +216,14 @@ function GetPlayerData(playerID)
   end
 
   -- Get current government
-  --print("GetPlayerData: Getting current government...")
+  print("GetPlayerData: Getting current government...")
   local governmentIndex = playerCulture:GetCurrentGovernment()
   if governmentIndex then
     data.CurrentGovernment = GameInfo.Governments[governmentIndex].GovernmentType
   end
 
   -- Get current policies
-  --print("GetPlayerData: Getting current policies...")
+  print("GetPlayerData: Getting current policies...")
   local currentPolicies = GetCurrentPolicies(playerID, player)
   for slotIndex, policyData in pairs(currentPolicies) do
     --print(string.format("Slot %d: %s", slotIndex, policyData.PolicyType))
@@ -235,13 +236,13 @@ function GetPlayerData(playerID)
   end
 
   -- Get Great People points
-  --print("GetPlayerData: Getting Great People points...")
+  print("GetPlayerData: Getting Great People points...")
   for class in GameInfo.GreatPersonClasses() do
     data.GreatPeoplePoints[class.GreatPersonClassType] = player:GetGreatPeoplePoints():GetPointsTotal(class.Hash)
     data.GreatPeoplePointsPerTurn[class.GreatPersonClassType] = player:GetGreatPeoplePoints():GetPointsPerTurn(classID)
   end
 
-  --print("GetPlayerData: Player data collection complete.")
+  print("GetPlayerData: Player data collection complete.")
   return data;
 end
 
@@ -301,6 +302,84 @@ function GetUnitData(unit)
   
     return currentPolicies
   end
+
+function GetSuzerainBonusText( playerID:number )
+	
+	local leader	:string = PlayerConfigurations[playerID]:GetLeaderTypeName();
+	local leaderInfo:table	= GameInfo.Leaders[leader];
+	if leaderInfo == nil then
+		UI.DataError("GetSuzerainBonusText, cannot determine the type of city state suzerain bonus for player #: "..tostring(playerID) );
+		return "UNKNOWN";
+	end
+
+	local text		:string = "";
+	
+	-- Unique Bonus
+	for leaderTraitPairInfo in GameInfo.LeaderTraits() do
+		if (leader ~= nil and leader == leaderTraitPairInfo.LeaderType) then
+			local traitInfo : table = GameInfo.Traits[leaderTraitPairInfo.TraitType];
+			if (traitInfo ~= nil) then
+				local name = PlayerConfigurations[playerID]:GetCivilizationShortDescription();
+				text = text .. "[COLOR:SuzerainDark]" .. Locale.Lookup("LOC_CITY_STATES_SUZERAIN_UNIQUE_BONUS", name) .. "[ENDCOLOR] ";
+				if traitInfo.Description ~= nil then
+					text = text .. Locale.Lookup(traitInfo.Description);
+				end
+			end
+		end
+	end	
+
+	-- Diplomatic Bonus
+	text = text .. "[NEWLINE][NEWLINE]" .. Locale.Lookup("LOC_CITY_STATES_SUZERAIN_DIPLOMATIC_BONUS");
+	
+	local comma_separator = Locale.Lookup("LOC_GRAMMAR_COMMA_SEPARATOR");
+
+	-- Resources Available
+	local resourceIcons	:string = "";
+	local player = Players[playerID];
+	if (player ~= nil) then
+		for resourceInfo in GameInfo.Resources() do
+			local resource = resourceInfo.Index;
+			-- Include exports, so we see what another player is getting if suzerain
+			if (player:GetResources():HasResource(resource) or player:GetResources():HasExportedResource(resource)) then
+				local amount = player:GetResources():GetResourceAmount(resource) + player:GetResources():GetExportedResourceAmount(resource);
+				if (resourceIcons ~= "") then
+					resourceIcons = resourceIcons .. comma_separator;
+				end
+				resourceIcons = resourceIcons .. amount .. " [ICON_" .. resourceInfo.ResourceType .. "] " .. Locale.Lookup(resourceInfo.Name);
+			end
+		end
+	end
+	if (resourceIcons ~= "") then
+		text = text .. " " .. resourceIcons;
+	else
+		text = text .. " " .. Locale.Lookup("LOC_CITY_STATES_SUZERAIN_NO_RESOURCES_AVAILABLE");
+	end
+
+	return text;
+end
+
+function GetQuests( playerID:number )
+	local kQuests		:table  = {};
+	local questsManager	:table = Game.GetQuestsManager();
+	local localPlayerID :number = Game.GetLocalPlayer();
+	if questsManager ~= nil then
+		for questInfo in GameInfo.Quests() do
+			if questsManager:HasActiveQuestFromPlayer( localPlayerID, playerID, questInfo.Index) then
+				kQuests[questInfo.Index] = { 
+					Description = questsManager:GetActiveQuestDescription( localPlayerID, playerID, questInfo.Index),
+					Name		= questsManager:GetActiveQuestName( localPlayerID, playerID, questInfo.Index),
+					Reward		= questsManager:GetActiveQuestReward( localPlayerID, playerID, questInfo.Index),
+					Type		= questInfo.QuestType,
+					Callout		= questInfo.IconString
+				};
+			end
+		end
+	else
+		UI.DataError("City-States were unable to obtain the QuestManager.");
+	end
+	return kQuests;
+end
+
 -- New function to get city state information
 -- Returns a table of information about all City States the player has met
 -- Returns a table of information about all City States the player has met
