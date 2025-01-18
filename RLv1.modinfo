@@ -24,6 +24,7 @@
       <File>PopupDialog.lua</File>
       <File>TutorialUIRoot.lua</File>
       <File>Rl_enviroment_scripts.lua</File>
+      <File>rewardFunction.lua</File>
       <File>Rl_enviroment_scripts.xml</File>
       <File>popupannhilator.xml</File>
     </ImportFiles>
@@ -47,6 +48,7 @@
     <File>PopupDialog.lua</File>
     <File>TutorialUIRoot.lua</File>
     <File>Rl_enviroment_scripts.lua</File>
+    <File>rewardFunction.lua</File>
     <File>Rl_enviroment_scripts.xml</File>
     <File>RL_Environment_Text.xml</File>
     <File>popupannhilator.xml</File>
