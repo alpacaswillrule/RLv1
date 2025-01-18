@@ -52,7 +52,7 @@ local VICTORY_TYPES = {
 };
 
 -- Configuration variables
-local TURN_LIMIT = 400;
+local TURN_LIMIT = 100;
 local AUTO_RESTART_ENABLED = true;
 
 
@@ -156,8 +156,8 @@ function RLv1.OnTurnBegin()
     print("=== TURN BEGIN FUNCTION START ===")
     print("\n=== GAMEINFO PLAYER OPERATIONS ===") 
 
-    local gameState = GetGameState()
-    PrintGameStateSummary(gameState)
+    local playerState = GetPlayerData(Game.GetLocalPlayer())
+    PrintPlayerSummary(playerState)
     
     if not m_isInitialized then 
         print("Not initialized, returning")
@@ -251,6 +251,7 @@ function AutoRestartGame()
     
     print("Initiating game restart...");
     Network.RestartGame();
+    Automation.SetAutoStartEnabled(true);
 end
 
 -- Handle team victory events

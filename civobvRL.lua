@@ -114,9 +114,9 @@ function GetPlayerID()
   return playerID;
 end
 
--- Gets information about the local player.
+-- Gets information about the local player. AKA THE GAMETSTATE THIS RETURNS THE GAMESTATE
 function GetPlayerData(playerID)
-  --print("GetPlayerData: Getting data for player: " .. tostring(playerID))
+  print("GetPlayerData: Getting data for player: " .. tostring(playerID))
 
   local player = Players[playerID];
   if not player then 
@@ -508,6 +508,63 @@ function GetVisibleTileData(playerID)
     return visibleTiles
   end
 
+
+  function PrintPlayerSummary(data)
+    if not data then
+        print("No player data available")
+        return
+    end
+
+    -- Print basic yields
+    print("\n=== YIELDS ===")
+    print(string.format("Gold: %d (%.1f per turn)", data.Gold, data.GoldPerTurn))
+    print(string.format("Faith: %d (%.1f per turn)", data.Faith, data.FaithPerTurn))
+    print(string.format("Science: %.1f per turn", data.SciencePerTurn))
+    print(string.format("Culture: %.1f per turn", data.CulturePerTurn))
+
+    -- Print diplomatic statuses
+    if data.DiplomaticStatuses then
+        print("\n=== DIPLOMATIC STATUSES ===")
+        for civID, status in pairs(data.DiplomaticStatuses) do
+            print(string.format("With Civ %d: %s", civID, status))
+        end
+    end
+
+    -- Print city state relationships
+    if data.CityStates then
+        print("\n=== CITY STATE RELATIONSHIPS ===")
+        for _, cityState in pairs(data.CityStates) do
+            if cityState.Type and cityState.Relationship then
+                print(string.format("%s: %s", cityState.Type, cityState.Relationship))
+            end
+        end
+    end
+
+    -- Print Great People points
+    print("\n=== GREAT PEOPLE POINTS ===")
+    for class, points in pairs(data.GreatPeoplePoints) do
+        local pointsPerTurn = data.GreatPeoplePointsPerTurn[class] or 0
+        print(string.format("%s: %d (%.1f per turn)", class, points, pointsPerTurn))
+    end
+
+    -- Print some key technologies researched (up to 5)
+    if #data.TechsResearched > 0 then
+        print("\n=== RECENT TECHNOLOGIES ===")
+        local count = 0
+        for i = #data.TechsResearched, math.max(1, #data.TechsResearched - 4), -1 do
+            print(data.TechsResearched[i])
+            count = count + 1
+            if count >= 5 then break end
+        end
+    end
+
+    -- Print government and policy info if available
+    if data.CurrentGovernment then
+        print("\n=== GOVERNMENT ===")
+        print("Current Government:", data.CurrentGovernment)
+        print("Active Policies:", #data.CurrentPolicies)
+    end
+end
 
 
 
