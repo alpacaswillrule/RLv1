@@ -7,7 +7,7 @@ include("PopupDialog");
 -- Then our mod files
 include("civobvRL");
 include("civactionsRL");
-
+include("rewardFunction")
 
 -- Function to select which action to take based on priorities
 function SelectPrioritizedAction(possibleActions)

@@ -8,6 +8,7 @@ RLv1 = {};
 include("civobvRL");
 include("civactionsRL");
 include("RL_heur_methods")
+include("rewardFunction")
 local m_pendingPopupDismissals = {}
 local m_isAgentEnabled = false; -- Default to disabled
 
