@@ -97,8 +97,7 @@ end
 local m_isInitialized = false;
 local m_currentGameTurn = 0;
 local m_localPlayerID = -1;
-local m_currentState = nil;
-local m_lastReward = 0;
+local index = 0
 
 -- Victory types as defined in the game
 local VICTORY_TYPES = {
@@ -214,44 +213,45 @@ end
 
 
 function RLv1.OnTurnBegin()
-    
-    local possibleActions = GetPossibleActions()
-    if not possibleActions then return end
-    
-    local numActionsToTake = 4
-    
-    for i = 1, numActionsToTake do
-        -- Get state before action
+    if not m_isAgentEnabled then return end
+    m_currentGameTurn = Game.GetCurrentGameTurn();
+    while true do
+        local possibleActions = GetPossibleActions()
         local currentState = GetPlayerData(Game.GetLocalPlayer())
-        print(CalculateReward(currentState))
         local actionType, actionParams = SelectPrioritizedAction(possibleActions)
-        if actionType then
-            -- Execute action
-            RLv1.ExecuteAction(actionType, actionParams)
-            
-            -- Get state after action
-            local nextState = GetPlayerData(Game.GetLocalPlayer())
-            
-            -- Record state-action-nextstate transition
-            table.insert(m_gameHistory.transitions, {
-                turn = m_currentGameTurn,
-                action = {
-                    type = actionType,
-                    params = actionParams
-                },
-                state = currentState,
-                next_state = nextState
-            })
-            
-            -- Update possible actions
-            possibleActions = GetPossibleActions()
-            if not possibleActions then break end
-        else
-            break
-        end
+    if actionType == "ENDTURN" then
+        EndTurn(true)
+        break
+    elseif actionType then
+        -- Execute action
+        RLv1.ExecuteAction(actionType, actionParams)
+        
+        -- Get state after action
+        local nextState = GetPlayerData(Game.GetLocalPlayer())
+        
+        -- Record state-action-nextstate transition
+        index = index + 1
+        table.insert(m_gameHistory.transitions, {
+            turn = m_currentGameTurn,
+            index = index,
+            action = {
+                type = actionType,
+                params = actionParams
+            },
+            state = currentState,
+            next_state = nextState
+        })
+        
+        -- Update possible actions
+        possibleActions = GetPossibleActions()
+        if not possibleActions then return end
+    else
+        print("NO ACTION SELECTED, NOT EVEN ENDTURN, SOMETHING WENT WRONG. Force ending turn")
+        EndTurn(true) --we have no actions left, force end turn, but something must've gone wrong
     end
+end -- end of while loop
 
-    EndTurn()
+
 end
 
 
