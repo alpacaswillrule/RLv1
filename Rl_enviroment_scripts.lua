@@ -214,42 +214,54 @@ end
 
 function RLv1.OnTurnBegin()
     if not m_isAgentEnabled then return end
-    m_currentGameTurn = Game.GetCurrentGameTurn();
-    while true do
-        local possibleActions = GetPossibleActions()
-        local currentState = GetPlayerData(Game.GetLocalPlayer())
-        local actionType, actionParams = SelectPrioritizedAction(possibleActions)
-    if actionType == "ENDTURN" then
-        EndTurn(true)
-        break
-    elseif actionType then
-        -- Execute action
-        RLv1.ExecuteAction(actionType, actionParams)
+    --get reward, and state
+    state = GetPlayerData(Game.GetLocalPlayer())
+    reward = CalculateReward(state)
+    --print
+    print("Reward: ", reward)
+
+    --now let's test if we can load 
+    LoadGameWithHistory("rl_game_13_1")
+
+
+
+
+--     m_currentGameTurn = Game.GetCurrentGameTurn();
+--     while true do
+--         local possibleActions = GetPossibleActions()
+--         local currentState = GetPlayerData(Game.GetLocalPlayer())
+--         local actionType, actionParams = SelectPrioritizedAction(possibleActions)
+--     if actionType == "ENDTURN" then
+--         EndTurn(true)
+--         break
+--     elseif actionType then
+--         -- Execute action
+--         RLv1.ExecuteAction(actionType, actionParams)
         
-        -- Get state after action
-        local nextState = GetPlayerData(Game.GetLocalPlayer())
+--         -- Get state after action
+--         local nextState = GetPlayerData(Game.GetLocalPlayer())
         
-        -- Record state-action-nextstate transition
-        index = index + 1
-        table.insert(m_gameHistory.transitions, {
-            turn = m_currentGameTurn,
-            index = index,
-            action = {
-                type = actionType,
-                params = actionParams
-            },
-            state = currentState,
-            next_state = nextState
-        })
+--         -- Record state-action-nextstate transition
+--         index = index + 1
+--         table.insert(m_gameHistory.transitions, {
+--             turn = m_currentGameTurn,
+--             index = index,
+--             action = {
+--                 type = actionType,
+--                 params = actionParams
+--             },
+--             state = currentState,
+--             next_state = nextState
+--         })
         
-        -- Update possible actions
-        possibleActions = GetPossibleActions()
-        if not possibleActions then return end
-    else
-        print("NO ACTION SELECTED, NOT EVEN ENDTURN, SOMETHING WENT WRONG. Force ending turn")
-        EndTurn(true) --we have no actions left, force end turn, but something must've gone wrong
-    end
-end -- end of while loop
+--         -- Update possible actions
+--         possibleActions = GetPossibleActions()
+--         if not possibleActions then return end
+--     else
+--         print("NO ACTION SELECTED, NOT EVEN ENDTURN, SOMETHING WENT WRONG. Force ending turn")
+--         EndTurn(true) --we have no actions left, force end turn, but something must've gone wrong
+--     end
+-- end -- end of while loop
 
 
 end
