@@ -219,6 +219,10 @@ function GetPlayerData(playerID)
     SciencePerTurn = player:GetTechs():GetScienceYield(),
     CulturePerTurn = player:GetCulture():GetCultureYield(),
     GoldPerTurn = player:GetTreasury():GetGoldYield(),
+    VictoryProgress = {
+        Science = Game.GetVictoryProgressForTeam(GameInfo.Victories["VICTORY_TECHNOLOGY"].Index, player:GetTeam()),
+        Culture = Game.GetVictoryProgressForTeam(GameInfo.Victories["VICTORY_CULTURE"].Index, player:GetTeam())
+    },
     maintenance = player:GetTreasury():GetTotalMaintenance(),
     DiplomaticStatuses = GetDiplomaticStatuses(player), -- Check if at war with any major civ
     CityStates = GetCityStatesInfo(playerID),
@@ -675,7 +679,7 @@ end
   end
   
 
-  function PrintPlayerSummary(data)
+function PrintPlayerSummary(data)
     if not data then
         print("No player data available")
         return
