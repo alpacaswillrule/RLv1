@@ -270,7 +270,6 @@ function RLv1.OnTurnEnd()
     end
 end
 
-
 -- Get player's team ID
 function GetPlayerTeamID(playerID)
     if playerID ~= nil and playerID >= 0 then
@@ -282,16 +281,37 @@ function GetPlayerTeamID(playerID)
     return -1;
 end
 
--- Enhanced auto restart with confirmation
-function AutoRestartGame()
-    SaveGameWithHistory()
-    if not AUTO_RESTART_ENABLED then return end;
+local g_Timer = 0
+local g_RestartDelay = 15  -- 15 second delay
 
-    print("Initiating game restart...");
-    Network.RestartGame();
-    Automation.SetAutoStartEnabled(true);
+local function StopRestartTimer()
+    Events.GameCoreEventPublishComplete.Remove(CheckRestartTimer)
 end
 
+local RestartOperation = coroutine.create(function()
+    SaveGameWithHistory()
+    if not AUTO_RESTART_ENABLED then return end
+    
+    print("Game will restart in " .. tostring(g_RestartDelay) .. " seconds...")
+    g_Timer = Automation.GetTime()
+    coroutine.yield()
+    
+    print("Initiating game restart...")
+    Network.RestartGame()
+    Automation.SetAutoStartEnabled(true)
+    StopRestartTimer()
+end)
+
+function CheckRestartTimer()
+    if Automation.GetTime() >= g_Timer + g_RestartDelay then
+        coroutine.resume(RestartOperation)
+    end
+end
+
+function AutoRestartGame()
+    Events.GameCoreEventPublishComplete.Add(CheckRestartTimer)
+    coroutine.resume(RestartOperation)
+end
 -- Handle team victory events
 function OnTeamVictory(team, victory, eventID)
     local localPlayer = Game.GetLocalPlayer();
