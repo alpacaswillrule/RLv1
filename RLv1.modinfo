@@ -18,7 +18,9 @@
     <ImportFiles id="RLv1_Files">
       <File>civobvRL.lua</File>
       <File>civactionsRL.lua</File>
-      <File>RL_heur_methods.lua</File>
+      <File>RL_Policy.lua</File>
+      <File>RL_Value.lua</File>
+      <File>RL_Update.lua</File>
       <File>popupannhilator.lua</File>
       <File>PopupManager.lua</File>
       <File>PopupDialog.lua</File>
@@ -43,7 +45,9 @@
     <File>civactionsRL.lua</File>
     <File>civobvRL.lua</File>
     <File>popupannhilator.lua</File>
-    <File>RL_heur_methods.lua</File>
+    <File>RL_Policy.lua</File>
+    <File>RL_Value.lua</File>
+    <File>RL_Update.lua</File>
     <File>PopupManager.lua</File>
     <File>PopupDialog.lua</File>
     <File>TutorialUIRoot.lua</File>

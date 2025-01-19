@@ -7,24 +7,24 @@ RLv1 = {};
 -- Then our mod files
 include("civobvRL");
 include("civactionsRL");
-include("RL_heur_methods")
+include("RL_Policy")
 include("rewardFunction")
 local m_isAgentEnabled = true; -- Default to disabled
 
 local m_todayGameCount = 0  -- Track number of games saved today
 
 -- Helper function to get today's date as number
-function GetTodayDate()
+function GetTodayHour()
     -- Get current real-world date
     local date = os.date("*t")
-    return date.day
+    return date.hour
 end
 
 -- Function to generate save game name
 function GenerateGameSaveName()
-    local day = GetTodayDate()
+    local hour = GetTodayHour()
     m_todayGameCount = m_todayGameCount + 1
-    return string.format("rl_game_%d_%d", day, m_todayGameCount)
+    return string.format("rl_game_%d_%d", hour, m_todayGameCount)
 end
 
 local m_gameHistory = {
@@ -212,11 +212,8 @@ function InitializeRL()
     print("RLv1: Agent initialized successfully!");
 end
 
+
 function RLv1.OnTurnBegin()
-    print("=== TURN BEGIN FUNCTION START ===")
-    if not m_isInitialized or not m_isAgentEnabled then return end
-    
-    m_currentGameTurn = Game.GetCurrentGameTurn()
     
     local possibleActions = GetPossibleActions()
     if not possibleActions then return end
