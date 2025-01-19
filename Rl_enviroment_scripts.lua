@@ -9,8 +9,66 @@ include("civobvRL");
 include("civactionsRL");
 include("RL_heur_methods")
 include("rewardFunction")
-local m_pendingPopupDismissals = {}
-local m_isAgentEnabled = false; -- Default to disabled
+local m_isAgentEnabled = true; -- Default to disabled
+
+local m_todayGameCount = 0  -- Track number of games saved today
+
+-- Helper function to get today's date as number
+function GetTodayDate()
+    -- Get current real-world date
+    local date = os.date("*t")
+    return date.day
+end
+
+-- Function to generate save game name
+function GenerateGameSaveName()
+    local day = GetTodayDate()
+    m_todayGameCount = m_todayGameCount + 1
+    return string.format("rl_game_%d_%d", day, m_todayGameCount)
+end
+
+local m_gameHistory = {
+    transitions = {}, -- Will store {state, action, next_state} tuples
+    episode_number = 0,
+    victory_type = nil,
+    total_turns = 0
+}
+
+function SaveGameWithHistory()
+    local gameFile = {};
+    gameFile.Name = GenerateGameSaveName();
+    gameFile.Location = SaveLocations.LOCAL_STORAGE;
+    gameFile.Type = Network.GetGameConfigurationSaveType();
+    gameFile.IsAutosave = false;
+    gameFile.IsQuicksave = false;
+    
+    -- Attach our history to the game configuration
+    GameConfiguration.SetValue("RL_HISTORY", m_gameHistory);
+    
+    Network.SaveGame(gameFile);
+end
+
+-- Load history from a saved game
+function LoadGameWithHistory(saveName)
+    local loadParams = {
+        Name = saveName,
+        Location = SaveLocations.LOCAL_STORAGE,
+        Type = SaveTypes.SINGLE_PLAYER,
+        IsAutosave = false,
+        IsQuicksave = false
+    };
+    
+    -- Load the game
+    if Network.LoadGame(loadParams, ServerType.SERVER_TYPE_NONE) then
+        -- Retrieve our history from the game configuration
+        local history = GameConfiguration.GetValue("RL_HISTORY");
+        if history then
+            m_gameHistory = history;
+            return true;
+        end
+    end
+    return false;
+end
 
 
 function RLv1.ToggleAgent()
@@ -153,74 +211,51 @@ function InitializeRL()
     SendRLNotification("Agent initialized successfully!");
     print("RLv1: Agent initialized successfully!");
 end
+
 function RLv1.OnTurnBegin()
     print("=== TURN BEGIN FUNCTION START ===")
-
-    local playerState = GetPlayerData(Game.GetLocalPlayer())
-    --PrintPlayerSummary(playerState)
-    PrintPlayerUnitsAndCities(playerState)
-    --PrintTileDataSummary(playerState.VisibleTiles,playerState.revealedTiles)
+    if not m_isInitialized or not m_isAgentEnabled then return end
     
-    if not m_isInitialized then 
-        print("Not initialized, returning")
-        return
-    end
-    if not m_isAgentEnabled then
-        print("Agent not enabled, returning")
-        return
-    end
+    m_currentGameTurn = Game.GetCurrentGameTurn()
     
-    m_currentGameTurn = Game.GetCurrentGameTurn();
-
-    SendRLNotification("Turn " .. tostring(m_currentGameTurn) .. " beginning");
-    print("RL Turn " .. tostring(m_currentGameTurn) .. " Begin");
-
     local possibleActions = GetPossibleActions()
+    if not possibleActions then return end
     
-    if not possibleActions then
-        print("No possible actions available")
-        return
-    end
-    
-    -- Use the prioritized action selector
-    local numActionsToTake = 4 --math.random(4, 9)
-    print("Planning to take " .. numActionsToTake .. " actions")
+    local numActionsToTake = 4
     
     for i = 1, numActionsToTake do
-        print("Starting action iteration " .. i)
+        -- Get state before action
+        local currentState = GetPlayerData(Game.GetLocalPlayer())
         
         local actionType, actionParams = SelectPrioritizedAction(possibleActions)
-        
         if actionType then
-            print("Selected action:", actionType)
-            --print("Action params:", actionParams and table.concat(actionParams, ", ") or "nil")
-            
+            -- Execute action
             RLv1.ExecuteAction(actionType, actionParams)
-            print("Action execution completed")
             
-            -- Update possible actions after each execution to maintain accuracy
-            possibleActions = {} --RESET POSSIBLE ACTIONS
-            ContextPtr:RequestRefresh()
+            -- Get state after action
+            local nextState = GetPlayerData(Game.GetLocalPlayer())
+            
+            -- Record state-action-nextstate transition
+            table.insert(m_gameHistory.transitions, {
+                turn = m_currentGameTurn,
+                action = {
+                    type = actionType,
+                    params = actionParams
+                },
+                state = currentState,
+                next_state = nextState
+            })
+            
+            -- Update possible actions
             possibleActions = GetPossibleActions()
-            
-            if not possibleActions then 
-                print("No more possible actions after update")
-                break 
-            end
+            if not possibleActions then break end
         else
-            print("No action selected, breaking loop")
             break
         end
-        
-        print("Completed action iteration " .. i)
     end
 
-    print("Action loop complete, ending turn")
-    -- Always end turn after taking actions
-    EndTurn();
-    print("=== TURN BEGIN FUNCTION END ===")
+    EndTurn()
 end
-
 
 
 -- -- Register our load handler
@@ -249,8 +284,9 @@ end
 
 -- Enhanced auto restart with confirmation
 function AutoRestartGame()
+    SaveGameWithHistory()
     if not AUTO_RESTART_ENABLED then return end;
-    
+
     print("Initiating game restart...");
     Network.RestartGame();
     Automation.SetAutoStartEnabled(true);
@@ -279,5 +315,105 @@ function OnPlayerDefeat(player, defeat, eventID)
                 player, defeat));
             AutoRestartGame();
         end
+    end
+end
+
+-- Example analysis function
+function AnalyzeGameHistory(saveName)
+    if LoadGameWithHistory(saveName) then
+        print("Loaded game history:")
+        print("Episodes:", m_gameHistory.episode_number)
+        print("Total turns:", m_gameHistory.total_turns)
+        print("Victory type:", m_gameHistory.victory_type)
+        print("Total transitions:", #m_gameHistory.transitions)
+        
+        -- Analyze actions taken
+        local actionCounts = {}
+        for _, transition in ipairs(m_gameHistory.transitions) do
+            actionCounts[transition.action.type] = (actionCounts[transition.action.type] or 0) + 1
+        end
+        
+        print("\nAction distribution:")
+        for actionType, count in pairs(actionCounts) do
+            print(actionType .. ":", count)
+        end
+    end
+end
+
+-- Load all games from a specific day
+function LoadAllGamesFromDay(day)
+    local histories = {}
+    local index = 1
+    
+    -- Try loading games until we fail to find one
+    while true do
+        local saveName = string.format("rl_game_%d_%d", day, index)
+        local loadParams = {
+            Name = saveName,
+            Location = SaveLocations.LOCAL_STORAGE,
+            Type = SaveTypes.SINGLE_PLAYER,
+            IsAutosave = false,
+            IsQuicksave = false
+        };
+        
+        if Network.LoadGame(loadParams, ServerType.SERVER_TYPE_NONE) then
+            local history = GameConfiguration.GetValue("RL_HISTORY")
+            if history then
+                table.insert(histories, history)
+                print("Loaded game: " .. saveName)
+            end
+            index = index + 1
+        else
+            break  -- No more games found for this day
+        end
+    end
+    
+    print(string.format("Loaded %d games from day %d", #histories, day))
+    return histories
+end
+
+-- Reset game counter at start of new day
+function CheckAndResetDayCounter()
+    -- Store last checked date in game configuration to persist between sessions
+    local lastCheckedDay = GameConfiguration.GetValue("LAST_CHECKED_DAY")
+    local today = GetTodayDate()
+    
+    if lastCheckedDay ~= today then
+        m_todayGameCount = 0
+        GameConfiguration.SetValue("LAST_CHECKED_DAY", today)
+    end
+end
+
+function AnalyzeGamesFromDay(day)
+    local histories = LoadAllGamesFromDay(day)
+    
+    print("\n=== Analysis of Games from Day " .. day .. " ===")
+    print("Total games:", #histories)
+    
+    -- Aggregate statistics across all games
+    local totalTurns = 0
+    local victories = {}
+    local actionCounts = {}
+    
+    for _, history in ipairs(histories) do
+        totalTurns = totalTurns + history.total_turns
+        victories[history.victory_type] = (victories[history.victory_type] or 0) + 1
+        
+        -- Count actions
+        for _, transition in ipairs(history.transitions) do
+            actionCounts[transition.action.type] = (actionCounts[transition.action.type] or 0) + 1
+        end
+    end
+    
+    -- Print statistics
+    print("\nAverage turns per game:", totalTurns / #histories)
+    print("\nVictory types:")
+    for type, count in pairs(victories) do
+        print(type .. ":", count)
+    end
+    
+    print("\nMost common actions:")
+    for actionType, count in pairs(actionCounts) do
+        print(actionType .. ":", count)
     end
 end
