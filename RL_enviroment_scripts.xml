@@ -28,7 +28,7 @@
                            Style="FontNormal16"
                            Color="200,200,200,255"
                            Anchor="L,C" 
-                           String="[ICON_Turn] RL Agent: OFF"
+                           String="[ICON_Turn] RL Agent: ON"
                            WrapWidth="120"/>
                 </Stack>
                 
