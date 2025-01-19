@@ -158,7 +158,7 @@ function InitializeRL()
     -- Load the XML context first
     print("RL: Loading XML context...");
     local success = pcall(function()
-        ContextPtr:LoadNewContext("RLEnvironment");
+        ContextPtr:LoadNewContext("Rl_enviroment_scripts");
     end)
     
     if not success then
@@ -223,7 +223,7 @@ function RLv1.OnTurnBegin()
     for i = 1, numActionsToTake do
         -- Get state before action
         local currentState = GetPlayerData(Game.GetLocalPlayer())
-        
+        print(CalculateReward(currentState))
         local actionType, actionParams = SelectPrioritizedAction(possibleActions)
         if actionType then
             -- Execute action
