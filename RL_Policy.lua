@@ -201,22 +201,32 @@ function SelectPrioritizedAction(possibleActions)
     -- end
 
     -- Priority 8: Any remaining action (random selection)
-    local availableActions = {}
+
+    
+        -- If there are any actions available, select one randomly
+      return SelectRandomAction(possibleActions);
+end
+
+function SelectRandomAction(possibleActions)
+    -- Get list of action types that have available actions
+    local availableActionTypes = {}
     for actionType, actions in pairs(possibleActions) do
         if type(actions) == "table" and #actions > 0 then
-            table.insert(availableActions, {type = actionType, action = actions[math.random(#actions)]})
+            table.insert(availableActionTypes, actionType) 
         end
     end
 
-    if #availableActions > 0 then
-        local randomAction = availableActions[math.random(#availableActions)]
-        return randomAction.type, randomAction.action
+    -- If no actions, return EndTurn
+    if #availableActionTypes == 0 then
+        return "EndTurn", {}
     end
 
-    -- No actions available
-    return nil, nil
+    -- Pick random action type and random action from that type
+    local actionType = availableActionTypes[math.random(#availableActionTypes)]
+    local actionParams = possibleActions[actionType][math.random(#possibleActions[actionType])]
+    
+    return actionType, actionParams
 end
-
 
 
 -- Example usage:
