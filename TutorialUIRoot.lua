@@ -2143,10 +2143,12 @@ function OnDiplomacyStatement(actingPlayer, reactingPlayer, values)
 	-- TODO(asherburne): Ensure values["StatementType"] == DENOUNCE
 	print("diplo stmt type="..values["StatementType"])
     if m_isAgentEnabled then
+		print("diplo smt close attempt1")
         CloseDiplomacyPopups()
     end
-	TutorialCheck("DiplomacyStatement")
+	TutorialCheck("DiplomacyStatementat2")
     if m_isAgentEnabled then
+		print("diplo smt close")
         CloseDiplomacyPopups()
     end
 end
