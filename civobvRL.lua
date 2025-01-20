@@ -57,7 +57,7 @@ function GetVisibleTileData(playerID)
     print("GetVisibleTileData: Starting for player: " .. tostring(playerID))
     
     local visibleTiles = {}
-    local revealedTiles = {}
+    local RevealedTiles = {}
     local player = Players[playerID]
     if not player then
         print("GetVisibleTileData: Error - Invalid player")
@@ -126,7 +126,7 @@ function GetVisibleTileData(playerID)
                 end
                 
                 if isRevealed and not isVisible then -- Only count as revealed if not visible
-                    table.insert(revealedTiles, tileData)
+                    table.insert(RevealedTiles, tileData)
                     revealedCount = revealedCount + 1
                 end
             end
@@ -134,7 +134,7 @@ function GetVisibleTileData(playerID)
     end
     
     print(string.format("GetVisibleTileData: Found %d visible tiles and %d revealed (but not visible) tiles", visibleCount, revealedCount))
-    return visibleTiles, revealedTiles
+    return visibleTiles, RevealedTiles
 end
 
 
@@ -209,7 +209,7 @@ function GetPlayerData(playerID)
     --print("GetPlayerData: Player not found.")
     return nil 
   end
-  local visibleTiles, revealedTiles = GetVisibleTileData(Game.GetLocalPlayer())
+  local visibleTiles, RevealedTiles = GetVisibleTileData(Game.GetLocalPlayer())
 
   local data = {
     Gold = player:GetTreasury():GetGoldBalance(),
@@ -227,7 +227,7 @@ function GetPlayerData(playerID)
     DiplomaticStatuses = GetDiplomaticStatuses(player), -- Check if at war with any major civ
     CityStates = GetCityStatesInfo(playerID),
     VisibleTiles = visibleTiles,
-    revealedTiles = revealedTiles,
+    RevealedTiles = RevealedTiles,
     Cities = {}, -- Add city data using GetCityData()
     Units = {},  -- Add unit data using GetUnitData()
     TechsResearched = {},
@@ -821,10 +821,10 @@ end
 --end of function
 end
 
-function PrintTileDataSummary(visibleTiles, revealedTiles)
+function PrintTileDataSummary(visibleTiles, RevealedTiles)
     print("\n=== TILE VISIBILITY SUMMARY ===")
     print(string.format("Total Visible Tiles: %d", #visibleTiles))
-    print(string.format("Total Revealed (but not visible) Tiles: %d", #revealedTiles))
+    print(string.format("Total Revealed (but not visible) Tiles: %d", #RevealedTiles))
     
     -- Function to analyze tiles
     local function analyzeTiles(tiles, description)
@@ -912,7 +912,7 @@ function PrintTileDataSummary(visibleTiles, revealedTiles)
     end
     
     if #visibleTiles > 0 then analyzeTiles(visibleTiles, "VISIBLE")
-    if #revealedTiles > 0 then analyzeTiles(revealedTiles, "REVEALED")
+    if #RevealedTiles > 0 then analyzeTiles(RevealedTiles, "REVEALED")
 end
 end
 end
