@@ -161,11 +161,11 @@ function RLv1.OnTurnBegin()
 
     m_currentGameTurn = Game.GetCurrentGameTurn();
     print("RLv1.OnTurnBegin: Turn " .. m_currentGameTurn .. " started");
-    
+
     while true do
         local possibleActions = GetPossibleActions()
         local currentState = GetPlayerData(Game.GetLocalPlayer())
-        local actionType, actionParams = SelectPrioritizedAction(possibleActions)
+        
     if actionType == "ENDTURN" then
         EndTurn(true)
         break
@@ -280,6 +280,90 @@ function OnPlayerDefeat(player, defeat, eventID)
     end
 end
 
+function OnResearchChanged(playerID)
+    -- Only process for local player
+    if playerID ~= Game.GetLocalPlayer() then 
+        return
+    end
+
+    print("=== OnResearchChanged: Research Change Detected ===")
+
+    -- 1. Get and Encode Game State
+    local currentState = GetPlayerData(playerID)
+    local encodedState = EncodeGameState(currentState)
+    print("Encoded State Size:", #encodedState)
+
+    -- 2. Initialize Policy Network (if not already initialized)
+    if not CivTransformerPolicy.isInitialized then
+        CivTransformerPolicy:Init()
+        CivTransformerPolicy.isInitialized = true
+        print("CivTransformerPolicy initialized.")
+    end
+
+    -- 3. Perform Forward Pass
+    local possibleActions = GetPossibleActions() -- You might want to modify this to return a simplified structure for testing
+    local action_type_probs, action_params_probs, value = CivTransformerPolicy:Forward(encodedState, possibleActions)
+
+    -- 4. Print Outputs for Debugging
+    print("=== Forward Pass Outputs ===")
+    --print("Action Type Probabilities:", action_type_probs) -- Might be large, depending on the number of action types
+    --print("Action Parameter Probabilities:", action_params_probs) -- Might be large
+    print("Value:", value)
+
+    -- 5. Test Matrix Operations (Optional)
+    print("=== Testing Matrix Operations ===")
+    local testMatrix = matrix:new(3, 3, 2) -- Create a 3x3 matrix filled with 2s
+    local testMatrix2 = matrix:new({{1, 2, 3}, {4, 5, 6}, {7, 8, 9}})
+    print("Test Matrix 1:")
+    testMatrix:print()
+    print("Test Matrix 2:")
+    testMatrix2:print()
+
+    local sumMatrix = matrix.add(testMatrix, testMatrix2)
+    print("Sum of Matrices:")
+    sumMatrix:print()
+
+    local mulMatrix = matrix.mulnum(testMatrix, 5)
+    print("Matrix Multiplied by 5:")
+    mulMatrix:print()
+
+    local transposedMatrix = matrix.transpose(testMatrix2)
+    print("Transposed Matrix:")
+    transposedMatrix:print()
+
+    -- 6. Test Attention Mechanism (Optional)
+    print("=== Testing Attention Mechanism (Placeholder) ===")
+    -- This is just a placeholder to remind you that you can add specific tests for the attention mechanism here
+    -- You'd need to create dummy query, key, value matrices and potentially a mask
+    -- Then, call the CivTransformerPolicy:Attention function and print the output
+    -- Example (you'll need to adjust dimensions to match your model):
+    local query = matrix:new(1, TRANSFORMER_DIM)
+    local key = matrix:new(5, TRANSFORMER_DIM)  -- 5 is an example sequence length
+    local value = matrix:new(5, TRANSFORMER_DIM)
+    local mask = nil -- Or create a test mask
+
+    -- Fill matrices with some dummy values
+    for i = 1, query:rows() do
+        for j = 1, query:columns() do
+            query:setelement(i, j, math.random())
+        end
+    end
+
+    for i = 1, key:rows() do
+        for j = 1, key:columns() do
+            key:setelement(i, j, math.random())
+            value:setelement(i, j, math.random())
+        end
+    end
+    
+    local attention_output = CivTransformerPolicy:Attention(query, key, value, mask)
+    print("Attention Output (Size): ", attention_output:size()[1], "x", attention_output:size()[2])
+    --print("Attention Output:") -- This might print a large matrix
+    --attention_output:print()
+end
+
+-- Register the event handler
+Events.ResearchQueueChanged.Add(OnResearchChanged)
 
 
 

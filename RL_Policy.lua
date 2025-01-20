@@ -23,6 +23,30 @@ local TRANSFORMER_DIM = 512 -- Dimension of the transformer model
 local TRANSFORMER_HEADS = 8 -- Number of attention heads
 local TRANSFORMER_LAYERS = 4 -- Number of transformer layers
 
+
+function tableToMatrix(tbl)
+    local rows = #tbl
+    local cols = #tbl[1]  -- Assumes all rows have the same number of columns
+    local mtx = matrix:new(rows, cols)
+    for i = 1, rows do
+        for j = 1, cols do
+            mtx:setelement(i, j, tbl[i][j])
+        end
+    end
+    return mtx
+end
+
+function matrixToTable(mtx)
+    local rows, cols = mtx:size()
+    local tbl = {}
+    for i = 1, rows do
+        tbl[i] = {}
+        for j = 1, cols do
+            tbl[i][j] = mtx:getelement(i, j)
+        end
+    end
+    return tbl
+end
 -- Helper function to normalize values to [0,1] range
 function Normalize(value, maxValue)
     if maxValue == 0 then return 0 end
@@ -412,13 +436,11 @@ STATE_EMBED_SIZE = 7 -- Global stats
                    + 5 * MAX_CITIES -- Spatial relations for cities (assuming 5 values per city)
                    + 4 * MAX_UNITS; -- Spatial relations for units (assuming 4 values per unit)
 
--- Placeholder for the Transformer Policy Network
 CivTransformerPolicy = {}
 
 -- 1. State Embedding Layer (Initialization)
 function CivTransformerPolicy:InitStateEmbedding()
     -- Initialize weights for the state embedding layer
-    -- This is a placeholder. In a real implementation, you'd initialize with random values.
     self.state_embedding_weights = {}
     for i = 1, STATE_EMBED_SIZE do
         self.state_embedding_weights[i] = {}
@@ -460,38 +482,170 @@ function CivTransformerPolicy:AddPositionalEncoding(state_embedding)
     return position_encoded_embedding
 end
 
--- 3. Attention Mechanism (Placeholder)
+
+-- Scaled Dot-Product Attention
 function CivTransformerPolicy:Attention(query, key, value, mask)
-    -- Placeholder for the attention mechanism
-    -- This is where you'd calculate attention scores and apply the mask
-    return value -- Placeholder: just returning the value for now
+    -- 1. Calculate Attention Scores:
+    
+    -- Transpose the key matrix for multiplication
+    local key_T = matrix.transpose(key)
+
+    -- Perform matrix multiplication between query and transposed key
+    local attention_scores = matrix.mul(query, key_T)
+
+    -- Scale the attention scores by dividing by the square root of the key dimension (d_k)
+    local d_k = key:size()[2] -- Get the number of columns in the key matrix
+    attention_scores = matrix.divnum(attention_scores, math.sqrt(d_k))
+
+    -- 2. Apply Mask (if provided):
+    if mask then
+        -- Add the mask to the attention scores (-Infinity or very large negative values at masked positions)
+        -- Assuming the mask is a table with the same dimensions as attention_scores
+        for i = 1, #attention_scores do
+            for j = 1, #attention_scores[1] do
+                if mask[i][j] then  -- Assuming 'true' in the mask means the position should be masked
+                    attention_scores[i][j] = -1e9 -- Use a large negative number to represent -Infinity
+                end
+            end
+        end
+    end
+
+    -- 3. Calculate Attention Probabilities (Softmax):
+    local attention_probabilities = matrix.softmax(attention_scores)
+    -- 4. Calculate Weighted Value:
+    local weighted_value = matrix.mul(attention_probabilities, value)
+    -- 5. Return the weighted value (convert back to Lua table for further processing)
+    return weighted_value
 end
 
--- 4. Feedforward Neural Network (Placeholder)
+-- Multi-Head Attention
+function CivTransformerPolicy:MultiHeadAttention(query, key, value, mask, num_heads)
+    local d_k = query:size()[2] / num_heads
+
+    -- 1. Linearly project query, key, and value into 'num_heads' different representations.
+    local query_projections = {}
+    local key_projections = {}
+    local value_projections = {}
+
+    for i = 1, num_heads do
+        -- Generate random projection matrices for each head
+        -- These would normally be learned parameters, but for simplicity, we use random matrices
+        local w_q = matrix.random(matrix:new(d_k, d_k))
+        local w_k = matrix.random(matrix:new(d_k, d_k))
+        local w_v = matrix.random(matrix:new(d_k, d_k))
+
+        -- Apply linear projections
+        table.insert(query_projections, matrix.mul(query, w_q))
+        table.insert(key_projections, matrix.mul(key, w_k))
+        table.insert(value_projections, matrix.mul(value, w_v))
+    end
+
+    -- 2. Apply Scaled Dot-Product Attention to each head.
+    local attention_outputs = {}
+    for head_index = 1, num_heads do
+        local head_output = self:Attention(query_projections[head_index],
+                                           key_projections[head_index],
+                                           value_projections[head_index],
+                                           mask)
+        table.insert(attention_outputs, head_output)
+    end
+
+    -- 3. Concatenate the outputs of all heads.
+    local concatenated_attention = attention_outputs[1]
+    for head_index = 2, num_heads do
+        concatenated_attention = matrix.concath(concatenated_attention, attention_outputs[head_index])
+    end
+
+    -- 4. Apply a final linear projection to the concatenated output.
+    -- This would also be a learned parameter matrix in a full implementation
+    local w_o = matrix.random(matrix:new(concatenated_attention:size()[2], TRANSFORMER_DIM)) 
+    local final_output = matrix.mul(concatenated_attention, w_o)
+
+    return final_output
+end
+
 function CivTransformerPolicy:Feedforward(input)
-    -- Placeholder for a feedforward network
-    -- This would involve a couple of linear layers with an activation function
-    return input -- Placeholder: just returning the input
+    -- Convert input table to matrix
+    local input_mtx = tableToMatrix(input)
+
+    -- Define dimensions
+    local d_model = input_mtx:size()[2] -- Number of columns (embedding dimension)
+    local d_ff = 2048  -- Hidden dimension of the feedforward network (can be a hyperparameter)
+
+    -- Initialize weights and biases for the two linear layers (randomly for now)
+    -- In a real implementation, these would be learned parameters
+    local w1 = matrix.random(matrix:new(d_model, d_ff))
+    local b1 = matrix.random(matrix:new(1, d_ff))
+    local w2 = matrix.random(matrix:new(d_ff, d_model))
+    local b2 = matrix.random(matrix:new(1, d_model))
+
+    -- First linear layer + ReLU activation
+    local layer1_output = matrix.add(matrix.mul(input_mtx, w1), matrix.repmat(b1, input_mtx:size()[1], 1)) -- Broadcasting b1
+    layer1_output = matrix.relu(layer1_output)
+
+    -- Second linear layer
+    local layer2_output = matrix.add(matrix.mul(layer1_output, w2), matrix.repmat(b2, input_mtx:size()[1], 1)) -- Broadcasting b2
+    
+    -- Convert the output matrix back to a table
+    local output_tbl = matrixToTable(layer2_output)
+
+    return output_tbl
+end
+-- Helper function for layer normalization (simplified for now)
+function CivTransformerPolicy:LayerNorm(input_mtx)
+    local epsilon = 1e-6 -- Small constant for numerical stability
+
+    -- Calculate the mean and variance for each row in the matrix
+    local means = {}
+    local variances = {}
+    for i = 1, input_mtx:rows() do
+        local sum = 0
+        local sum_sq = 0
+        for j = 1, input_mtx:columns() do
+            local val = input_mtx:getelement(i, j)
+            sum = sum + val
+            sum_sq = sum_sq + val * val
+        end
+        table.insert(means, sum / input_mtx:columns())
+        table.insert(variances, sum_sq / input_mtx:columns() - means[i] * means[i])
+    end
+
+    -- Normalize the matrix
+    local normalized_mtx = matrix:new(input_mtx:rows(), input_mtx:columns())
+    for i = 1, input_mtx:rows() do
+        for j = 1, input_mtx:columns() do
+            normalized_mtx:setelement(i, j, (input_mtx:getelement(i, j) - means[i]) / math.sqrt(variances[i] + epsilon))
+        end
+    end
+
+    return normalized_mtx
 end
 
--- 5. Transformer Layer (Placeholder)
+-- 5. Transformer Layer (Complete with Feedforward, Residual Connections, and Layer Normalization)
 function CivTransformerPolicy:TransformerLayer(input, mask)
-    -- Applying attention
-    attention_output = self:Attention(input, input, input, mask)
-    
-    -- Add & Norm (simplified, no residual connection or normalization for now)
-    add_norm_output_1 = attention_output -- In reality, you'd add input to attention_output and normalize
-    
-    -- Applying feedforward network
-    ff_output = self:Feedforward(add_norm_output_1)
-    
-    -- Add & Norm (again, simplified)
-    add_norm_output_2 = ff_output -- In reality, you'd add add_norm_output_1 to ff_output and normalize
+    -- Convert input table to matrix
+    local input_mtx = tableToMatrix(input)
 
-    return add_norm_output_2
+    -- Multi-Head Self-Attention
+    local attention_output = self:MultiHeadAttention(input_mtx, input_mtx, input_mtx, mask, TRANSFORMER_HEADS)
+
+    -- Add & Norm (Residual Connection and Layer Normalization)
+    local add_norm_output_1 = self:LayerNorm(matrix.add(input_mtx, attention_output))
+
+    -- Feedforward Network
+    local ff_output_tbl = self:Feedforward(matrixToTable(add_norm_output_1)) 
+    local ff_output_mtx = tableToMatrix(ff_output_tbl)
+
+    -- Add & Norm (Residual Connection and Layer Normalization)
+    local add_norm_output_2 = self:LayerNorm(matrix.add(add_norm_output_1, ff_output_mtx))
+
+    -- Convert the output matrix back to a table
+    local output_tbl = matrixToTable(add_norm_output_2)
+
+    return output_tbl
 end
 
--- 6. Transformer Encoder (Placeholder)
+-- 6. Transformer Encoder 
 function CivTransformerPolicy:TransformerEncoder(input, mask)
     local encoder_output = input
     for i = 1, TRANSFORMER_LAYERS do
