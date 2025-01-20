@@ -159,52 +159,45 @@ function RLv1.OnTurnBegin()
     --print
     print("Reward: ", reward)
 
-
---     m_currentGameTurn = Game.GetCurrentGameTurn();
---     print("RLv1.OnTurnBegin: Turn " .. m_currentGameTurn .. " started");
---     --if we have hit turn limit, restart game
---     if m_currentGameTurn >= TURN_LIMIT then
---         print("Turn limit reached at turn " .. m_currentGameTurn .. ". Initiating restart...");
---         AutoRestartGame();
---         return;
---     end
-
---     while true do
---         local possibleActions = GetPossibleActions()
---         local currentState = GetPlayerData(Game.GetLocalPlayer())
---         local actionType, actionParams = SelectPrioritizedAction(possibleActions)
---     if actionType == "ENDTURN" then
---         EndTurn(true)
---         break
---     elseif actionType then
---         -- Execute action
---         RLv1.ExecuteAction(actionType, actionParams)
+    m_currentGameTurn = Game.GetCurrentGameTurn();
+    print("RLv1.OnTurnBegin: Turn " .. m_currentGameTurn .. " started");
+    
+    while true do
+        local possibleActions = GetPossibleActions()
+        local currentState = GetPlayerData(Game.GetLocalPlayer())
+        local actionType, actionParams = SelectPrioritizedAction(possibleActions)
+    if actionType == "ENDTURN" then
+        EndTurn(true)
+        break
+    elseif actionType then
+        -- Execute action
+        RLv1.ExecuteAction(actionType, actionParams)
         
---         -- Get state after action
---         local nextState = GetPlayerData(Game.GetLocalPlayer())
+        -- Get state after action
+        local nextState = GetPlayerData(Game.GetLocalPlayer())
         
---         -- Record state-action-nextstate transition
---         index = index + 1
---         table.insert(m_gameHistory.transitions, {
---             turn = m_currentGameTurn,
---             index = index,
---             action = {
---                 type = actionType,
---                 params = actionParams
---             },
---             state = currentState,
---             next_state = nextState
---         })
+        -- Record state-action-nextstate transition
+        index = index + 1
+        table.insert(m_gameHistory.transitions, {
+            turn = m_currentGameTurn,
+            index = index,
+            action = {
+                type = actionType,
+                params = actionParams
+            },
+            state = currentState,
+            next_state = nextState
+        })
         
---         -- Update possible actions
---         possibleActions = GetPossibleActions()
---         if not possibleActions then return end
---     else
---         print("NO ACTION SELECTED, NOT EVEN ENDTURN, SOMETHING WENT WRONG. Force ending turn")
---         EndTurn(true) --we have no actions left, force end turn, but something must've gone wrong
---         break
---     end
--- end -- end of while loop
+        -- Update possible actions
+        possibleActions = GetPossibleActions()
+        if not possibleActions then return end
+    else
+        print("NO ACTION SELECTED, NOT EVEN ENDTURN, SOMETHING WENT WRONG. Force ending turn")
+        EndTurn(true) --we have no actions left, force end turn, but something must've gone wrong
+        break
+    end
+end -- end of while loop
 end
 
 
@@ -290,7 +283,6 @@ end
 
 
 
-
 -- function OnResearchChanged(playerID)
 --     -- Only process for local player
 --     if playerID ~= Game.GetLocalPlayer() then 
@@ -331,17 +323,8 @@ end
 --         -- Print some state info from the first transition
 --         if #loadedHistory.transitions > 0 then
 --             local state = loadedHistory.transitions[1].state
---             print("\nState Summary:")
---             print("Gold: " .. tostring(state.Gold))
---             print("Science Per Turn: " .. tostring(state.SciencePerTurn))
---             print("Culture Per Turn: " .. tostring(state.CulturePerTurn))
---             print("Number of Cities: " .. tostring(#state.Cities))
---             print("Number of Units: " .. tostring(#state.Units))
-            
---             -- Print victory progress
---             print("\nVictory Progress:")
---             print("Science Victory: " .. tostring(state.VictoryProgress.Science))
---             print("Culture Victory: " .. tostring(state.VictoryProgress.Culture))
+--             PrintPlayerSummary(state)
+--             PrintPlayerUnitsAndCities(state)
 --         end
 --     else
 --         print("Failed to load saved game state")
