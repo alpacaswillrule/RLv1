@@ -23,6 +23,83 @@ local TRANSFORMER_DIM = 512 -- Dimension of the transformer model
 local TRANSFORMER_HEADS = 8 -- Number of attention heads
 local TRANSFORMER_LAYERS = 4 -- Number of transformer layers
 
+-- Create embedding for a single unit
+function EncodeUnitState(unit)
+    local unitEmbed = {}
+    
+    -- Basic stats normalized to [0,1]
+    table.insert(unitEmbed, Normalize(unit.Combat or 0, 100))
+    table.insert(unitEmbed, Normalize(unit.RangedCombat or 0, 100))
+    table.insert(unitEmbed, Normalize(unit.BombardCombat or 0, 100))
+    table.insert(unitEmbed, Normalize(unit.Damage or 0, unit.MaxDamage or 100))
+    table.insert(unitEmbed, Normalize(unit.Moves, unit.MaxMoves))
+    table.insert(unitEmbed, Normalize(unit.Level, 10))
+    table.insert(unitEmbed, Normalize(unit.Experience, 100))
+    table.insert(unitEmbed, Normalize(unit.ActionCharges or 0, 5))
+    table.insert(unitEmbed, Normalize(unit.Position.X, 100)) -- Need to normalize based on map size
+    table.insert(unitEmbed, Normalize(unit.Position.Y, 100))
+
+    -- Pad to fixed size
+    while #unitEmbed < UNIT_EMBED_SIZE do
+        table.insert(unitEmbed, 0)
+    end
+    
+    return unitEmbed
+end
+
+function EncodeTileState(tile)
+    local tileEmbed = {}
+    
+    -- Basic tile info
+    table.insert(tileEmbed, tile.IsVisible and 1 or 0)
+    table.insert(tileEmbed, tile.IsWater and 1 or 0)
+    table.insert(tileEmbed, tile.IsImpassable and 1 or 0)
+    table.insert(tileEmbed, tile.IsCity and 1 or 0)
+    table.insert(tileEmbed, tile.IsPillaged and 1 or 0)
+    table.insert(tileEmbed, tile.IsWorked and 1 or 0)
+    table.insert(tileEmbed, Normalize(tile.Appeal, 10))
+    
+    -- Yields
+    table.insert(tileEmbed, Normalize(tile.Yields.Food, 10))
+    table.insert(tileEmbed, Normalize(tile.Yields.Production, 10))
+    table.insert(tileEmbed, Normalize(tile.Yields.Gold, 10))
+    table.insert(tileEmbed, Normalize(tile.Yields.Science, 5))
+    table.insert(tileEmbed, Normalize(tile.Yields.Culture, 5))
+    table.insert(tileEmbed, Normalize(tile.Yields.Faith, 5))
+    
+    -- Pad to fixed size
+    while #tileEmbed < TILE_EMBED_SIZE do
+        table.insert(tileEmbed, 0)
+    end
+    
+    return tileEmbed
+end
+
+function EncodeCityState(city)
+    local cityEmbed = {}
+    
+    -- Basic stats normalized to [0,1]
+    table.insert(cityEmbed, Normalize(city.Population, 20))
+    table.insert(cityEmbed, city.IsCapital and 1 or 0)
+    table.insert(cityEmbed, Normalize(city.DistrictsNum, city.DistrictsPossibleNum))
+    table.insert(cityEmbed, Normalize(city.GoldPerTurn, 100))
+    table.insert(cityEmbed, Normalize(city.FoodPerTurn, 50))
+    table.insert(cityEmbed, Normalize(city.ProductionPerTurn, 100))
+    table.insert(cityEmbed, Normalize(city.SciencePerTurn, 50))
+    table.insert(cityEmbed, Normalize(city.CulturePerTurn, 50))
+    table.insert(cityEmbed, Normalize(city.FaithPerTurn, 50))
+    table.insert(cityEmbed, Normalize(city.Housing, 20))
+    table.insert(cityEmbed, Normalize(city.Defense, 100))
+    table.insert(cityEmbed, city.IsUnderSiege and 1 or 0)
+    table.insert(cityEmbed, Normalize(city.AmenitiesNetAmount, 10))
+
+    -- Pad to fixed size
+    while #cityEmbed < CITY_EMBED_SIZE do
+        table.insert(cityEmbed, 0)
+    end
+    
+    return cityEmbed
+end
 
 function tableToMatrix(tbl)
     local rows = #tbl
