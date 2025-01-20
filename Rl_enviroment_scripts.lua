@@ -9,7 +9,7 @@ include("civobvRL");
 include("civactionsRL");
 include("RL_Policy")
 include("rewardFunction")
-local m_isAgentEnabled = true; -- Default to disabled
+local m_isAgentEnabled = false; -- Default to disabled
 
 local m_todayGameCount = 0  -- Track number of games saved today
 
@@ -64,10 +64,28 @@ function LoadGameWithHistory(saveName)
         local history = GameConfiguration.GetValue("RL_HISTORY");
         if history then
             m_gameHistory = history;
-            return true;
+            
+            -- Print information about the first state in the history
+            print("\n=== First State from Loaded Game ===")
+            if #history.transitions > 0 then
+                local firstTransition = history.transitions[1]
+                if firstTransition.state then
+                    PrintPlayerSummary(firstTransition.state)
+                    return true
+                else
+                    print("No state data found in first transition")
+                end
+            else
+                print("No transitions found in history")
+            end
+            return true
+        else
+            print("No RL_HISTORY found in game configuration")
         end
+    else
+        print("Failed to load game: " .. saveName)
     end
-    return false;
+    return false
 end
 
 
@@ -110,7 +128,7 @@ local VICTORY_TYPES = {
 };
 
 -- Configuration variables
-local TURN_LIMIT = 100;
+local TURN_LIMIT = 20;
 local AUTO_RESTART_ENABLED = true;
 
 
@@ -154,18 +172,6 @@ function InitializeRL()
         return; 
     end
 
-    -- Load the XML context first
-    print("RL: Loading XML context...");
-    local success = pcall(function()
-        ContextPtr:LoadNewContext("Rl_enviroment_scripts");
-    end)
-    
-    if not success then
-        print("ERROR: Failed to load RLEnvironment context!");
-        return;
-    end
-    print("RL: XML context loaded successfully");
-    
     -- Force immediate UI update and ensure context is active
     ContextPtr:RequestRefresh();
     ContextPtr:SetHide(false);
@@ -220,13 +226,18 @@ function RLv1.OnTurnBegin()
     --print
     print("Reward: ", reward)
 
-    --now let's test if we can load 
-    LoadGameWithHistory("rl_game_13_1")
-
-
-
+--     --now let's test if we can load 
+     LoadGameWithHistory("rl_game_13_1")
 
 --     m_currentGameTurn = Game.GetCurrentGameTurn();
+--     print("RLv1.OnTurnBegin: Turn " .. m_currentGameTurn .. " started");
+--     --if we have hit turn limit, restart game
+--     if m_currentGameTurn >= TURN_LIMIT then
+--         print("Turn limit reached at turn " .. m_currentGameTurn .. ". Initiating restart...");
+--         AutoRestartGame();
+--         return;
+--     end
+
 --     while true do
 --         local possibleActions = GetPossibleActions()
 --         local currentState = GetPlayerData(Game.GetLocalPlayer())
@@ -260,10 +271,9 @@ function RLv1.OnTurnBegin()
 --     else
 --         print("NO ACTION SELECTED, NOT EVEN ENDTURN, SOMETHING WENT WRONG. Force ending turn")
 --         EndTurn(true) --we have no actions left, force end turn, but something must've gone wrong
+--         break
 --     end
 -- end -- end of while loop
-
-
 end
 
 

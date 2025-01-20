@@ -209,12 +209,6 @@ end
 
 
 
-
-
-
-
-
-
 function SelectRandomAction(possibleActions)
     -- Get list of action types that have available actions
     local availableActionTypes = {}
