@@ -10,22 +10,8 @@ include("civactionsRL");
 include("RL_Policy")
 include("rewardFunction")
 local m_isAgentEnabled = false; -- Default to disabled
-
-local m_todayGameCount = 0  -- Track number of games saved today
-
--- Helper function to get today's date as number
-function GetTodayHour()
-    -- Get current real-world date
-    local date = os.date("*t")
-    return date.hour
-end
-
--- Function to generate save game name
-function GenerateGameSaveName()
-    local hour = GetTodayHour()
-    m_todayGameCount = m_todayGameCount + 1
-    return string.format("rl_game_%d_%d", hour, m_todayGameCount)
-end
+local m_isInitialized = false;
+local m_localPlayerID = -1;
 
 local m_gameHistory = {
     transitions = {}, -- Will store {state, action, next_state} tuples
@@ -33,60 +19,6 @@ local m_gameHistory = {
     victory_type = nil,
     total_turns = 0
 }
-
-function SaveGameWithHistory()
-    local gameFile = {};
-    gameFile.Name = GenerateGameSaveName();
-    gameFile.Location = SaveLocations.LOCAL_STORAGE;
-    gameFile.Type = Network.GetGameConfigurationSaveType();
-    gameFile.IsAutosave = false;
-    gameFile.IsQuicksave = false;
-    
-    -- Attach our history to the game configuration
-    GameConfiguration.SetValue("RL_HISTORY", m_gameHistory);
-    
-    Network.SaveGame(gameFile);
-end
-
--- Load history from a saved game
-function LoadGameWithHistory(saveName)
-    local loadParams = {
-        Name = saveName,
-        Location = SaveLocations.LOCAL_STORAGE,
-        Type = SaveTypes.SINGLE_PLAYER,
-        IsAutosave = false,
-        IsQuicksave = false
-    };
-    
-    -- Load the game
-    if Network.LoadGame(loadParams, ServerType.SERVER_TYPE_NONE) then
-        -- Retrieve our history from the game configuration
-        local history = GameConfiguration.GetValue("RL_HISTORY");
-        if history then
-            m_gameHistory = history;
-            
-            -- Print information about the first state in the history
-            print("\n=== First State from Loaded Game ===")
-            if #history.transitions > 0 then
-                local firstTransition = history.transitions[1]
-                if firstTransition.state then
-                    PrintPlayerSummary(firstTransition.state)
-                    return true
-                else
-                    print("No state data found in first transition")
-                end
-            else
-                print("No transitions found in history")
-            end
-            return true
-        else
-            print("No RL_HISTORY found in game configuration")
-        end
-    else
-        print("Failed to load game: " .. saveName)
-    end
-    return false
-end
 
 
 function RLv1.ToggleAgent()
@@ -111,11 +43,6 @@ function RLv1.ToggleAgent()
     end
 end
 
--- Initialize state
-local m_isInitialized = false;
-local m_currentGameTurn = 0;
-local m_localPlayerID = -1;
-local index = 0
 
 -- Victory types as defined in the game
 local VICTORY_TYPES = {
@@ -226,8 +153,6 @@ function RLv1.OnTurnBegin()
     --print
     print("Reward: ", reward)
 
---     --now let's test if we can load 
-     LoadGameWithHistory("rl_game_13_1")
 
 --     m_currentGameTurn = Game.GetCurrentGameTurn();
 --     print("RLv1.OnTurnBegin: Turn " .. m_currentGameTurn .. " started");
@@ -308,7 +233,6 @@ local function StopRestartTimer()
 end
 
 local RestartOperation = coroutine.create(function()
-    SaveGameWithHistory()
     if not AUTO_RESTART_ENABLED then return end
     
     print("Game will restart in " .. tostring(g_RestartDelay) .. " seconds...")
@@ -357,102 +281,4 @@ function OnPlayerDefeat(player, defeat, eventID)
     end
 end
 
--- Example analysis function
-function AnalyzeGameHistory(saveName)
-    if LoadGameWithHistory(saveName) then
-        print("Loaded game history:")
-        print("Episodes:", m_gameHistory.episode_number)
-        print("Total turns:", m_gameHistory.total_turns)
-        print("Victory type:", m_gameHistory.victory_type)
-        print("Total transitions:", #m_gameHistory.transitions)
-        
-        -- Analyze actions taken
-        local actionCounts = {}
-        for _, transition in ipairs(m_gameHistory.transitions) do
-            actionCounts[transition.action.type] = (actionCounts[transition.action.type] or 0) + 1
-        end
-        
-        print("\nAction distribution:")
-        for actionType, count in pairs(actionCounts) do
-            print(actionType .. ":", count)
-        end
-    end
-end
 
--- Load all games from a specific day
-function LoadAllGamesFromDay(day)
-    local histories = {}
-    local index = 1
-    
-    -- Try loading games until we fail to find one
-    while true do
-        local saveName = string.format("rl_game_%d_%d", day, index)
-        local loadParams = {
-            Name = saveName,
-            Location = SaveLocations.LOCAL_STORAGE,
-            Type = SaveTypes.SINGLE_PLAYER,
-            IsAutosave = false,
-            IsQuicksave = false
-        };
-        
-        if Network.LoadGame(loadParams, ServerType.SERVER_TYPE_NONE) then
-            local history = GameConfiguration.GetValue("RL_HISTORY")
-            if history then
-                table.insert(histories, history)
-                print("Loaded game: " .. saveName)
-            end
-            index = index + 1
-        else
-            break  -- No more games found for this day
-        end
-    end
-    
-    print(string.format("Loaded %d games from day %d", #histories, day))
-    return histories
-end
-
--- Reset game counter at start of new day
-function CheckAndResetDayCounter()
-    -- Store last checked date in game configuration to persist between sessions
-    local lastCheckedDay = GameConfiguration.GetValue("LAST_CHECKED_DAY")
-    local today = GetTodayDate()
-    
-    if lastCheckedDay ~= today then
-        m_todayGameCount = 0
-        GameConfiguration.SetValue("LAST_CHECKED_DAY", today)
-    end
-end
-
-function AnalyzeGamesFromDay(day)
-    local histories = LoadAllGamesFromDay(day)
-    
-    print("\n=== Analysis of Games from Day " .. day .. " ===")
-    print("Total games:", #histories)
-    
-    -- Aggregate statistics across all games
-    local totalTurns = 0
-    local victories = {}
-    local actionCounts = {}
-    
-    for _, history in ipairs(histories) do
-        totalTurns = totalTurns + history.total_turns
-        victories[history.victory_type] = (victories[history.victory_type] or 0) + 1
-        
-        -- Count actions
-        for _, transition in ipairs(history.transitions) do
-            actionCounts[transition.action.type] = (actionCounts[transition.action.type] or 0) + 1
-        end
-    end
-    
-    -- Print statistics
-    print("\nAverage turns per game:", totalTurns / #histories)
-    print("\nVictory types:")
-    for type, count in pairs(victories) do
-        print(type .. ":", count)
-    end
-    
-    print("\nMost common actions:")
-    for actionType, count in pairs(actionCounts) do
-        print(actionType .. ":", count)
-    end
-end
