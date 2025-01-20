@@ -9,7 +9,6 @@ include("civobvRL");
 include("civactionsRL");
 include("rewardFunction");
 include("storage");
-include("matrix")
 
 -- Constants for embedding sizes and transformer config
 local STATE_EMBED_SIZE = 256 -- This needs to be calculated based on your encoding
@@ -29,6 +28,211 @@ function Normalize(value, maxValue)
     return value / maxValue
 end
 
+--[[
+-- Example placeholder for action types and their parameters
+local ACTION_TYPES = {
+    "EndTurn",
+    "ChooseCivic",
+    "ChooseTech",
+    "CityRangedAttack",
+    -- ... other action types
+}
+
+local MAX_PARAMS_PER_TYPE = {
+    EndTurn = 0,
+    ChooseCivic = 1, -- e.g., Civic ID
+    ChooseTech = 1, -- e.g., Tech ID
+    CityRangedAttack = 2, -- e.g., Target X and Y
+    -- ... other action types
+}
+]]
+-- Encoding functions (EncodeCityState, EncodeUnitState, ..., EncodeGameState)
+-- ... (These are the functions you've already defined in your question)
+
+-- Calculate the actual state embedding size based on your encoding functions and constants
+STATE_EMBED_SIZE = 7 -- Global stats
+                   + (MAX_CITIES * CITY_EMBED_SIZE)
+                   + (MAX_UNITS * UNIT_EMBED_SIZE)
+                   + (MAX_TILES * TILE_EMBED_SIZE)
+                   + 3 -- Tech embed (assuming each tech has 3 values: IsUnlocked, Progress, IsBoosted)
+                   + 3 -- Civic embed (similar assumption as tech)
+                   + 2 -- Victory progress (assuming 2 values: Science, Culture)
+                   + 3 -- Diplomatic status (assuming each status has 3 values: stateValue, HasMet, Score)
+                   + 10 -- Government embedding size (as defined in EncodeGovernment)
+                   + 4  -- Policy embedding size (as defined in EncodePolicies)
+                   + 5 * MAX_CITIES -- Spatial relations for cities (assuming 5 values per city)
+                   + 4 * MAX_UNITS; -- Spatial relations for units (assuming 4 values per unit)
+
+-- Placeholder for the Transformer Policy Network
+CivTransformerPolicy = {}
+
+-- 1. State Embedding Layer (Initialization)
+function CivTransformerPolicy:InitStateEmbedding()
+    -- Initialize weights for the state embedding layer
+    -- This is a placeholder. In a real implementation, you'd initialize with random values.
+    self.state_embedding_weights = {}
+    for i = 1, STATE_EMBED_SIZE do
+        self.state_embedding_weights[i] = {}
+        for j = 1, TRANSFORMER_DIM do
+            self.state_embedding_weights[i][j] = 0 -- Replace with random initialization
+        end
+    end
+end
+
+-- 2. Positional Encoding
+function CivTransformerPolicy:AddPositionalEncoding(state_embedding)
+    local position_encoded_embedding = {}
+    
+    -- Assuming the state_embedding is a sequence of vectors
+    for i = 1, #state_embedding do
+        local embed_vector = state_embedding[i]
+        local position_vector = {}
+
+        -- For each dimension in the embedding vector
+        for d = 1, #embed_vector do
+            local positional_value
+            
+            -- Apply the positional encoding formula
+            if d % 2 == 0 then
+                -- Even dimensions: sin(pos / 10000^(2i/d_model))
+                positional_value = math.sin(i / (10000 ^ (2 * (d / 2) / TRANSFORMER_DIM)))
+            else
+                -- Odd dimensions: cos(pos / 10000^(2i/d_model))
+                positional_value = math.cos(i / (10000 ^ (2 * ((d - 1) / 2) / TRANSFORMER_DIM)))
+            end
+
+            -- Add the positional value to the original embedding value
+            position_vector[d] = embed_vector[d] + positional_value
+        end
+
+        -- Add the position encoded vector to the new embedding
+        position_encoded_embedding[i] = position_vector
+    end
+
+    return position_encoded_embedding
+end
+
+-- 3. Attention Mechanism (Placeholder)
+function CivTransformerPolicy:Attention(query, key, value, mask)
+    -- Placeholder for the attention mechanism
+    -- This is where you'd calculate attention scores and apply the mask
+    return value -- Placeholder: just returning the value for now
+end
+
+-- 4. Feedforward Neural Network (Placeholder)
+function CivTransformerPolicy:Feedforward(input)
+    -- Placeholder for a feedforward network
+    -- This would involve a couple of linear layers with an activation function
+    return input -- Placeholder: just returning the input
+end
+
+-- 5. Transformer Layer (Placeholder)
+function CivTransformerPolicy:TransformerLayer(input, mask)
+    -- Applying attention
+    attention_output = self:Attention(input, input, input, mask)
+    
+    -- Add & Norm (simplified, no residual connection or normalization for now)
+    add_norm_output_1 = attention_output -- In reality, you'd add input to attention_output and normalize
+    
+    -- Applying feedforward network
+    ff_output = self:Feedforward(add_norm_output_1)
+    
+    -- Add & Norm (again, simplified)
+    add_norm_output_2 = ff_output -- In reality, you'd add add_norm_output_1 to ff_output and normalize
+
+    return add_norm_output_2
+end
+
+-- 6. Transformer Encoder (Placeholder)
+function CivTransformerPolicy:TransformerEncoder(input, mask)
+    local encoder_output = input
+    for i = 1, TRANSFORMER_LAYERS do
+        encoder_output = self:TransformerLayer(encoder_output, mask)
+    end
+    return encoder_output
+end
+
+--[[
+-- 7. Output Layers (Placeholders)
+-- Action Type Head
+function CivTransformerPolicy:ActionTypeHead(input)
+    -- Placeholder for the action type output layer
+    return {} -- Placeholder: should return a table of action type probabilities
+end
+
+-- Parameter Heads
+function CivTransformerPolicy:ParameterHeads(input)
+    -- Placeholder for the parameter output layers
+    return {} -- Placeholder: should return a table of parameter probabilities for each action type
+end
+
+-- Value Head
+function CivTransformerPolicy:ValueHead(input)
+    -- Placeholder for the value output layer
+    return 0 -- Placeholder: should return a single value
+end
+--]]
+
+-- Initialization of the Policy Network
+function CivTransformerPolicy:Init()
+    self:InitStateEmbedding()
+    -- We don't initialize other components yet, as they are just placeholders for now
+end
+
+-- Forward Pass (Placeholder)
+function CivTransformerPolicy:Forward(state_embed, possible_actions)
+    -- 1. Embed the state
+    local embedded_state = {}
+    for i = 1, #state_embed do
+        local embed_vector = {}
+        for j = 1, TRANSFORMER_DIM do
+            local sum = 0
+            for k = 1, STATE_EMBED_SIZE do
+                sum = sum + state_embed[k] * self.state_embedding_weights[k][j]
+            end
+            table.insert(embed_vector, sum)
+        end
+        table.insert(embedded_state, embed_vector)
+    end
+
+    -- 2. Add positional encoding
+    embedded_state = self:AddPositionalEncoding(embedded_state)
+
+    -- 3. Create a mask for invalid actions (simplified for now)
+    local mask = {} -- This would be based on possible_actions
+
+    -- 4. Pass through Transformer Encoder
+    local transformer_output = self:TransformerEncoder(embedded_state, mask)
+
+    -- 5. Placeholder for Action Type Selection
+    local action_type_probs = {}  -- This should be the output of ActionTypeHead
+
+    -- 6. Placeholder for Parameter Selection
+    local action_params_probs = {} -- This should be the output of ParameterHeads
+
+    -- 7. Placeholder for Value Estimation
+    local value = 0 -- This should be the output of ValueHead
+
+    return action_type_probs, action_params_probs, value
+end
+
+--[[
+-- Example usage (for now, without actual actions or parameters)
+local state = GetPlayerData(Game.GetLocalPlayer())
+local encoded_state = EncodeGameState(state)
+local possible_actions = GetPossibleActions()
+
+CivTransformerPolicy:Init()
+local action_type_probs, action_params_probs, value = CivTransformerPolicy:Forward(encoded_state, possible_actions)
+
+-- Print the outputs (for demonstration purposes)
+print("Action Type Probabilities:", action_type_probs)
+print("Action Parameter Probabilities:", action_params_probs)
+print("Value:", value)
+--]]
+
+-- Main state encoding function
+-- Add encoding for tech/civic progress
 function EncodeTechState(techs)
     local techEmbed = {}
     
@@ -377,6 +581,8 @@ function EncodeSpatialRelations(cities, units, mapWidth, mapHeight)
     return spatialEmbed
 end
 
+
+
 function SelectRandomAction(possibleActions)
     -- Get list of action types that have available actions
     local availableActionTypes = {}
@@ -397,187 +603,3 @@ function SelectRandomAction(possibleActions)
     
     return actionType, actionParams
 end
-
--- Calculate the actual state embedding size based on your encoding functions and constants
-STATE_EMBED_SIZE = 7 -- Global stats
-                   + (MAX_CITIES * CITY_EMBED_SIZE)
-                   + (MAX_UNITS * UNIT_EMBED_SIZE)
-                   + (MAX_TILES * TILE_EMBED_SIZE)
-                   + 3 -- Tech embed (assuming each tech has 3 values: IsUnlocked, Progress, IsBoosted)
-                   + 3 -- Civic embed (similar assumption as tech)
-                   + 2 -- Victory progress (assuming 2 values: Science, Culture)
-                   + 3 -- Diplomatic status (assuming each status has 3 values: stateValue, HasMet, Score)
-                   + 10 -- Government embedding size (as defined in EncodeGovernment)
-                   + 4  -- Policy embedding size (as defined in EncodePolicies)
-                   + 5 * MAX_CITIES -- Spatial relations for cities (assuming 5 values per city)
-                   + 4 * MAX_UNITS; -- Spatial relations for units (assuming 4 values per unit)
-
--- Placeholder for the Transformer Policy Network
-CivTransformerPolicy = {}
-
--- 1. State Embedding Layer (Initialization)
-function CivTransformerPolicy:InitStateEmbedding()
-    -- Initialize weights for the state embedding layer
-    -- This is a placeholder. In a real implementation, you'd initialize with random values.
-    self.state_embedding_weights = {}
-    for i = 1, STATE_EMBED_SIZE do
-        self.state_embedding_weights[i] = {}
-        for j = 1, TRANSFORMER_DIM do
-            self.state_embedding_weights[i][j] = math.random(0.1,2) -- Replace with random initialization
-        end
-    end
-end
-
-function CivTransformerPolicy:AddPositionalEncoding(state_embedding)
-    local position_encoded_embedding = {}
-    
-    -- Assuming the state_embedding is a sequence of vectors
-    for i = 1, #state_embedding do
-        local embed_vector = state_embedding[i]
-        local position_vector = {}
-
-        -- For each dimension in the embedding vector
-        for d = 1, #embed_vector do
-            local positional_value
-            
-            -- Apply the positional encoding formula
-            if d % 2 == 0 then
-                -- Even dimensions: sin(pos / 10000^(2i/d_model))
-                positional_value = math.sin(i / (10000 ^ (2 * (d / 2) / TRANSFORMER_DIM)))
-            else
-                -- Odd dimensions: cos(pos / 10000^(2i/d_model))
-                positional_value = math.cos(i / (10000 ^ (2 * ((d - 1) / 2) / TRANSFORMER_DIM)))
-            end
-
-            -- Add the positional value to the original embedding value
-            position_vector[d] = embed_vector[d] + positional_value
-        end
-
-        -- Add the position encoded vector to the new embedding
-        position_encoded_embedding[i] = position_vector
-    end
-
-    return position_encoded_embedding
-end
-
--- 3. Attention Mechanism (Placeholder)
-function CivTransformerPolicy:Attention(query, key, value, mask)
-    -- Placeholder for the attention mechanism
-    -- This is where you'd calculate attention scores and apply the mask
-    return value -- Placeholder: just returning the value for now
-end
-
--- 4. Feedforward Neural Network (Placeholder)
-function CivTransformerPolicy:Feedforward(input)
-    -- Placeholder for a feedforward network
-    -- This would involve a couple of linear layers with an activation function
-    return input -- Placeholder: just returning the input
-end
-
--- 5. Transformer Layer (Placeholder)
-function CivTransformerPolicy:TransformerLayer(input, mask)
-    -- Applying attention
-    attention_output = self:Attention(input, input, input, mask)
-    
-    -- Add & Norm (simplified, no residual connection or normalization for now)
-    add_norm_output_1 = attention_output -- In reality, you'd add input to attention_output and normalize
-    
-    -- Applying feedforward network
-    ff_output = self:Feedforward(add_norm_output_1)
-    
-    -- Add & Norm (again, simplified)
-    add_norm_output_2 = ff_output -- In reality, you'd add add_norm_output_1 to ff_output and normalize
-
-    return add_norm_output_2
-end
-
--- 6. Transformer Encoder (Placeholder)
-function CivTransformerPolicy:TransformerEncoder(input, mask)
-    local encoder_output = input
-    for i = 1, TRANSFORMER_LAYERS do
-        encoder_output = self:TransformerLayer(encoder_output, mask)
-    end
-    return encoder_output
-end
-
---[[
--- 7. Output Layers (Placeholders)
--- Action Type Head
-function CivTransformerPolicy:ActionTypeHead(input)
-    -- Placeholder for the action type output layer
-    return {} -- Placeholder: should return a table of action type probabilities
-end
-
--- Parameter Heads
-function CivTransformerPolicy:ParameterHeads(input)
-    -- Placeholder for the parameter output layers
-    return {} -- Placeholder: should return a table of parameter probabilities for each action type
-end
-
--- Value Head
-function CivTransformerPolicy:ValueHead(input)
-    -- Placeholder for the value output layer
-    return 0 -- Placeholder: should return a single value
-end
---]]
-
--- Initialization of the Policy Network
-function CivTransformerPolicy:Init()
-    self:InitStateEmbedding()
-    -- We don't initialize other components yet, as they are just placeholders for now
-end
-
--- Forward Pass (Placeholder)
-function CivTransformerPolicy:Forward(state_embed, possible_actions)
-    -- 1. Embed the state
-    local embedded_state = {}
-    for i = 1, #state_embed do
-        local embed_vector = {}
-        for j = 1, TRANSFORMER_DIM do
-            local sum = 0
-            for k = 1, STATE_EMBED_SIZE do
-                sum = sum + state_embed[k] * self.state_embedding_weights[k][j]
-            end
-            table.insert(embed_vector, sum)
-        end
-        table.insert(embedded_state, embed_vector)
-    end
-
-    -- 2. Add positional encoding
-    embedded_state = self:AddPositionalEncoding(embedded_state)
-
-    -- 3. Create a mask for invalid actions (simplified for now)
-    local mask = {} -- This would be based on possible_actions
-
-    -- 4. Pass through Transformer Encoder
-    local transformer_output = self:TransformerEncoder(embedded_state, mask)
-
-    -- 5. Placeholder for Action Type Selection
-    local action_type_probs = {}  -- This should be the output of ActionTypeHead
-
-    -- 6. Placeholder for Parameter Selection
-    local action_params_probs = {} -- This should be the output of ParameterHeads
-
-    -- 7. Placeholder for Value Estimation
-    local value = 0 -- This should be the output of ValueHead
-
-    return action_type_probs, action_params_probs, value
-end
-
---[[
--- Example usage (for now, without actual actions or parameters)
-local state = GetPlayerData(Game.GetLocalPlayer())
-local encoded_state = EncodeGameState(state)
-local possible_actions = GetPossibleActions()
-
-CivTransformerPolicy:Init()
-local action_type_probs, action_params_probs, value = CivTransformerPolicy:Forward(encoded_state, possible_actions)
-
--- Print the outputs (for demonstration purposes)
-print("Action Type Probabilities:", action_type_probs)
-print("Action Parameter Probabilities:", action_params_probs)
-print("Value:", value)
---]]
-
--- Main state encoding function
--- Add encoding for tech/civic progress
