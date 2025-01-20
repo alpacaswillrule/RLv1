@@ -423,7 +423,7 @@ function CivTransformerPolicy:InitStateEmbedding()
     for i = 1, STATE_EMBED_SIZE do
         self.state_embedding_weights[i] = {}
         for j = 1, TRANSFORMER_DIM do
-            self.state_embedding_weights[i][j] = 0 -- Replace with random initialization
+            self.state_embedding_weights[i][j] = math.random(0.1,2) -- Replace with random initialization
         end
     end
 end
