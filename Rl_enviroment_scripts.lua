@@ -7,19 +7,25 @@ RLv1 = {};
 -- Then our mod files
 include("civobvRL");
 include("civactionsRL");
-include("RL_Policy")
-include("rewardFunction")
+include("RL_Policy");
+include("rewardFunction");
+include("storage")
 local m_isAgentEnabled = false; -- Default to disabled
 local m_isInitialized = false;
 local m_localPlayerID = -1;
-
-local m_gameHistory = {
-    transitions = {}, -- Will store {state, action, next_state} tuples
+local gameId = GenerateGameID()
+m_gameHistory = {
+    transitions = {},
     episode_number = 0,
     victory_type = nil,
-    total_turns = 0
+    total_turns = 0,
+    game_id = gameId  -- Store the ID with the history
 }
 
+local num_games_run = 0 --ONCE THIS NUMBER HITS 10, WE RETRAIN
+
+function retrain()
+end
 
 function RLv1.ToggleAgent()
     m_isAgentEnabled = not m_isAgentEnabled;
@@ -282,3 +288,65 @@ function OnPlayerDefeat(player, defeat, eventID)
 end
 
 
+
+
+
+-- function OnResearchChanged(playerID)
+--     -- Only process for local player
+--     if playerID ~= Game.GetLocalPlayer() then 
+--         return
+--     end
+
+--     local currentState = GetPlayerData(playerID) -- Get current game state
+--     local cleanstate = CleanStateForSerialization(currentState)
+    
+--     -- Create a minimal game history with current state
+--     local gameHistory = {
+--         transitions = {
+--             {
+--                 turn = Game.GetCurrentGameTurn(),
+--                 index = 1,
+--                 state = cleanstate,
+--                 -- Since this is just a snapshot, we'll leave these empty
+--                 action = {},
+--                 next_state = nil
+--             }
+--         },
+--         episode_number = 1,
+--         victory_type = nil,
+--         total_turns = Game.GetCurrentGameTurn()
+--     }
+
+--     print("=== Saving Game State on Research Change ===")
+--     --SaveGameHistory(gameHistory, "testjohan")
+
+--     -- Load and print info
+--     print("=== Loading Saved Game State ===")
+--     local loadedHistory = LoadGameHistory("testjohan")
+    
+--     if loadedHistory then
+--         print("Total Turns: " .. tostring(loadedHistory.total_turns))
+--         print("Episode Number: " .. tostring(loadedHistory.episode_number))
+        
+--         -- Print some state info from the first transition
+--         if #loadedHistory.transitions > 0 then
+--             local state = loadedHistory.transitions[1].state
+--             print("\nState Summary:")
+--             print("Gold: " .. tostring(state.Gold))
+--             print("Science Per Turn: " .. tostring(state.SciencePerTurn))
+--             print("Culture Per Turn: " .. tostring(state.CulturePerTurn))
+--             print("Number of Cities: " .. tostring(#state.Cities))
+--             print("Number of Units: " .. tostring(#state.Units))
+            
+--             -- Print victory progress
+--             print("\nVictory Progress:")
+--             print("Science Victory: " .. tostring(state.VictoryProgress.Science))
+--             print("Culture Victory: " .. tostring(state.VictoryProgress.Culture))
+--         end
+--     else
+--         print("Failed to load saved game state")
+--     end
+-- end
+
+-- -- Register the event handler
+-- Events.ResearchQueueChanged.Add(OnResearchChanged)
