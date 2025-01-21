@@ -459,9 +459,6 @@ function EncodeSpatialRelations(cities, units, mapWidth, mapHeight)
         local minCityDist = 1.0
         for _, city in ipairs(cities) do
             --we seem to be passing something wrong here, print
-            print("MARKER FOR ISSUE WHATS GETTING OUTPUT:")
-            print(city.X, city.Y)
-            print(unit.Position.X, unit.Position.Y)
             local dist = getNormalizedDistance(unit.Position.X, unit.Position.Y, city.X, city.Y)
             minCityDist = math.min(minCityDist, dist)
         end
@@ -764,16 +761,26 @@ function CivTransformerPolicy:Init()
     -- We don't initialize other components yet, as they are just placeholders for now
 end
 
+function CivTransformerPolicy:PadStateEmbed(state_embed)
+    -- Pad the state embedding to the fixed size
+    while #state_embed < STATE_EMBED_SIZE do
+        table.insert(state_embed, 0)
+    end
+    print("State Embedding Size:", #state_embed)
+    return state_embed
+end
+
 -- Forward Pass (Placeholder)
 function CivTransformerPolicy:Forward(state_embed, possible_actions)
     -- 1. Embed the state
+    state_embed = self:PadStateEmbed(state_embed)
     local embedded_state = {}
     for i = 1, #state_embed do
         local embed_vector = {}
         for j = 1, TRANSFORMER_DIM do
             local sum = 0
             for k = 1, STATE_EMBED_SIZE do
-                sum = sum + state_embed[k] * self.state_embedding_weights[k][j]
+                sum = sum + state_embed[k] * self.state_embedding_weights[k][j] 
             end
             table.insert(embed_vector, sum)
         end
