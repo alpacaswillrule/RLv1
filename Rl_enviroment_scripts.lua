@@ -9,7 +9,8 @@ include("civobvRL");
 include("civactionsRL");
 include("RL_Policy");
 include("rewardFunction");
-include("storage")
+include("storage");
+include("matrix");
 local m_isAgentEnabled = false; -- Default to disabled
 local m_isInitialized = false;
 local m_localPlayerID = -1;

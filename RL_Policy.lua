@@ -9,7 +9,7 @@ include("civobvRL");
 include("civactionsRL");
 include("rewardFunction");
 include("storage");
-include("matrix")
+include("matrix");
 
 -- Constants for embedding sizes and transformer config
 local STATE_EMBED_SIZE = 256 -- This needs to be calculated based on your encoding
@@ -301,6 +301,9 @@ function EncodeGameState(state)
     local spatialEmbed = EncodeSpatialRelations(state.Cities, state.Units, mapWidth, mapHeight)
     for _, value in ipairs(spatialEmbed) do
         table.insert(stateEmbed, value)
+    end
+    while #stateEmbed < STATE_EMBED_SIZE do
+        table.insert(stateEmbed, 0)
     end
     
     return stateEmbed
@@ -600,7 +603,8 @@ end
 
 -- Multi-Head Attention
 function CivTransformerPolicy:MultiHeadAttention(query, key, value, mask, num_heads)
-    local d_k = query:size()[2] / num_heads
+    local size = query:size()
+    local d_k = size[2] / num_heads
 
     -- 1. Linearly project query, key, and value into 'num_heads' different representations.
     local query_projections = {}
@@ -729,6 +733,8 @@ end
 function CivTransformerPolicy:TransformerEncoder(input, mask)
     local encoder_output = input
     for i = 1, TRANSFORMER_LAYERS do
+        --print length of encoder_output
+        print("Encoder Output Length before transformer layer:", #encoder_output)
         encoder_output = self:TransformerLayer(encoder_output, mask)
     end
     return encoder_output
@@ -762,16 +768,19 @@ function CivTransformerPolicy:Init()
 end
 
 function CivTransformerPolicy:PadStateEmbed(state_embed)
-    -- Pad the state embedding to the fixed size
-    while #state_embed < STATE_EMBED_SIZE do
-        table.insert(state_embed, 0)
-    end
+
     print("State Embedding Size:", #state_embed)
     return state_embed
 end
 
 -- Forward Pass (Placeholder)
 function CivTransformerPolicy:Forward(state_embed, possible_actions)
+
+    if matrix then
+        print("Matrix functions:", table.concat(matrix, ", ")) -- Print available functions (if it's a table)
+      else
+        print("Error: Matrix module not loaded!")
+      end
     -- 1. Embed the state
     state_embed = self:PadStateEmbed(state_embed)
     local embedded_state = {}
@@ -786,16 +795,16 @@ function CivTransformerPolicy:Forward(state_embed, possible_actions)
         end
         table.insert(embedded_state, embed_vector)
     end
-
+    print("Embedded State done, Size is :", #embedded_state)
     -- 2. Add positional encoding
     embedded_state = self:AddPositionalEncoding(embedded_state)
-
+    print("Positional Encoding done, Size is :", #embedded_state)
     -- 3. Create a mask for invalid actions (simplified for now)
     local mask = {} -- This would be based on possible_actions
 
-    -- 4. Pass through Transformer Encoder
+    -- 4. Pass through Transformer Encoder 
     local transformer_output = self:TransformerEncoder(embedded_state, mask)
-
+    print("Transformer Encoder done, Size is :", #transformer_output)
     -- 5. Placeholder for Action Type Selection
     local action_type_probs = {}  -- This should be the output of ActionTypeHead
 

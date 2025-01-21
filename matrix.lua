@@ -114,7 +114,7 @@ LICENSE
 --// matrix //
 --////////////
 
-local matrix = {_TYPE='module', _NAME='matrix', _VERSION='0.2.11.20120416'}
+matrix = {_TYPE='module', _NAME='matrix', _VERSION='0.2.11.20120416'}
 
 -- access to the metatable we set at the end of the file
 local matrix_meta = {}
@@ -1288,6 +1288,13 @@ end
 function matrix.sigmoid(mtx)
     return matrix.replace(mtx, function(x) return 1 / (1 + math.exp(-x)) end)
 end
+
+ --// __index handling
+ matrix_meta.__index = {}
+ for k,v in pairs( matrix ) do
+     matrix_meta.__index[k] = v
+ end
+ matrix_meta.__index.size = matrix.size
 
 
 matrix.symbol = symbol
