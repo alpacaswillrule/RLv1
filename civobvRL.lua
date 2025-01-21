@@ -279,6 +279,8 @@ function GetPlayerData(playerID)
   for i, city in player:GetCities():Members() do
       local cityData = GetCityData(city);
       if cityData then
+        cityData.X = city:GetX();
+        cityData.Y = city:GetY();
         table.insert(data.Cities, cityData);
       end
   end

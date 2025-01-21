@@ -23,6 +23,37 @@ local TRANSFORMER_DIM = 512 -- Dimension of the transformer model
 local TRANSFORMER_HEADS = 8 -- Number of attention heads
 local TRANSFORMER_LAYERS = 4 -- Number of transformer layers
 
+
+
+function tableToMatrix(tbl)
+    local rows = #tbl
+    local cols = #tbl[1]  -- Assumes all rows have the same number of columns
+    local mtx = matrix:new(rows, cols)
+    for i = 1, rows do
+        for j = 1, cols do
+            mtx:setelement(i, j, tbl[i][j])
+        end
+    end
+    return mtx
+end
+
+function matrixToTable(mtx)
+    local rows, cols = mtx:size()
+    local tbl = {}
+    for i = 1, rows do
+        tbl[i] = {}
+        for j = 1, cols do
+            tbl[i][j] = mtx:getelement(i, j)
+        end
+    end
+    return tbl
+end
+-- Helper function to normalize values to [0,1] range
+function Normalize(value, maxValue)
+    if maxValue == 0 then return 0 end
+    return value / maxValue
+end
+
 -- Create embedding for a single unit
 function EncodeUnitState(unit)
     local unitEmbed = {}
@@ -99,35 +130,6 @@ function EncodeCityState(city)
     end
     
     return cityEmbed
-end
-
-function tableToMatrix(tbl)
-    local rows = #tbl
-    local cols = #tbl[1]  -- Assumes all rows have the same number of columns
-    local mtx = matrix:new(rows, cols)
-    for i = 1, rows do
-        for j = 1, cols do
-            mtx:setelement(i, j, tbl[i][j])
-        end
-    end
-    return mtx
-end
-
-function matrixToTable(mtx)
-    local rows, cols = mtx:size()
-    local tbl = {}
-    for i = 1, rows do
-        tbl[i] = {}
-        for j = 1, cols do
-            tbl[i][j] = mtx:getelement(i, j)
-        end
-    end
-    return tbl
-end
--- Helper function to normalize values to [0,1] range
-function Normalize(value, maxValue)
-    if maxValue == 0 then return 0 end
-    return value / maxValue
 end
 
 function EncodeTechState(techs)
@@ -456,6 +458,10 @@ function EncodeSpatialRelations(cities, units, mapWidth, mapHeight)
         -- Distance to nearest city
         local minCityDist = 1.0
         for _, city in ipairs(cities) do
+            --we seem to be passing something wrong here, print
+            print("MARKER FOR ISSUE WHATS GETTING OUTPUT:")
+            print(city.X, city.Y)
+            print(unit.Position.X, unit.Position.Y)
             local dist = getNormalizedDistance(unit.Position.X, unit.Position.Y, city.X, city.Y)
             minCityDist = math.min(minCityDist, dist)
         end
