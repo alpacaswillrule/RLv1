@@ -321,7 +321,9 @@ function CleanStateForSerialization(state)
             
             -- Other
             TradingPosts = CleanTableForSerialization(city.TradingPosts, 1),
-            Wonders = CleanTableForSerialization(city.Wonders, 1)
+            Wonders = CleanTableForSerialization(city.Wonders, 1),
+            X = city.X,
+            Y = city.Y
         }
         table.insert(cleanState.Cities, cleanCity)
     end
