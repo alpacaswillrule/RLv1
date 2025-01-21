@@ -935,10 +935,10 @@ end
 --//  matrix.size ( mtx )
 -- get matrix size as string rows,columns
 function matrix.size( mtx )
-	if matrix.type( mtx ) == "tensor" then
-		return #mtx,#mtx[1],#mtx[1][1]
-	end
-	return #mtx,#mtx[1]
+    if matrix.type( mtx ) == "tensor" then
+        return {#mtx,#mtx[1],#mtx[1][1]}
+    end
+    return {#mtx, #mtx[1]}
 end
 
 --// matrix.getelement ( mtx, i, j )

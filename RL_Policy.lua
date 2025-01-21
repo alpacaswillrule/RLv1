@@ -603,7 +603,7 @@ end
 
 -- Multi-Head Attention
 function CivTransformerPolicy:MultiHeadAttention(query, key, value, mask, num_heads)
-    local size = query:size()
+    local size = query:size()  -- Get the size table
     local d_k = size[2] / num_heads
 
     -- 1. Linearly project query, key, and value into 'num_heads' different representations.
@@ -618,6 +618,8 @@ function CivTransformerPolicy:MultiHeadAttention(query, key, value, mask, num_he
         local w_k = matrix.random(matrix:new(d_k, d_k))
         local w_v = matrix.random(matrix:new(d_k, d_k))
 
+        print("m1 size:", size[1],size[2])
+        print("m2 size:", w_q:size()[1],w_q:size()[2])
         -- Apply linear projections
         table.insert(query_projections, matrix.mul(query, w_q))
         table.insert(key_projections, matrix.mul(key, w_k))
