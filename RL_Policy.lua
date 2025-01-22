@@ -26,6 +26,40 @@ local TRANSFORMER_LAYERS = 4 -- Number of transformer layers
 local MAX_TECHS = 70        -- Total techs in Civ6
 local MAX_CIVICS = 50       -- Total civics in Civ6
 local MAX_DIPLO_CIVS = 20   -- Max other civilizations
+ACTION_PARAM_ORDER = {
+    "CityID",           -- ID of the city for city-related actions
+    "UnitID",           -- ID of the unit for unit-related actions
+    "PlotX",           -- X coordinate for movement/placement actions
+    "PlotY",           -- Y coordinate for movement/placement actions
+    "ProductionHash",   -- Hash for production items (buildings, units, etc.)
+    "ImprovementHash", -- Hash for tile improvements
+    "PromotionType",   -- Type of unit promotion
+    "PurchaseType",    -- Type of purchase action
+    "TypeHash"         -- Generic hash for other types of actions
+}
+PARAM_ENCODING_SIZE = 6
+
+
+function argmax(t)
+    local max_val = t[1]
+    local max_idx = 1
+    for i = 2, #t do
+        if t[i] > max_val then
+            max_val = t[i]
+            max_idx = i
+        end
+    end
+    return max_idx
+end
+
+-- Add slice function for tables
+function slice_table(tbl, first, last)
+    local sliced = {}
+    for i = first or 1, last or #tbl do
+        table.insert(sliced, tbl[i])
+    end
+    return sliced
+end
 
 function tableToMatrix(tbl)
     local rows = #tbl
@@ -551,6 +585,23 @@ function EncodeActionParam(param_name, value, encoded)
     return encoded
 end
 
+function DecodeActionParam(param_name, encoded_values)
+    -- Handle different parameter types
+    if param_name:match("ID$") or param_name:match("Hash$") then
+        -- Decode hashed values
+        return math.floor(encoded_values[1] * (2^32))
+    elseif param_name:match("X$") or param_name:match("Y$") then
+        -- Decode map coordinates
+        return math.floor(encoded_values[1] * MAP_DIMENSION)
+    elseif param_name == "ProductionType" then
+        -- Decode production type from one-hot encoding
+        local types = {"UNIT", "BUILDING", "DISTRICT", "PROJECT"}
+        return types[argmax(encoded_values)]
+    else
+        -- Default numerical value decoding
+        return encoded_values[1] * 100  -- Scale back from [0,1] to [0,100]
+    end
+end
 -- Action Decoding
 function DecodeAction(encoded, possible_actions)
     -- Decode action type
@@ -558,7 +609,7 @@ function DecodeAction(encoded, possible_actions)
         "CityProduction", "UnitMove", "CityManagement", 
         "Diplomacy", "Research", "Civic", "EndTurn"
     }
-    local action_type_idx = argmax(table.slice(encoded, 1, #action_types))
+    local action_type_idx = argmax(slice_table(encoded, 1, #action_types))
     local action_type = action_types[action_type_idx]
     
     -- Decode parameters
@@ -566,10 +617,8 @@ function DecodeAction(encoded, possible_actions)
     local offset = #action_types
     
     for i, param_name in ipairs(ACTION_PARAM_ORDER) do
-        local param_value = DecodeActionParam(
-            param_name, 
-            table.slice(encoded, offset + 1, offset + PARAM_ENCODING_SIZE)
-        )
+        local param_values = slice_table(encoded, offset + 1, offset + PARAM_ENCODING_SIZE)
+        local param_value = DecodeActionParam(param_name, param_values)
         params[param_name] = param_value
         offset = offset + PARAM_ENCODING_SIZE
     end
