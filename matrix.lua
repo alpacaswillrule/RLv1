@@ -166,6 +166,43 @@ function matrix:new( rows, columns, value )
 	return setmetatable( mtx,matrix_meta )
 end
 
+function matrix.setrow( mtx, row_idx, values )
+    -- Check if row index is valid
+    if row_idx < 1 or row_idx > #mtx then
+        return nil, "Row index out of bounds"
+    end
+    
+    -- Check if values is a table
+    if type(values) ~= "table" then
+        return nil, "Values must be a table"
+    end
+    
+    -- Check if number of values matches matrix width
+    if #values ~= #mtx[1] then
+        return nil, string.format(
+            "Values length mismatch: got %d values but matrix has %d columns",
+            #values, #mtx[1]
+        )
+    end
+    
+    -- Get the type of first element to determine copy function
+    local mtype = matrix.type(mtx)
+    local docopy = mtype == "number" and 
+                  function(x) return x end or 
+                  function(t) 
+                      local newt = setmetatable({}, getmetatable(t))
+                      for i,v in ipairs(t) do newt[i] = v end
+                      return newt 
+                  end
+    
+    -- Set the values
+    for j = 1, #mtx[1] do
+        mtx[row_idx][j] = docopy(values[j])
+    end
+    
+    return 1
+end
+
 --// matrix ( rows [, comlumns [, value]] )
 -- set __call behaviour of matrix
 -- for matrix( ... ) as matrix.new( ... )
@@ -1342,6 +1379,8 @@ end
      matrix_meta.__index[k] = v
  end
  matrix_meta.__index.size = matrix.size
+ -- Add to matrix_meta.__index
+matrix_meta.__index.setrow = matrix.setrow
 
 
 matrix.symbol = symbol

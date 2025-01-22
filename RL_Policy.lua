@@ -607,42 +607,6 @@ function MatchToValidAction(action_type, params, possible_actions)
     return best_match or {ActionType = "EndTurn"}  -- Fallback
 end
 
-function CivTransformerPolicy:CreateAttentionMask(possible_actions)
-    -- Create binary mask where 1 = valid action, 0 = invalid
-    local action_types = {
-        "CityProduction", "UnitMove", "CityManagement", 
-        "Diplomacy", "Research", "Civic", "EndTurn"
-    }
-    
-    -- Create base mask matrix
-    local mask = matrix:new(#action_types, MAX_ACTION_PARAMS, 1)  -- Default allow
-    
-    -- Apply constraints based on possible actions
-    for action_idx, action_type in ipairs(action_types) do
-        if not possible_actions[action_type] or #possible_actions[action_type] == 0 then
-            -- Entire action type is invalid
-            mask:setrow(action_idx, matrix:new(1, MAX_ACTION_PARAMS, 0))
-        else
-            -- Validate individual parameters for this action type
-            for param_idx = 1, MAX_ACTION_PARAMS do
-                local param_name = ACTION_PARAM_ORDER[param_idx]
-                local valid = false
-                
-                -- Check if any valid action has this parameter
-                for _, action in ipairs(possible_actions[action_type]) do
-                    if action[param_name] ~= nil then
-                        valid = true
-                        break
-                    end
-                end
-                
-                mask:setelement(action_idx, param_idx, valid and 1 or 0)
-            end
-        end
-    end
-    
-    return mask
-end
 
 -- Define parameter order and max parameters
 local ACTION_PARAM_ORDER = {
@@ -693,12 +657,15 @@ CivTransformerPolicy = {
 
 -- 1. State Embedding Layer (Initialization)
 function CivTransformerPolicy:InitStateEmbedding()
-    -- Use matrix directly
-    self.state_embedding_weights = matrix.random(matrix:new(STATE_EMBED_SIZE, TRANSFORMER_DIM))
-    -- Scale the random values to be between 0.1 and 2
+    -- Create matrix using :new
+    self.state_embedding_weights = matrix:new(STATE_EMBED_SIZE, TRANSFORMER_DIM)
+    -- Apply random initialization
+    matrix.random(self.state_embedding_weights)
+    
+    -- Scale values between 0.1 and 2
     for i = 1, STATE_EMBED_SIZE do
         for j = 1, TRANSFORMER_DIM do
-            local val = self.state_embedding_weights:getelement(i,j)
+            local val = self.state_embedding_weights:getelement(i, j)
             self.state_embedding_weights:setelement(i, j, val * 1.9 + 0.1)
         end
     end
@@ -727,6 +694,46 @@ function CivTransformerPolicy:AddPositionalEncoding(state_embedding)
     return pos_encoding
 end
 
+function CivTransformerPolicy:CreateAttentionMask(possible_actions)
+    local action_types = {
+        "CityProduction", "UnitMove", "CityManagement", 
+        "Diplomacy", "Research", "Civic", "EndTurn"
+    }
+    local MAX_ACTION_PARAMS = 9  -- From ACTION_PARAM_ORDER length
+    
+    -- Create mask matrix with proper initialization
+    local mask = matrix:new(#action_types, MAX_ACTION_PARAMS, 1)  -- 1 = allowed by default
+    
+    for action_idx, action_type in ipairs(action_types) do
+        if not possible_actions[action_type] or #possible_actions[action_type] == 0 then
+            -- Create zero-filled row table
+            local zero_row = {}
+            for i = 1, MAX_ACTION_PARAMS do
+                table.insert(zero_row, 0)
+            end
+            -- Set entire row to 0
+            mask:setrow(action_idx, zero_row)
+        else
+            -- Validate individual parameters for this action type
+            for param_idx = 1, MAX_ACTION_PARAMS do
+                local param_name = ACTION_PARAM_ORDER[param_idx]
+                local valid = false
+                
+                -- Check if any valid action has this parameter
+                for _, action in ipairs(possible_actions[action_type]) do
+                    if action[param_name] ~= nil then
+                        valid = true
+                        break
+                    end
+                end
+                
+                mask:setelement(action_idx, param_idx, valid and 1 or 0)
+            end
+        end
+    end
+    
+    return mask
+end
 
 function CivTransformerPolicy:Attention(query, key, value, mask)
     -- Calculate attention scores using matrix operations
