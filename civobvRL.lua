@@ -1187,7 +1187,7 @@ function GetPossibleActions()
 };
 
   local possibleActions = {
-    EndTurn = true, -- Always possible (unless blocked for some reason)
+    EndTurn = {true}, -- Always possible (unless blocked for some reason)
     ChooseCivic = {},
     ChooseTech = {},
     CityRangedAttack = {},

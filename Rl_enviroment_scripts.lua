@@ -296,7 +296,7 @@ function OnResearchChanged(playerID)
     local currentState = GetPlayerData(playerID)
     state_mtx = CivTransformerPolicy:ProcessGameState(currentState)
 
-    local possibleActions = GetPossibleActions() -- You might want to modify this to return a simplified structure for testing
+    local possibleActions = GetPossibleActions()
     -- local action_type_probs, action_params_probs, value = 
     CivTransformerPolicy:Forward(state_mtx, possibleActions)
 

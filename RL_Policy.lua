@@ -705,7 +705,8 @@ function CivTransformerPolicy:CreateAttentionMask(possible_actions)
     local mask = matrix:new(#action_types, MAX_ACTION_PARAMS, 1)  -- 1 = allowed by default
     
     for action_idx, action_type in ipairs(action_types) do
-        if not possible_actions[action_type] or #possible_actions[action_type] == 0 then
+        if not possible_actions[action_type] or 
+           (action_type ~= "EndTurn" and #possible_actions[action_type] == 0) then
             -- Create zero-filled row table
             local zero_row = {}
             for i = 1, MAX_ACTION_PARAMS do
@@ -719,11 +720,19 @@ function CivTransformerPolicy:CreateAttentionMask(possible_actions)
                 local param_name = ACTION_PARAM_ORDER[param_idx]
                 local valid = false
                 
-                -- Check if any valid action has this parameter
-                for _, action in ipairs(possible_actions[action_type]) do
-                    if action[param_name] ~= nil then
-                        valid = true
-                        break
+                -- Handle EndTurn case separately
+                if action_type == "EndTurn" then
+                    valid = false  -- EndTurn doesn't need parameters
+                else
+                    -- Only try to iterate if it's actually a table of actions
+                    local actions = possible_actions[action_type]
+                    if type(actions) == "table" then
+                        for _, action in ipairs(actions) do
+                            if action[param_name] ~= nil then
+                                valid = true
+                                break
+                            end
+                        end
                     end
                 end
                 
@@ -776,29 +785,66 @@ function CivTransformerPolicy:MultiHeadAttention(query, key, value, mask)
     print("Number of heads:", self.num_heads)
     print("Head dimension:", self.d_k)
 
-    -- Project queries, keys, and values
+    local attention_outputs = {}
+
+    -- Process each attention head
     for h = 1, self.num_heads do
         print("Processing head", h)
+        
+        -- Project queries, keys, and values
         local q_proj = matrix.mul(query, self.head_projections.w_q[h])
         local k_proj = matrix.mul(key, self.head_projections.w_k[h])
         local v_proj = matrix.mul(value, self.head_projections.w_v[h])
         
-        local q_proj_size = q_proj:size()
-        local k_proj_size = k_proj:size()
-        local v_proj_size = v_proj:size()
+        -- Compute attention scores
+        local attention_scores = matrix.mul(q_proj, matrix.transpose(k_proj))
+        attention_scores = matrix.divnum(attention_scores, math.sqrt(self.d_k))
         
-        print("Projected shapes for head", h, ":")
-        print("  Q:", q_proj_size[1], "x", q_proj_size[2])
-        print("  K:", k_proj_size[1], "x", k_proj_size[2])
-        print("  V:", v_proj_size[1], "x", v_proj_size[2])
+        -- Apply mask if provided
+        if mask then
+            attention_scores = matrix.replace(attention_scores, function(score, i, j)
+                return mask:getelement(i, j) == 1 and score or -1e9
+            end)
+        end
+        
+        -- Compute attention weights
+        local attention_weights = matrix.softmax(attention_scores)
+        
+        -- Compute head output
+        local head_output = matrix.mul(attention_weights, v_proj)
+        table.insert(attention_outputs, head_output)
+        
+        -- Debug prints
+        local q_proj_size = q_proj:size()
+        local head_output_size = head_output:size()
+        print("Head", h, "projected Q shape:", q_proj_size[1], "x", q_proj_size[2])
+        print("Head", h, "output shape:", head_output_size[1], "x", head_output_size[2])
     end
 
-    -- ... rest of the MultiHeadAttention implementation ...
-    local output = self:ConcatenateAndProject(attention_outputs)
+    -- Concatenate all head outputs
+    local concatenated = attention_outputs[1]
+    for h = 2, #attention_outputs do
+        concatenated = matrix.concath(concatenated, attention_outputs[h])
+    end
+    
+    -- Final projection
+    local output = matrix.mul(concatenated, self.w_o)
     local output_size = output:size()
     print("Final MultiHeadAttention output shape:", output_size[1], "x", output_size[2])
     
     return output
+end
+
+-- Helper function to concatenate and project
+function CivTransformerPolicy:ConcatenateAndProject(attention_outputs)
+    -- Concatenate all head outputs along the feature dimension
+    local concatenated = attention_outputs[1]
+    for h = 2, #attention_outputs do
+        concatenated = matrix.concath(concatenated, attention_outputs[h])
+    end
+    
+    -- Apply final projection matrix
+    return matrix.mul(concatenated, self.w_o)
 end
 
 function CivTransformerPolicy:Feedforward(input_mtx)
@@ -822,34 +868,45 @@ end
 
 -- Helper function for layer normalization (simplified for now)
 function CivTransformerPolicy:LayerNorm(input_mtx)
-    -- Current implementation calculates means and variances using loops
-    -- Let's use matrix operations instead:
-    
     local epsilon = 1e-6
     local rows, cols = input_mtx:size()[1], input_mtx:size()[2]
     
-    -- Calculate mean for each row using matrix operations
-    local ones_col = matrix:new(cols, 1, 1)  -- Column vector of ones
-    local means = matrix.mul(input_mtx, ones_col)
-    means = matrix.divnum(means, cols)  -- Now a rows x 1 matrix
+    -- Create matrices of correct dimensions
+    local mean_mtx = matrix:new(rows, 1, 0)
+    local var_mtx = matrix:new(rows, 1, 0)
     
-    -- Broadcast mean for subtraction
-    local means_broadcast = matrix.mul(means, matrix:new(1, cols, 1))
+    -- Calculate mean for each row
+    for i = 1, rows do
+        local sum = 0
+        for j = 1, cols do
+            sum = sum + input_mtx:getelement(i, j)
+        end
+        mean_mtx:setelement(i, 1, sum / cols)
+    end
     
-    -- Calculate variance using matrix operations
-    local centered = matrix.sub(input_mtx, means_broadcast)
-    local squared = matrix.replace(centered, function(x) return x * x end)
-    local variances = matrix.mul(squared, ones_col)
-    variances = matrix.divnum(variances, cols)
-    
-    -- Broadcast variance for division
-    local std_broadcast = matrix.mul(
-        matrix.replace(variances, function(x) return math.sqrt(x + epsilon) end),
-        matrix:new(1, cols, 1)
-    )
+    -- Calculate variance for each row
+    for i = 1, rows do
+        local sum_sq = 0
+        local mean = mean_mtx:getelement(i, 1)
+        for j = 1, cols do
+            local diff = input_mtx:getelement(i, j) - mean
+            sum_sq = sum_sq + (diff * diff)
+        end
+        var_mtx:setelement(i, 1, sum_sq / cols)
+    end
     
     -- Normalize
-    return matrix.divnum(centered, std_broadcast)
+    local output = matrix:new(rows, cols, 0)
+    for i = 1, rows do
+        local mean = mean_mtx:getelement(i, 1)
+        local std = math.sqrt(var_mtx:getelement(i, 1) + epsilon)
+        for j = 1, cols do
+            local normalized = (input_mtx:getelement(i, j) - mean) / std
+            output:setelement(i, j, normalized)
+        end
+    end
+    
+    return output
 end
 
 -- 5. Transformer Layer (Complete with Feedforward, Residual Connections, and Layer Normalization)

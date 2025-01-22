@@ -634,6 +634,37 @@ function matrix.sqrt( m1, iters )
 	return y,z,get_abs_avg(matrix.mul(y,y),m1)
 end
 
+-- Add this function to the matrix library
+function matrix.repmat(mtx, rows, cols)
+    -- Get input dimensions
+    local orig_rows, orig_cols = mtx:size()[1], mtx:size()[2]
+    
+    -- Create new matrix
+    local result = matrix:new(orig_rows * rows, orig_cols * cols)
+    
+    -- Fill the new matrix with repeated copies
+    for i = 1, rows do
+        for j = 1, cols do
+            -- Calculate offset for this block
+            local row_offset = (i-1) * orig_rows
+            local col_offset = (j-1) * orig_cols
+            
+            -- Copy the original matrix into this position
+            for ii = 1, orig_rows do
+                for jj = 1, orig_cols do
+                    result:setelement(
+                        row_offset + ii,
+                        col_offset + jj,
+                        mtx:getelement(ii, jj)
+                    )
+                end
+            end
+        end
+    end
+    
+    return result
+end
+
 --// matrix.root ( m1, root [,iters] )
 -- calculate any root of a matrix
 -- source: http://www.dm.unipi.it/~cortona04/slides/bruno.pdf
