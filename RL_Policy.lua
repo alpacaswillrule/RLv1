@@ -22,8 +22,10 @@ local MAX_TILES = 100
 local TRANSFORMER_DIM = 512 -- Dimension of the transformer model
 local TRANSFORMER_HEADS = 8 -- Number of attention heads
 local TRANSFORMER_LAYERS = 4 -- Number of transformer layers
-
-
+-- Add these constants at the top with other MAX_* definitions
+local MAX_TECHS = 70        -- Total techs in Civ6
+local MAX_CIVICS = 50       -- Total civics in Civ6
+local MAX_DIPLO_CIVS = 20   -- Max other civilizations
 
 function tableToMatrix(tbl)
     local rows = #tbl
@@ -136,26 +138,36 @@ end
 
 function EncodeTechState(techs)
     local techEmbed = {}
-    
-    -- For each tech, encode both if it's researched and its progress if in progress
-    for _, tech in ipairs(techs) do
+    -- Encode up to MAX_TECHS
+    for i = 1, math.min(#techs, MAX_TECHS) do
+        local tech = techs[i]
         table.insert(techEmbed, tech.IsUnlocked and 1 or 0)
-        table.insert(techEmbed, tech.Progress or 0) 
+        table.insert(techEmbed, tech.Progress or 0)
         table.insert(techEmbed, tech.IsBoosted and 1 or 0)
     end
-    
+    -- Pad remaining tech slots
+    for i = #techs + 1, MAX_TECHS do
+        table.insert(techEmbed, 0)
+        table.insert(techEmbed, 0)
+        table.insert(techEmbed, 0)
+    end
     return techEmbed
 end
 
 function EncodeCivicState(civics)
     local civicEmbed = {}
-    
-    for _, civic in ipairs(civics) do
+    for i = 1, math.min(#civics, MAX_CIVICS) do
+        local civic = civics[i]
         table.insert(civicEmbed, civic.IsUnlocked and 1 or 0)
         table.insert(civicEmbed, civic.Progress or 0)
         table.insert(civicEmbed, civic.IsBoosted and 1 or 0)
     end
-    
+    -- Pad remaining civic slots
+    for i = #civics + 1, MAX_CIVICS do
+        table.insert(civicEmbed, 0)
+        table.insert(civicEmbed, 0)
+        table.insert(civicEmbed, 0)
+    end
     return civicEmbed
 end
 
@@ -173,24 +185,19 @@ end
 -- Add diplomatic status encoding
 function EncodeDiplomaticStatus(diplomaticStatuses)
     local diplomaticEmbed = {}
-    
-    for _, status in pairs(diplomaticStatuses) do
-        -- Convert diplomatic state to numeric value
-        local stateValue = 0
-        if status.DiplomaticState == "DIPLO_STATE_ALLIED" then stateValue = 1
-        elseif status.DiplomaticState == "DIPLO_STATE_DECLARED_FRIEND" then stateValue = 0.75
-        elseif status.DiplomaticState == "DIPLO_STATE_FRIENDLY" then stateValue = 0.5
-        elseif status.DiplomaticState == "DIPLO_STATE_NEUTRAL" then stateValue = 0.25
-        elseif status.DiplomaticState == "DIPLO_STATE_UNFRIENDLY" then stateValue = -0.25
-        elseif status.DiplomaticState == "DIPLO_STATE_DENOUNCED" then stateValue = -0.75
-        elseif status.DiplomaticState == "DIPLO_STATE_WAR" then stateValue = -1
-        end
-        
-        table.insert(diplomaticEmbed, stateValue)
-        table.insert(diplomaticEmbed, status.HasMet and 1 or 0)
-        table.insert(diplomaticEmbed, Normalize(status.Score, 100))
+    local count = 0
+    -- Only process first MAX_DIPLO_CIVS entries
+    for civID, status in pairs(diplomaticStatuses) do
+        if count >= MAX_DIPLO_CIVS then break end
+        -- ... existing encoding code ...
+        count = count + 1
     end
-    
+    -- Pad remaining slots (3 values per civ)
+    for i = count + 1, MAX_DIPLO_CIVS do
+        table.insert(diplomaticEmbed, 0)
+        table.insert(diplomaticEmbed, 0)
+        table.insert(diplomaticEmbed, 0)
+    end
     return diplomaticEmbed
 end
 
@@ -303,6 +310,21 @@ function EncodeGameState(state)
     local spatialEmbed = EncodeSpatialRelations(state.Cities, state.Units, mapWidth, mapHeight)
     for _, value in ipairs(spatialEmbed) do
         table.insert(stateEmbed, value)
+    end
+    while #stateEmbed < STATE_EMBED_SIZE do
+        table.insert(stateEmbed, 0)
+    end
+
+    if #stateEmbed > STATE_EMBED_SIZE then
+        print("WARNING State embedding size exceeds limit:", #stateEmbed)
+    end
+
+    if #stateEmbed < STATE_EMBED_SIZE then
+        print("WARNING State embedding size below limit:", #stateEmbed)
+    end
+    -- Final truncation/padding to ensure exact size
+    while #stateEmbed > STATE_EMBED_SIZE do
+        table.remove(stateEmbed)
     end
     while #stateEmbed < STATE_EMBED_SIZE do
         table.insert(stateEmbed, 0)
@@ -486,6 +508,150 @@ function EncodeSpatialRelations(cities, units, mapWidth, mapHeight)
     return spatialEmbed
 end
 
+-- Action Encoding
+function EncodeAction(action_type, action_params)
+    local encoded = {}
+    
+    -- Action type one-hot encoding
+    local action_types = {
+        "CityProduction", "UnitMove", "CityManagement", 
+        "Diplomacy", "Research", "Civic", "EndTurn"
+    }
+    for _, atype in ipairs(action_types) do
+        table.insert(encoded, atype == action_type and 1 or 0)
+    end
+    
+    -- Parameter encoding
+    for _, param_name in ipairs(ACTION_PARAM_ORDER) do
+        local value = action_params[param_name] or 0
+        encoded = EncodeActionParam(param_name, value, encoded)
+    end
+    
+    return encoded
+end
+
+function EncodeActionParam(param_name, value, encoded)
+    -- Custom encoding per parameter type
+    if param_name:match("ID$") or param_name:match("Hash$") then
+        -- Hashed value using game's internal hash system
+        table.insert(encoded, Normalize(Hash(value), 2^32))
+    elseif param_name:match("X$") or param_name:match("Y$") then
+        -- Map coordinates
+        table.insert(encoded, Normalize(value, MAP_DIMENSION))
+    elseif param_name == "ProductionType" then
+        -- One-hot for common production types
+        local types = {"UNIT", "BUILDING", "DISTRICT", "PROJECT"}
+        for _, t in ipairs(types) do
+            table.insert(encoded, t == value and 1 or 0)
+        end
+    else
+        -- Generic numerical value
+        table.insert(encoded, Normalize(value, 100))
+    end
+    return encoded
+end
+
+-- Action Decoding
+function DecodeAction(encoded, possible_actions)
+    -- Decode action type
+    local action_types = {
+        "CityProduction", "UnitMove", "CityManagement", 
+        "Diplomacy", "Research", "Civic", "EndTurn"
+    }
+    local action_type_idx = argmax(table.slice(encoded, 1, #action_types))
+    local action_type = action_types[action_type_idx]
+    
+    -- Decode parameters
+    local params = {}
+    local offset = #action_types
+    
+    for i, param_name in ipairs(ACTION_PARAM_ORDER) do
+        local param_value = DecodeActionParam(
+            param_name, 
+            table.slice(encoded, offset + 1, offset + PARAM_ENCODING_SIZE)
+        )
+        params[param_name] = param_value
+        offset = offset + PARAM_ENCODING_SIZE
+    end
+
+    -- Find closest valid action combination
+    return MatchToValidAction(action_type, params, possible_actions)
+end
+
+function MatchToValidAction(action_type, params, possible_actions)
+    -- Find valid action with closest parameters
+    local best_match = nil
+    local best_score = -math.huge
+    
+    for _, valid_action in ipairs(possible_actions[action_type] or {}) do
+        local score = 0
+        
+        -- Calculate parameter similarity
+        for param, value in pairs(params) do
+            if valid_action[param] ~= nil then
+                -- Use cosine similarity for hashes, absolute difference for coordinates
+                if type(value) == "table" then
+                    score = score + CosineSimilarity(value, valid_action[param])
+                else
+                    score = score + 1 - math.abs(value - valid_action[param])
+                end
+            end
+        end
+        
+        if score > best_score then
+            best_score = score
+            best_match = valid_action
+        end
+    end
+    
+    return best_match or {ActionType = "EndTurn"}  -- Fallback
+end
+
+function CivTransformerPolicy:CreateAttentionMask(possible_actions)
+    -- Create binary mask where 1 = valid action, 0 = invalid
+    local action_types = {
+        "CityProduction", "UnitMove", "CityManagement", 
+        "Diplomacy", "Research", "Civic", "EndTurn"
+    }
+    
+    -- Create base mask matrix
+    local mask = matrix:new(#action_types, MAX_ACTION_PARAMS, 1)  -- Default allow
+    
+    -- Apply constraints based on possible actions
+    for action_idx, action_type in ipairs(action_types) do
+        if not possible_actions[action_type] or #possible_actions[action_type] == 0 then
+            -- Entire action type is invalid
+            mask:setrow(action_idx, matrix:new(1, MAX_ACTION_PARAMS, 0))
+        else
+            -- Validate individual parameters for this action type
+            for param_idx = 1, MAX_ACTION_PARAMS do
+                local param_name = ACTION_PARAM_ORDER[param_idx]
+                local valid = false
+                
+                -- Check if any valid action has this parameter
+                for _, action in ipairs(possible_actions[action_type]) do
+                    if action[param_name] ~= nil then
+                        valid = true
+                        break
+                    end
+                end
+                
+                mask:setelement(action_idx, param_idx, valid and 1 or 0)
+            end
+        end
+    end
+    
+    return mask
+end
+
+-- Define parameter order and max parameters
+local ACTION_PARAM_ORDER = {
+    "CityID", "UnitID", "PlotX", "PlotY", "ProductionHash", 
+    "ImprovementHash", "PromotionType", "PurchaseType", "TypeHash"
+}
+local MAX_ACTION_PARAMS = #ACTION_PARAM_ORDER
+
+
 function SelectRandomAction(possibleActions)
     -- Get list of action types that have available actions
     local availableActionTypes = {}
@@ -508,20 +674,22 @@ function SelectRandomAction(possibleActions)
 end
 
 -- Calculate the actual state embedding size based on your encoding functions and constants
-STATE_EMBED_SIZE = 7 -- Global stats
-                   + (MAX_CITIES * CITY_EMBED_SIZE)
-                   + (MAX_UNITS * UNIT_EMBED_SIZE)
-                   + (MAX_TILES * TILE_EMBED_SIZE)
-                   + 3 -- Tech embed (assuming each tech has 3 values: IsUnlocked, Progress, IsBoosted)
-                   + 3 -- Civic embed (similar assumption as tech)
-                   + 2 -- Victory progress (assuming 2 values: Science, Culture)
-                   + 3 -- Diplomatic status (assuming each status has 3 values: stateValue, HasMet, Score)
-                   + 10 -- Government embedding size (as defined in EncodeGovernment)
-                   + 4  -- Policy embedding size (as defined in EncodePolicies)
-                   + 5 * MAX_CITIES -- Spatial relations for cities (assuming 5 values per city)
-                   + 4 * MAX_UNITS; -- Spatial relations for units (assuming 4 values per unit)
-
-CivTransformerPolicy = {}
+-- Replace the existing calculation with:
+STATE_EMBED_SIZE = 7
+    + (MAX_CITIES * CITY_EMBED_SIZE)
+    + (MAX_UNITS * UNIT_EMBED_SIZE)
+    + (MAX_TILES * TILE_EMBED_SIZE)
+    + (MAX_TECHS * 3)          -- 3 values per tech
+    + (MAX_CIVICS * 3)         -- 3 values per civic
+    + 2                        -- Victory progress
+    + (MAX_DIPLO_CIVS * 3)     -- 3 values per diplo status
+    + 10                       -- Government
+    + 4                        -- Policies
+    + (5 * MAX_CITIES)         -- Spatial cities
+    + (4 * MAX_UNITS)          -- Spatial units
+CivTransformerPolicy = {
+        initialized = false
+    }
 
 -- 1. State Embedding Layer (Initialization)
 function CivTransformerPolicy:InitStateEmbedding()
@@ -582,54 +750,48 @@ end
 
 -- Multi-Head Attention
 function CivTransformerPolicy:MultiHeadAttention(query, key, value, mask)
-    local d_k = self.d_k
-    local num_heads = self.num_heads
-    local batch_size = query:size()[1]
+    print("\nMultiHeadAttention:")
+    -- Verify input shapes
+    local q_size = query:size()
+    local k_size = key:size()
+    local v_size = value:size()
     
-    -- Linear projections for all heads at once
-    local q_projected = matrix:new(batch_size * num_heads, d_k)
-    local k_projected = matrix:new(batch_size * num_heads, d_k)
-    local v_projected = matrix:new(batch_size * num_heads, d_k)
+    print("Query shape:", q_size[1], "x", q_size[2])
+    print("Key shape:", k_size[1], "x", k_size[2])
+    print("Value shape:", v_size[1], "x", v_size[2])
     
-    -- Project queries, keys, and values for all heads simultaneously
-    for h = 1, num_heads do
-        local offset = (h-1) * batch_size
-        local q_head = matrix.mul(query, self.head_projections.w_q[h])
-        local k_head = matrix.mul(key, self.head_projections.w_k[h])
-        local v_head = matrix.mul(value, self.head_projections.w_v[h])
+    assert(q_size[2] == self.d_model, "Query dimension mismatch")
+    assert(k_size[2] == self.d_model, "Key dimension mismatch")
+    assert(v_size[2] == self.d_model, "Value dimension mismatch")
+
+    local batch_size = q_size[1]
+    print("Batch size:", batch_size)
+    print("Number of heads:", self.num_heads)
+    print("Head dimension:", self.d_k)
+
+    -- Project queries, keys, and values
+    for h = 1, self.num_heads do
+        print("Processing head", h)
+        local q_proj = matrix.mul(query, self.head_projections.w_q[h])
+        local k_proj = matrix.mul(key, self.head_projections.w_k[h])
+        local v_proj = matrix.mul(value, self.head_projections.w_v[h])
         
-        -- Copy into the combined matrices
-        for i = 1, batch_size do
-            for j = 1, d_k do
-                q_projected:setelement(offset + i, j, q_head:getelement(i, j))
-                k_projected:setelement(offset + i, j, k_head:getelement(i, j))
-                v_projected:setelement(offset + i, j, v_head:getelement(i, j))
-            end
-        end
-    end
-    
-    -- Compute attention for all heads simultaneously
-    local attention_output = self:Attention(q_projected, k_projected, v_projected, mask)
-    
-    -- Reshape and concatenate heads
-    local output = matrix:new(batch_size, self.d_model)
-    for h = 1, num_heads do
-        local offset = (h-1) * batch_size
-        local head_output = matrix.subm(attention_output, 
-                                      offset + 1, 1, 
-                                      offset + batch_size, d_k)
+        local q_proj_size = q_proj:size()
+        local k_proj_size = k_proj:size()
+        local v_proj_size = v_proj:size()
         
-        -- Copy head output to appropriate columns
-        local col_offset = (h-1) * d_k
-        for i = 1, batch_size do
-            for j = 1, d_k do
-                output:setelement(i, col_offset + j, head_output:getelement(i, j))
-            end
-        end
+        print("Projected shapes for head", h, ":")
+        print("  Q:", q_proj_size[1], "x", q_proj_size[2])
+        print("  K:", k_proj_size[1], "x", k_proj_size[2])
+        print("  V:", v_proj_size[1], "x", v_proj_size[2])
     end
+
+    -- ... rest of the MultiHeadAttention implementation ...
+    local output = self:ConcatenateAndProject(attention_outputs)
+    local output_size = output:size()
+    print("Final MultiHeadAttention output shape:", output_size[1], "x", output_size[2])
     
-    -- Final projection
-    return matrix.mul(output, self.w_o)
+    return output
 end
 
 function CivTransformerPolicy:Feedforward(input_mtx)
@@ -685,33 +847,67 @@ end
 
 -- 5. Transformer Layer (Complete with Feedforward, Residual Connections, and Layer Normalization)
 function CivTransformerPolicy:TransformerLayer(input, mask)
-    -- Convert to matrix
-    local input_mtx = tableToMatrix(input)
-    
+    print("\nTransformerLayer:")
+    -- Convert input to matrix if needed
+    local input_mtx = type(input.size) == "function" and input or tableToMatrix(input)
+    local input_size = input_mtx:size()
+    print("Input matrix shape:", input_size[1], "x", input_size[2])
+
+    -- Multi-Head Attention
+    print("Calling MultiHeadAttention...")
     local attention_output = self:MultiHeadAttention(input_mtx, input_mtx, input_mtx, mask)
-    
-    -- Still in matrix form, good!
+    local attention_size = attention_output:size()
+    print("Attention output shape:", attention_size[1], "x", attention_size[2])
+    assert(attention_size[1] == input_size[1] and attention_size[2] == input_size[2],
+           "Attention output shape mismatch")
+
+    -- First Add & Norm
     local add_norm_output_1 = self:LayerNorm(matrix.add(input_mtx, attention_output))
+    local norm1_size = add_norm_output_1:size()
+    print("First LayerNorm output shape:", norm1_size[1], "x", norm1_size[2])
     
-    -- Unnecessarily converts to table and back to matrix
-    local ff_output_tbl = self:Feedforward(matrixToTable(add_norm_output_1)) 
-    local ff_output_mtx = tableToMatrix(ff_output_tbl)
+    -- Feedforward
+    print("Calling Feedforward...")
+    local ff_output = self:Feedforward(add_norm_output_1)
+    local ff_size = ff_output:size()
+    print("Feedforward output shape:", ff_size[1], "x", ff_size[2])
     
-    -- More matrix operations
-    local add_norm_output_2 = self:LayerNorm(matrix.add(add_norm_output_1, ff_output_mtx))
+    -- Second Add & Norm
+    local final_output = self:LayerNorm(matrix.add(add_norm_output_1, ff_output))
+    local final_size = final_output:size()
+    print("Final output shape:", final_size[1], "x", final_size[2])
     
-    -- Final conversion back to table
-    local output_tbl = matrixToTable(add_norm_output_2)
-    return output_tbl
+    return final_output
 end
 
 -- 6. Transformer Encoder 
 function CivTransformerPolicy:TransformerEncoder(input, mask)
+    -- Verify input shape
+    print("\nTransformerEncoder:")
+    local input_size = type(input.size) == "function" and input:size() or {#input, #input[1]}
+    print("TransformerEncoder Input Shape:", input_size[1], "x", input_size[2])
+    assert(input_size[2] == TRANSFORMER_DIM, 
+           "Input dimension mismatch. Expected " .. TRANSFORMER_DIM .. 
+           ", got " .. input_size[2])
+
     local encoder_output = input
     for i = 1, TRANSFORMER_LAYERS do
-        --print length of encoder_output
-        print("Encoder Output Length before transformer layer:", #encoder_output)
+        print("\nTransformer Layer", i)
+        print("Encoder input shape:", 
+              type(encoder_output.size) == "function" and 
+              table.concat(encoder_output:size(), "x") or 
+              #encoder_output .. "x" .. #encoder_output[1])
+        
         encoder_output = self:TransformerLayer(encoder_output, mask)
+        
+        -- Verify output shape hasn't changed
+        local output_size = type(encoder_output.size) == "function" and 
+                           encoder_output:size() or 
+                           {#encoder_output, #encoder_output[1]}
+        print("Encoder output shape:", output_size[1], "x", output_size[2])
+        assert(output_size[1] == input_size[1] and output_size[2] == input_size[2],
+               "Encoder output shape changed from " .. input_size[1] .. "x" .. input_size[2] ..
+               " to " .. output_size[1] .. "x" .. output_size[2])
     end
     return encoder_output
 end
@@ -739,6 +935,11 @@ end
 
 -- Initialization of the Policy Network
 function CivTransformerPolicy:Init()
+
+    if self.initialized then
+        print("CivTransformerPolicy already initialized")
+        return
+    end
     -- Existing embedding initialization
     self:InitStateEmbedding()
     
@@ -778,6 +979,8 @@ function CivTransformerPolicy:Init()
 
     -- Final projection matrix
     self.w_o = xavier_init(self.d_model, self.d_model)
+    self.initialized = true
+    print("Initialized Transformer Policy Network")
 end
 
 function CivTransformerPolicy:PadStateEmbed(state_embed)
@@ -786,31 +989,32 @@ function CivTransformerPolicy:PadStateEmbed(state_embed)
     return state_embed
 end
 
--- Forward Pass (Placeholder)
-function CivTransformerPolicy:Forward(state_embed, possible_actions)
+function CivTransformerPolicy:ProcessGameState(state)
+    local state_embed = EncodeGameState(state)
     -- Convert state_embed to matrix if needed
     local state_mtx = type(state_embed.getelement) == "function" and 
-                     state_embed or 
-                     tableToMatrix({state_embed})
+        state_embed or 
+        tableToMatrix({state_embed})
     
-    -- Embed state using matrix multiplication
-    local embedded_state = matrix.mul(state_mtx, self.state_embedding_weights)
-    
-    -- Add positional encoding (already matrix-based)
-    embedded_state = self:AddPositionalEncoding(embedded_state)
-    
-    -- Create attention mask
+    --state_mtx = matrix.transpose(state_mtx)
+    return state_mtx
+end
+
+-- Updated Forward function with action masking
+function CivTransformerPolicy:Forward(state_mtx, possible_actions)
+    -- Create attention mask from possible actions
     local mask = self:CreateAttentionMask(possible_actions)
     
-    -- Pass through transformer (now all matrix-based)
+    -- Existing processing
+    local embedded_state = matrix.mul(state_mtx, self.state_embedding_weights)
+    embedded_state = self:AddPositionalEncoding(embedded_state)
     local transformer_output = self:TransformerEncoder(embedded_state, mask)
     
-    -- Output heads (need to be implemented as matrix operations)
-    local action_type_probs = self:ActionTypeHead(transformer_output)
-    local action_params_probs = self:ParameterHeads(transformer_output)
-    local value = self:ValueHead(transformer_output)
-    
-    return action_type_probs, action_params_probs, value
+    -- Action prediction
+    local action_encoding = matrixToTable(transformer_output)
+    local decoded_action = DecodeAction(action_encoding, possible_actions)
+    RLv1.ExecuteAction(decoded_action.ActionType, decoded_action.Parameters)
+    return decoded_action
 end
 
 --[[

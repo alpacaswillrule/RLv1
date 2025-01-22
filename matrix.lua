@@ -221,19 +221,28 @@ end
 -- Multiply two matrices; m1 columns must be equal to m2 rows
 -- e.g. #m1[1] == #m2
 function matrix.mul(m1, m2)
-    local rows = #m1
-    local cols = #m2[1]
-    local inner = #m1[1]
-    local mtx = matrix:new(rows, cols, 0)
+    -- Get dimensions
+    local m1_rows = #m1
+    local m1_cols = #m1[1]
+    local m2_rows = #m2
+    local m2_cols = #m2[1]
+
+    -- Verify dimensions
+    assert(m1_cols == m2_rows, string.format(
+        "Matrix dimension mismatch: m1 columns (%d) must equal m2 rows (%d)",
+        m1_cols, m2_rows
+    ))
+
+    local mtx = matrix:new(m1_rows, m2_cols, 0)
     
     -- Cache row/column access patterns
-    for i = 1, rows do
+    for i = 1, m1_rows do
         local m1_row = m1[i]
         local mtx_row = mtx[i]
-        for k = 1, inner do
+        for k = 1, m1_cols do
             local m1_val = m1_row[k]
             local m2_col = m2[k]
-            for j = 1, cols do
+            for j = 1, m2_cols do
                 mtx_row[j] = mtx_row[j] + m1_val * m2_col[j]
             end
         end

@@ -290,27 +290,21 @@ function OnResearchChanged(playerID)
 
     print("=== OnResearchChanged: Research Change Detected ===")
 
+    CivTransformerPolicy:Init()
+
     -- 1. Get and Encode Game State
     local currentState = GetPlayerData(playerID)
-    local encodedState = EncodeGameState(currentState)
-    print("Encoded State Size:", #encodedState)
+    state_mtx = CivTransformerPolicy:ProcessGameState(currentState)
 
-    -- 2. Initialize Policy Network (if not already initialized)
-    if not CivTransformerPolicy.isInitialized then
-        CivTransformerPolicy:Init()
-        CivTransformerPolicy.isInitialized = true
-        print("CivTransformerPolicy initialized.")
-    end
-
-    -- 3. Perform Forward Pass
     local possibleActions = GetPossibleActions() -- You might want to modify this to return a simplified structure for testing
-    local action_type_probs, action_params_probs, value = CivTransformerPolicy:Forward(encodedState, possibleActions)
+    -- local action_type_probs, action_params_probs, value = 
+    CivTransformerPolicy:Forward(state_mtx, possibleActions)
 
     -- 4. Print Outputs for Debugging
     print("=== Forward Pass Outputs ===")
     --print("Action Type Probabilities:", action_type_probs) -- Might be large, depending on the number of action types
     --print("Action Parameter Probabilities:", action_params_probs) -- Might be large
-    print("Value:", value)
+    --print("Value:", value)
 
     -- 5. Test Matrix Operations (Optional)
     print("=== Testing Matrix Operations ===")
