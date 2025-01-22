@@ -38,7 +38,9 @@ function tableToMatrix(tbl)
 end
 
 function matrixToTable(mtx)
-    local rows, cols = mtx:size()
+    local size = mtx:size()  -- Returns table {rows, cols}
+    local rows = size[1]
+    local cols = size[2]
     local tbl = {}
     for i = 1, rows do
         tbl[i] = {}
@@ -523,211 +525,183 @@ CivTransformerPolicy = {}
 
 -- 1. State Embedding Layer (Initialization)
 function CivTransformerPolicy:InitStateEmbedding()
-    -- Initialize weights for the state embedding layer
-    self.state_embedding_weights = {}
+    -- Use matrix directly
+    self.state_embedding_weights = matrix.random(matrix:new(STATE_EMBED_SIZE, TRANSFORMER_DIM))
+    -- Scale the random values to be between 0.1 and 2
     for i = 1, STATE_EMBED_SIZE do
-        self.state_embedding_weights[i] = {}
         for j = 1, TRANSFORMER_DIM do
-            self.state_embedding_weights[i][j] = math.random(0.1,2) -- Replace with random initialization
+            local val = self.state_embedding_weights:getelement(i,j)
+            self.state_embedding_weights:setelement(i, j, val * 1.9 + 0.1)
         end
     end
 end
 
 function CivTransformerPolicy:AddPositionalEncoding(state_embedding)
-    local position_encoded_embedding = {}
+    -- Convert input to matrix if it isn't already
+    local input_mtx = type(state_embedding.getelement) == "function" and 
+                     state_embedding or 
+                     tableToMatrix(state_embedding)
     
-    -- Assuming the state_embedding is a sequence of vectors
-    for i = 1, #state_embedding do
-        local embed_vector = state_embedding[i]
-        local position_vector = {}
-
-        -- For each dimension in the embedding vector
-        for d = 1, #embed_vector do
+    local rows, cols = input_mtx:size()[1], input_mtx:size()[2]
+    local pos_encoding = matrix:new(rows, cols)
+    
+    for i = 1, rows do
+        for j = 1, cols do
             local positional_value
-            
-            -- Apply the positional encoding formula
-            if d % 2 == 0 then
-                -- Even dimensions: sin(pos / 10000^(2i/d_model))
-                positional_value = math.sin(i / (10000 ^ (2 * (d / 2) / TRANSFORMER_DIM)))
+            if j % 2 == 0 then
+                positional_value = math.sin(i / (10000 ^ (2 * (j / 2) / cols)))
             else
-                -- Odd dimensions: cos(pos / 10000^(2i/d_model))
-                positional_value = math.cos(i / (10000 ^ (2 * ((d - 1) / 2) / TRANSFORMER_DIM)))
+                positional_value = math.cos(i / (10000 ^ (2 * ((j - 1) / 2) / cols)))
             end
-
-            -- Add the positional value to the original embedding value
-            position_vector[d] = embed_vector[d] + positional_value
+            pos_encoding:setelement(i, j, input_mtx:getelement(i, j) + positional_value)
         end
-
-        -- Add the position encoded vector to the new embedding
-        position_encoded_embedding[i] = position_vector
     end
-
-    return position_encoded_embedding
+    return pos_encoding
 end
 
 
--- Scaled Dot-Product Attention
 function CivTransformerPolicy:Attention(query, key, value, mask)
-    -- 1. Calculate Attention Scores:
-    
-    -- Transpose the key matrix for multiplication
-    local key_T = matrix.transpose(key)
-
-    -- Perform matrix multiplication between query and transposed key
-    local attention_scores = matrix.mul(query, key_T)
-
-    -- Scale the attention scores by dividing by the square root of the key dimension (d_k)
-    local d_k = key:size()[2] -- Get the number of columns in the key matrix
+    -- Calculate attention scores using matrix operations
+    local d_k = key:columns()
+    local attention_scores = matrix.mul(query, matrix.transpose(key))
     attention_scores = matrix.divnum(attention_scores, math.sqrt(d_k))
-
-    -- 2. Apply Mask (if provided):
+    
+    -- Apply mask if provided
     if mask then
-        -- Add the mask to the attention scores (-Infinity or very large negative values at masked positions)
-        -- Assuming the mask is a table with the same dimensions as attention_scores
-        for i = 1, #attention_scores do
-            for j = 1, #attention_scores[1] do
-                if mask[i][j] then  -- Assuming 'true' in the mask means the position should be masked
-                    attention_scores[i][j] = -1e9 -- Use a large negative number to represent -Infinity
-                end
-            end
-        end
+        attention_scores = matrix.replace(attention_scores, function(x, i, j)
+            return mask:getelement(i, j) == 0 and x or -1e9
+        end)
     end
-
-    -- 3. Calculate Attention Probabilities (Softmax):
-    local attention_probabilities = matrix.softmax(attention_scores)
-    -- 4. Calculate Weighted Value:
-    local weighted_value = matrix.mul(attention_probabilities, value)
-    -- 5. Return the weighted value (convert back to Lua table for further processing)
-    return weighted_value
+    
+    -- Apply softmax
+    local attention_weights = matrix.softmax(attention_scores)
+    
+    -- Calculate attention output
+    return matrix.mul(attention_weights, value)
 end
 
 -- Multi-Head Attention
-function CivTransformerPolicy:MultiHeadAttention(query, key, value, mask, num_heads)
-    local size = query:size()  -- Get the size table
-    local d_k = size[2] / num_heads
-
-    -- 1. Linearly project query, key, and value into 'num_heads' different representations.
-    local query_projections = {}
-    local key_projections = {}
-    local value_projections = {}
-
-    for i = 1, num_heads do
-        -- Generate random projection matrices for each head
-        -- These would normally be learned parameters, but for simplicity, we use random matrices
-        local w_q = matrix.random(matrix:new(d_k, d_k))
-        local w_k = matrix.random(matrix:new(d_k, d_k))
-        local w_v = matrix.random(matrix:new(d_k, d_k))
-
-        print("m1 size:", size[1],size[2])
-        print("m2 size:", w_q:size()[1],w_q:size()[2])
-        -- Apply linear projections
-        table.insert(query_projections, matrix.mul(query, w_q))
-        table.insert(key_projections, matrix.mul(key, w_k))
-        table.insert(value_projections, matrix.mul(value, w_v))
+function CivTransformerPolicy:MultiHeadAttention(query, key, value, mask)
+    local d_k = self.d_k
+    local num_heads = self.num_heads
+    local batch_size = query:size()[1]
+    
+    -- Linear projections for all heads at once
+    local q_projected = matrix:new(batch_size * num_heads, d_k)
+    local k_projected = matrix:new(batch_size * num_heads, d_k)
+    local v_projected = matrix:new(batch_size * num_heads, d_k)
+    
+    -- Project queries, keys, and values for all heads simultaneously
+    for h = 1, num_heads do
+        local offset = (h-1) * batch_size
+        local q_head = matrix.mul(query, self.head_projections.w_q[h])
+        local k_head = matrix.mul(key, self.head_projections.w_k[h])
+        local v_head = matrix.mul(value, self.head_projections.w_v[h])
+        
+        -- Copy into the combined matrices
+        for i = 1, batch_size do
+            for j = 1, d_k do
+                q_projected:setelement(offset + i, j, q_head:getelement(i, j))
+                k_projected:setelement(offset + i, j, k_head:getelement(i, j))
+                v_projected:setelement(offset + i, j, v_head:getelement(i, j))
+            end
+        end
     end
-
-    -- 2. Apply Scaled Dot-Product Attention to each head.
-    local attention_outputs = {}
-    for head_index = 1, num_heads do
-        local head_output = self:Attention(query_projections[head_index],
-                                           key_projections[head_index],
-                                           value_projections[head_index],
-                                           mask)
-        table.insert(attention_outputs, head_output)
+    
+    -- Compute attention for all heads simultaneously
+    local attention_output = self:Attention(q_projected, k_projected, v_projected, mask)
+    
+    -- Reshape and concatenate heads
+    local output = matrix:new(batch_size, self.d_model)
+    for h = 1, num_heads do
+        local offset = (h-1) * batch_size
+        local head_output = matrix.subm(attention_output, 
+                                      offset + 1, 1, 
+                                      offset + batch_size, d_k)
+        
+        -- Copy head output to appropriate columns
+        local col_offset = (h-1) * d_k
+        for i = 1, batch_size do
+            for j = 1, d_k do
+                output:setelement(i, col_offset + j, head_output:getelement(i, j))
+            end
+        end
     end
-
-    -- 3. Concatenate the outputs of all heads.
-    local concatenated_attention = attention_outputs[1]
-    for head_index = 2, num_heads do
-        concatenated_attention = matrix.concath(concatenated_attention, attention_outputs[head_index])
-    end
-
-    -- 4. Apply a final linear projection to the concatenated output.
-    -- This would also be a learned parameter matrix in a full implementation
-    local w_o = matrix.random(matrix:new(concatenated_attention:size()[2], TRANSFORMER_DIM)) 
-    local final_output = matrix.mul(concatenated_attention, w_o)
-
-    return final_output
+    
+    -- Final projection
+    return matrix.mul(output, self.w_o)
 end
 
-function CivTransformerPolicy:Feedforward(input)
-    -- Convert input table to matrix
-    local input_mtx = tableToMatrix(input)
-
+function CivTransformerPolicy:Feedforward(input_mtx)
     -- Define dimensions
-    local d_model = input_mtx:size()[2] -- Number of columns (embedding dimension)
-    local d_ff = 2048  -- Hidden dimension of the feedforward network (can be a hyperparameter)
+    local d_model = input_mtx:columns()
+    local d_ff = 2048
 
-    -- Initialize weights and biases for the two linear layers (randomly for now)
-    -- In a real implementation, these would be learned parameters
+    -- Initialize weights and biases as matrices
     local w1 = matrix.random(matrix:new(d_model, d_ff))
     local b1 = matrix.random(matrix:new(1, d_ff))
     local w2 = matrix.random(matrix:new(d_ff, d_model))
     local b2 = matrix.random(matrix:new(1, d_model))
 
     -- First linear layer + ReLU activation
-    local layer1_output = matrix.add(matrix.mul(input_mtx, w1), matrix.repmat(b1, input_mtx:size()[1], 1)) -- Broadcasting b1
+    local layer1_output = matrix.add(matrix.mul(input_mtx, w1), matrix.repmat(b1, input_mtx:rows(), 1))
     layer1_output = matrix.relu(layer1_output)
 
     -- Second linear layer
-    local layer2_output = matrix.add(matrix.mul(layer1_output, w2), matrix.repmat(b2, input_mtx:size()[1], 1)) -- Broadcasting b2
-    
-    -- Convert the output matrix back to a table
-    local output_tbl = matrixToTable(layer2_output)
-
-    return output_tbl
+    return matrix.add(matrix.mul(layer1_output, w2), matrix.repmat(b2, input_mtx:rows(), 1))
 end
+
 -- Helper function for layer normalization (simplified for now)
 function CivTransformerPolicy:LayerNorm(input_mtx)
-    local epsilon = 1e-6 -- Small constant for numerical stability
-
-    -- Calculate the mean and variance for each row in the matrix
-    local means = {}
-    local variances = {}
-    for i = 1, input_mtx:rows() do
-        local sum = 0
-        local sum_sq = 0
-        for j = 1, input_mtx:columns() do
-            local val = input_mtx:getelement(i, j)
-            sum = sum + val
-            sum_sq = sum_sq + val * val
-        end
-        table.insert(means, sum / input_mtx:columns())
-        table.insert(variances, sum_sq / input_mtx:columns() - means[i] * means[i])
-    end
-
-    -- Normalize the matrix
-    local normalized_mtx = matrix:new(input_mtx:rows(), input_mtx:columns())
-    for i = 1, input_mtx:rows() do
-        for j = 1, input_mtx:columns() do
-            normalized_mtx:setelement(i, j, (input_mtx:getelement(i, j) - means[i]) / math.sqrt(variances[i] + epsilon))
-        end
-    end
-
-    return normalized_mtx
+    -- Current implementation calculates means and variances using loops
+    -- Let's use matrix operations instead:
+    
+    local epsilon = 1e-6
+    local rows, cols = input_mtx:size()[1], input_mtx:size()[2]
+    
+    -- Calculate mean for each row using matrix operations
+    local ones_col = matrix:new(cols, 1, 1)  -- Column vector of ones
+    local means = matrix.mul(input_mtx, ones_col)
+    means = matrix.divnum(means, cols)  -- Now a rows x 1 matrix
+    
+    -- Broadcast mean for subtraction
+    local means_broadcast = matrix.mul(means, matrix:new(1, cols, 1))
+    
+    -- Calculate variance using matrix operations
+    local centered = matrix.sub(input_mtx, means_broadcast)
+    local squared = matrix.replace(centered, function(x) return x * x end)
+    local variances = matrix.mul(squared, ones_col)
+    variances = matrix.divnum(variances, cols)
+    
+    -- Broadcast variance for division
+    local std_broadcast = matrix.mul(
+        matrix.replace(variances, function(x) return math.sqrt(x + epsilon) end),
+        matrix:new(1, cols, 1)
+    )
+    
+    -- Normalize
+    return matrix.divnum(centered, std_broadcast)
 end
 
 -- 5. Transformer Layer (Complete with Feedforward, Residual Connections, and Layer Normalization)
 function CivTransformerPolicy:TransformerLayer(input, mask)
-    -- Convert input table to matrix
+    -- Convert to matrix
     local input_mtx = tableToMatrix(input)
-
-    -- Multi-Head Self-Attention
-    local attention_output = self:MultiHeadAttention(input_mtx, input_mtx, input_mtx, mask, TRANSFORMER_HEADS)
-
-    -- Add & Norm (Residual Connection and Layer Normalization)
+    
+    local attention_output = self:MultiHeadAttention(input_mtx, input_mtx, input_mtx, mask)
+    
+    -- Still in matrix form, good!
     local add_norm_output_1 = self:LayerNorm(matrix.add(input_mtx, attention_output))
-
-    -- Feedforward Network
+    
+    -- Unnecessarily converts to table and back to matrix
     local ff_output_tbl = self:Feedforward(matrixToTable(add_norm_output_1)) 
     local ff_output_mtx = tableToMatrix(ff_output_tbl)
-
-    -- Add & Norm (Residual Connection and Layer Normalization)
+    
+    -- More matrix operations
     local add_norm_output_2 = self:LayerNorm(matrix.add(add_norm_output_1, ff_output_mtx))
-
-    -- Convert the output matrix back to a table
+    
+    -- Final conversion back to table
     local output_tbl = matrixToTable(add_norm_output_2)
-
     return output_tbl
 end
 
@@ -765,8 +739,45 @@ end
 
 -- Initialization of the Policy Network
 function CivTransformerPolicy:Init()
+    -- Existing embedding initialization
     self:InitStateEmbedding()
-    -- We don't initialize other components yet, as they are just placeholders for now
+    
+    -- Multi-head attention parameters
+    self.num_heads = TRANSFORMER_HEADS
+    self.d_model = TRANSFORMER_DIM
+    self.d_k = self.d_model / self.num_heads
+
+    -- Initialize projection matrices for each head
+    self.head_projections = {
+        w_q = {},  -- (d_model, d_k) per head
+        w_k = {},
+        w_v = {}
+    }
+    
+    -- Xavier initialization helper
+    local function xavier_init(rows, cols)
+        local std = math.sqrt(2.0 / (rows + cols))
+        local mtx = matrix:new(rows, cols, 0)  -- Create matrix filled with 0s
+        
+        -- Manually set each element with random values
+        for i = 1, mtx:rows() do
+            for j = 1, mtx:columns() do
+                -- Generate random value in [-std, std] range
+                local val = math.random() * 2 * std - std
+                mtx:setelement(i, j, val)
+            end
+        end
+        
+        return mtx
+    end
+    for i = 1, self.num_heads do
+        self.head_projections.w_q[i] = xavier_init(self.d_model, self.d_k)
+        self.head_projections.w_k[i] = xavier_init(self.d_model, self.d_k)
+        self.head_projections.w_v[i] = xavier_init(self.d_model, self.d_k)
+    end
+
+    -- Final projection matrix
+    self.w_o = xavier_init(self.d_model, self.d_model)
 end
 
 function CivTransformerPolicy:PadStateEmbed(state_embed)
@@ -777,45 +788,28 @@ end
 
 -- Forward Pass (Placeholder)
 function CivTransformerPolicy:Forward(state_embed, possible_actions)
-
-    if matrix then
-        print("Matrix functions:", table.concat(matrix, ", ")) -- Print available functions (if it's a table)
-      else
-        print("Error: Matrix module not loaded!")
-      end
-    -- 1. Embed the state
-    state_embed = self:PadStateEmbed(state_embed)
-    local embedded_state = {}
-    for i = 1, #state_embed do
-        local embed_vector = {}
-        for j = 1, TRANSFORMER_DIM do
-            local sum = 0
-            for k = 1, STATE_EMBED_SIZE do
-                sum = sum + state_embed[k] * self.state_embedding_weights[k][j] 
-            end
-            table.insert(embed_vector, sum)
-        end
-        table.insert(embedded_state, embed_vector)
-    end
-    print("Embedded State done, Size is :", #embedded_state)
-    -- 2. Add positional encoding
+    -- Convert state_embed to matrix if needed
+    local state_mtx = type(state_embed.getelement) == "function" and 
+                     state_embed or 
+                     tableToMatrix({state_embed})
+    
+    -- Embed state using matrix multiplication
+    local embedded_state = matrix.mul(state_mtx, self.state_embedding_weights)
+    
+    -- Add positional encoding (already matrix-based)
     embedded_state = self:AddPositionalEncoding(embedded_state)
-    print("Positional Encoding done, Size is :", #embedded_state)
-    -- 3. Create a mask for invalid actions (simplified for now)
-    local mask = {} -- This would be based on possible_actions
-
-    -- 4. Pass through Transformer Encoder 
+    
+    -- Create attention mask
+    local mask = self:CreateAttentionMask(possible_actions)
+    
+    -- Pass through transformer (now all matrix-based)
     local transformer_output = self:TransformerEncoder(embedded_state, mask)
-    print("Transformer Encoder done, Size is :", #transformer_output)
-    -- 5. Placeholder for Action Type Selection
-    local action_type_probs = {}  -- This should be the output of ActionTypeHead
-
-    -- 6. Placeholder for Parameter Selection
-    local action_params_probs = {} -- This should be the output of ParameterHeads
-
-    -- 7. Placeholder for Value Estimation
-    local value = 0 -- This should be the output of ValueHead
-
+    
+    -- Output heads (need to be implemented as matrix operations)
+    local action_type_probs = self:ActionTypeHead(transformer_output)
+    local action_params_probs = self:ParameterHeads(transformer_output)
+    local value = self:ValueHead(transformer_output)
+    
     return action_type_probs, action_params_probs, value
 end
 

@@ -220,20 +220,26 @@ end
 --// matrix.mul ( m1, m2 )
 -- Multiply two matrices; m1 columns must be equal to m2 rows
 -- e.g. #m1[1] == #m2
-function matrix.mul( m1, m2 )
-	-- multiply rows with columns
-	local mtx = {}
-	for i = 1,#m1 do
-		mtx[i] = {}
-		for j = 1,#m2[1] do
-			local num = m1[i][1] * m2[1][j]
-			for n = 2,#m1[1] do
-				num = num + m1[i][n] * m2[n][j]
-			end
-			mtx[i][j] = num
-		end
-	end
-	return setmetatable( mtx, matrix_meta )
+function matrix.mul(m1, m2)
+    local rows = #m1
+    local cols = #m2[1]
+    local inner = #m1[1]
+    local mtx = matrix:new(rows, cols, 0)
+    
+    -- Cache row/column access patterns
+    for i = 1, rows do
+        local m1_row = m1[i]
+        local mtx_row = mtx[i]
+        for k = 1, inner do
+            local m1_val = m1_row[k]
+            local m2_col = m2[k]
+            for j = 1, cols do
+                mtx_row[j] = mtx_row[j] + m1_val * m2_col[j]
+            end
+        end
+    end
+    
+    return mtx
 end
 
 --//  matrix.div ( m1, m2 )
@@ -1240,6 +1246,38 @@ function symbol_meta.__concat(a,b)
 	return tostring(a) .. tostring(b)
 end
 
+-- Efficient matrix broadcasting for element-wise operations
+function matrix.broadcast(mtx, rows, cols)
+    local new_mtx = matrix:new(rows, cols)
+    local mtx_rows, mtx_cols = mtx:size()[1], mtx:size()[2]
+    
+    for i = 1, rows do
+        for j = 1, cols do
+            new_mtx:setelement(i, j, 
+                mtx:getelement(((i-1) % mtx_rows) + 1, 
+                              ((j-1) % mtx_cols) + 1))
+        end
+    end
+    return new_mtx
+end
+
+-- Efficient matrix concatenation
+function matrix.concat_heads(matrices, batch_size, head_dim)
+    local num_heads = #matrices
+    local output = matrix:new(batch_size, head_dim * num_heads)
+    
+    for h = 1, num_heads do
+        local head_mtx = matrices[h]
+        local offset = (h-1) * head_dim
+        
+        for i = 1, batch_size do
+            for j = 1, head_dim do
+                output:setelement(i, offset + j, head_mtx:getelement(i, j))
+            end
+        end
+    end
+    return output
+end
 
 -- Softmax function for matrices
 function matrix.softmax(mtx)

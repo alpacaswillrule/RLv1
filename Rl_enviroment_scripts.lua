@@ -286,6 +286,7 @@ function OnResearchChanged(playerID)
     if playerID ~= Game.GetLocalPlayer() then 
         return
     end
+    
 
     print("=== OnResearchChanged: Research Change Detected ===")
 
@@ -332,35 +333,6 @@ function OnResearchChanged(playerID)
     print("Transposed Matrix:")
     transposedMatrix:print()
 
-    -- 6. Test Attention Mechanism (Optional)
-    print("=== Testing Attention Mechanism (Placeholder) ===")
-    -- This is just a placeholder to remind you that you can add specific tests for the attention mechanism here
-    -- You'd need to create dummy query, key, value matrices and potentially a mask
-    -- Then, call the CivTransformerPolicy:Attention function and print the output
-    -- Example (you'll need to adjust dimensions to match your model):
-    local query = matrix:new(1, TRANSFORMER_DIM)
-    local key = matrix:new(5, TRANSFORMER_DIM)  -- 5 is an example sequence length
-    local value = matrix:new(5, TRANSFORMER_DIM)
-    local mask = nil -- Or create a test mask
-
-    -- Fill matrices with some dummy values
-    for i = 1, query:rows() do
-        for j = 1, query:columns() do
-            query:setelement(i, j, math.random())
-        end
-    end
-
-    for i = 1, key:rows() do
-        for j = 1, key:columns() do
-            key:setelement(i, j, math.random())
-            value:setelement(i, j, math.random())
-        end
-    end
-    
-    local attention_output = CivTransformerPolicy:Attention(query, key, value, mask)
-    print("Attention Output (Size): ", attention_output:size()[1], "x", attention_output:size()[2])
-    --print("Attention Output:") -- This might print a large matrix
-    --attention_output:print()
 end
 
 -- Register the event handler
