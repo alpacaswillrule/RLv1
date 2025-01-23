@@ -198,6 +198,11 @@ function RLv1.OnTurnBegin()
         local value_estimate = ValueNetwork:GetValue(state)
         
         local action = forward_result.action
+        if action.ActionType == "EndTurn" then
+            RLv1.ExecuteAction(action.ActionType, action.Parameters or {})
+            break
+        end
+
         RLv1.ExecuteAction(action.ActionType, action.Parameters or {})
         
         -- Get state after action
