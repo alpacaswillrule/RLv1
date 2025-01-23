@@ -58,7 +58,7 @@ function RLv1.ExecuteAction(actionType, actionParams)
     elseif actionType == "UnitRangedAttack" then
         UnitRangedAttack(actionParams[1], actionParams[2], actionParams[3]);
     elseif actionType == "UnitAirAttack" then
-        UnitAirAttack(actionParams[1], actionParams[2], actionParams[3]);
+        UnitAirAttack(actionParams[1], actionParams[2]);
     -- elseif actionType == "FormUnit" then
     --     FormUnitFormation(actionParams[1], actionParams[2], actionParams[3]);
     -- elseif actionType == "RebaseUnit" then

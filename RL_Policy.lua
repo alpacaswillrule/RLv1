@@ -14,7 +14,77 @@ include("matrix");
 -- Get map dimensions
 local mapWidth, mapHeight = Map.GetGridSize()
 local MAP_DIMENSION = math.max(mapWidth, mapHeight)
+-- Update action types to include all possibilities
+ACTION_TYPES = {
+    "EndTurn",
+    "ChooseCivic",
+    "ChooseTech", 
+    "CityRangedAttack",
+    "EncampmentRangedAttack",
+    "SendEnvoy",
+    "MakePeace",
+    "LevyMilitary",
+    "RecruitGreatPerson",
+    "RejectGreatPerson",
+    "PatronizeGreatPersonGold",
+    "PatronizeGreatPersonFaith",
+    "MoveUnit",
+    "UnitRangedAttack",
+    "UnitAirAttack",
+    "FormUnit",
+    "RebaseUnit",
+    "WMDStrike",
+    "QueueUnitPath",
+    "BuildImprovement",
+    "EnterFormation",
+    "FoundCity",
+    "PromoteUnit",
+    "UpgradeUnit",
+    "ChangeGovernment",
+    "ChangePolicies",
+    "EstablishTradeRoute",
+    "CityProduction",
+    "PlaceDistrict",
+    "FoundPantheon",
+    "FoundReligion",
+    "SelectBeliefs",
+    "SpreadReligion",
+    "EvangelizeBelief",
+    "PurchaseWithGold",
+    "PurchaseWithFaith",
+    "ActivateGreatPerson",
+    "AssignGovernorTitle",
+    "AssignGovernorToCity",
+    "HarvestResource",
+    "Fortify",
+    "FormCorps",
+    "FormArmy",
+    "Wake",
+    "Repair",
+    "RemoveFeature"
+}
 
+-- Update parameter names to include all possible parameters
+local ACTION_PARAM_ORDER = {
+    "CityID",
+    "UnitID", 
+    "PlotX",
+    "PlotY",
+    "TargetPlayerID",
+    "ProductionHash",
+    "ImprovementHash",
+    "PromotionType",
+    "PurchaseType",
+    "BeliefType",
+    "ReligionHash",
+    "GovernorType",
+    "PolicyHash",
+    "TechHash",
+    "CivicHash",
+    "TradeRouteIndex",
+    "DistrictHash",
+    "TypeHash"
+}
 -- Hash function for action parameters
 function Hash(value)
     if type(value) == "string" then
@@ -47,18 +117,8 @@ local TRANSFORMER_LAYERS = 4 -- Number of transformer layers
 local MAX_TECHS = 70        -- Total techs in Civ6
 local MAX_CIVICS = 50       -- Total civics in Civ6
 local MAX_DIPLO_CIVS = 20   -- Max other civilizations
-ACTION_PARAM_ORDER = {
-    "CityID",           -- ID of the city for city-related actions
-    "UnitID",           -- ID of the unit for unit-related actions
-    "PlotX",           -- X coordinate for movement/placement actions
-    "PlotY",           -- Y coordinate for movement/placement actions
-    "ProductionHash",   -- Hash for production items (buildings, units, etc.)
-    "ImprovementHash", -- Hash for tile improvements
-    "PromotionType",   -- Type of unit promotion
-    "PurchaseType",    -- Type of purchase action
-    "TypeHash"         -- Generic hash for other types of actions
-}
-PARAM_ENCODING_SIZE = 6
+
+PARAM_ENCODING_SIZE = 18
 
 
 function argmax(t)
@@ -388,6 +448,52 @@ function EncodeGameState(state)
     return stateEmbed
 end
 
+function DecodeHash(encoded_values)
+    local hash = 0
+    for i, value in ipairs(encoded_values) do
+        hash = hash + math.floor(value * 31) * (32 ^ (i-1))
+    end
+    return hash
+end
+
+function DecodeCoordinate(encoded_value)
+    return math.floor(encoded_value * MAP_DIMENSION)
+end
+
+function DecodeID(encoded_values)
+    return math.floor(encoded_values[1] * 1000000)
+end
+function DecodeSpecialParameters(action_type, encoded_values, offset)
+    local params = {}
+    
+    if action_type == "BuildImprovement" then
+        params.ImprovementHash = DecodeHash(slice_table(encoded_values, offset, offset + 5))
+        params.PlotX = DecodeCoordinate(encoded_values[offset + 6])
+        params.PlotY = DecodeCoordinate(encoded_values[offset + 7])
+        
+    elseif action_type == "SpreadReligion" then
+        params.TargetCityID = DecodeID(slice_table(encoded_values, offset, offset + 5))
+        params.ReligionHash = DecodeHash(slice_table(encoded_values, offset + 6, offset + 11))
+        
+    elseif action_type == "EstablishTradeRoute" then
+        params.Yields = {}
+        local yield_types = {"Food", "Production", "Gold", "Science", "Culture", "Faith"}
+        for i, yield_type in ipairs(yield_types) do
+            params.Yields[yield_type] = encoded_values[offset + i] * 100 -- Denormalize
+        end
+        
+    elseif action_type == "FoundReligion" then
+        params.BeliefHashes = {}
+        for i = 1, 3 do  -- Assume 3 belief choices
+            local belief_hash = DecodeHash(slice_table(encoded_values, offset + (i-1)*6, offset + i*6 - 1))
+            table.insert(params.BeliefHashes, belief_hash)
+        end
+    end
+    
+    return params
+end
+
+
 -- Add government type encoding
 function EncodeGovernment(government)
     local governmentEmbed = {}
@@ -568,21 +674,33 @@ end
 function EncodeAction(action_type, action_params)
     local encoded = {}
     
-    -- Action type one-hot (7 elements)
-    local action_types = {"CityProduction", "MoveUnit", "CityManagement",  -- Changed UnitMove to MoveUnit
-                         "Diplomacy", "Research", "Civic", "EndTurn"}
-    for _, atype in ipairs(action_types) do
+    -- Action type one-hot encoding
+    for _, atype in ipairs(ACTION_TYPES) do
         table.insert(encoded, atype == action_type and 1 or 0)
     end
 
-    -- Parameters (9×6 = 54 elements)
+    -- Parameters encoding
     for _, param_name in ipairs(ACTION_PARAM_ORDER) do
         local value = action_params[param_name] or 0
         encoded = EncodeActionParam(param_name, value, encoded)
     end
 
-    -- Ensure correct final size
-    assert(#encoded == 61, "Invalid action encoding size: "..#encoded)
+    -- Add special handling for specific action types
+    if action_type == "EstablishTradeRoute" then
+        -- Encode yields
+        local yields = action_params.Yields or {}
+        for _, yield_type in ipairs({"Food", "Production", "Gold", "Science", "Culture", "Faith"}) do
+            table.insert(encoded, Normalize(yields[yield_type] or 0, 100))
+        end
+    elseif action_type == "FoundReligion" then
+        -- Encode belief choices
+        if action_params.BeliefHashes then
+            for _, hash in ipairs(action_params.BeliefHashes) do
+                table.insert(encoded, Normalize(hash or 0, 1000000))
+            end
+        end
+    end
+
     return encoded
 end
 
@@ -670,65 +788,92 @@ function DecodeActionParam(param_name, encoded_values)
     end
 end
 -- Action Decoding
-function DecodeAction(encoded, possible_actions)
+function DecodeAction(encoded, possible_actions, masked_logits)
     print("\nDecoding Action:")
-    print("Encoded size:", #encoded)
     
-    local action_types = {"CityProduction", "MoveUnit", "CityManagement",  -- Changed UnitMove to MoveUnit
-                         "Diplomacy", "Research", "Civic", "EndTurn"}
+    -- Convert logits to probabilities using softmax
+    local sum_exp = 0
+    local probs = {}
+    for _, logit in ipairs(masked_logits) do
+        local exp_val = math.exp(logit)
+        sum_exp = sum_exp + exp_val
+        table.insert(probs, exp_val)
+    end
     
-    -- Get action type probabilities
-    local action_type_probs = slice_table(encoded, 1, #action_types)
-    print("Action type probabilities:", table.concat(action_type_probs, ", "))
+    -- Normalize probabilities
+    for i = 1, #probs do
+        probs[i] = probs[i] / sum_exp
+    end
     
-    local action_type_idx = argmax(action_type_probs)
-    print("Selected action type index:", action_type_idx)
-    local action_type = action_types[action_type_idx]
-    print("Selected action type:", action_type)
+    -- Sample action type using probabilities
+    local rand = math.random()
+    local cumsum = 0
+    local selected_idx = 1
     
-    -- Extract parameter values
+    for i, prob in ipairs(probs) do
+        cumsum = cumsum + prob
+        if rand <= cumsum then
+            selected_idx = i
+            break
+        end
+    end
+    
+    local action_type = ACTION_TYPES[selected_idx]
+    print("Sampled action type:", action_type, "with probability:", probs[selected_idx])
+    
+    -- Validate selected action is possible
+    if not possible_actions[action_type] or 
+       (action_type ~= "EndTurn" and #possible_actions[action_type] == 0) then
+        print("Selected action not possible, defaulting to EndTurn")
+        return {
+            ActionType = "EndTurn",
+            Parameters = {}
+        }
+    end
+    
+    -- Decode parameters for valid action
     local params = {}
-    local offset = #action_types
+    local offset = #ACTION_TYPES
     
     for _, param_name in ipairs(ACTION_PARAM_ORDER) do
         local param_values = slice_table(encoded, offset + 1, offset + PARAM_ENCODING_SIZE)
-        print("Parameter", param_name, "values:", table.concat(param_values, ", "))
         offset = offset + PARAM_ENCODING_SIZE
         
         if #param_values == PARAM_ENCODING_SIZE then
             params[param_name] = DecodeActionParam(param_name, param_values)
-            print("Decoded", param_name, "=", params[param_name])
-        else
-            print("WARNING: Skipping parameter", param_name, "due to insufficient values")
-            params[param_name] = 0
+            print(string.format("Decoded %s = %s", param_name, tostring(params[param_name])))
         end
     end
-
-    -- Add fallback handling
-    if not action_type then
-        print("WARNING: No valid action type selected, defaulting to EndTurn")
-        return {ActionType = "EndTurn", Parameters = {}}
-    end
-
-    -- Match to valid action
-    local matched_action = MatchToValidAction(action_type, params, possible_actions)
-    print("Matched action:", matched_action.ActionType)
     
-    return matched_action
+    -- Match decoded action to valid action and include probabilities
+    local action = MatchToValidAction(action_type, params, possible_actions)
+    action.Probabilities = probs
+    action.SelectedProbability = probs[selected_idx]
+    
+    return action
 end
+
+
 function MatchToValidAction(action_type, params, possible_actions)
     print("\nMatching to valid action:")
     print("Action type:", action_type)
-    print("Available actions for type:", possible_actions[action_type] and #possible_actions[action_type] or 0)
     
     -- Handle EndTurn specially
     if action_type == "EndTurn" then
         return {ActionType = "EndTurn", Parameters = {}}
     end
     
-    -- If no valid actions of this type, return EndTurn
-    if not possible_actions[action_type] or #possible_actions[action_type] == 0 then
-        print("No valid actions for type", action_type, "defaulting to EndTurn")
+    -- Validate possible actions exist
+    if not possible_actions[action_type] then
+        print("No actions available for type", action_type)
+        return {ActionType = "EndTurn", Parameters = {}}
+    end
+    
+    local valid_actions = possible_actions[action_type]
+    print("Available actions:", #valid_actions)
+    
+    if #valid_actions == 0 then
+        print("No valid actions for type", action_type)
         return {ActionType = "EndTurn", Parameters = {}}
     end
     
@@ -736,22 +881,30 @@ function MatchToValidAction(action_type, params, possible_actions)
     local best_match = nil
     local best_score = -math.huge
     
-    for _, valid_action in ipairs(possible_actions[action_type]) do
+    for _, valid_action in ipairs(valid_actions) do
         local score = 0
+        local param_count = 0
+        
         for param, value in pairs(params) do
             if valid_action[param] then
                 score = score + (1 - math.abs((value - valid_action[param]) / 
                     (math.max(math.abs(value), math.abs(valid_action[param])) + 1e-6)))
+                param_count = param_count + 1
             end
         end
         
-        if score > best_score then
-            best_score = score
-            best_match = valid_action
+        -- Normalize score by number of matched parameters
+        if param_count > 0 then
+            score = score / param_count
+            if score > best_score then
+                best_score = score
+                best_match = valid_action
+            end
         end
     end
     
     if best_match then
+        print("Found matching action with score:", best_score)
         return {
             ActionType = action_type,
             Parameters = best_match
@@ -1104,51 +1257,33 @@ end
 -- end
 
 function CivTransformerPolicy:CreateAttentionMask(possible_actions)
-    local action_types = {"CityProduction", "MoveUnit", "CityManagement",  -- Changed UnitMove to MoveUnit
-                         "Diplomacy", "Research", "Civic", "EndTurn"}
-    local MAX_ACTION_PARAMS = 9  -- From ACTION_PARAM_ORDER length
+    -- Create mask for all possible action types 
+    local action_mask = matrix:new(#ACTION_TYPES, 1, 0) -- Initialize to 0 (masked)
     
-    -- Create mask matrix with proper initialization
-    local mask = matrix:new(#action_types, MAX_ACTION_PARAMS, 1)  -- 1 = allowed by default
-    
-    for action_idx, action_type in ipairs(action_types) do
-        if not possible_actions[action_type] or 
-           (action_type ~= "EndTurn" and #possible_actions[action_type] == 0) then
-            -- Create zero-filled row table
-            local zero_row = {}
-            for i = 1, MAX_ACTION_PARAMS do
-                table.insert(zero_row, 0)
+    -- Set 1 for valid actions only
+    for action_type, actions in pairs(possible_actions) do
+        local idx = nil
+        -- Find index of this action type
+        for i, atype in ipairs(ACTION_TYPES) do
+            if atype == action_type then
+                idx = i
+                break
             end
-            -- Set entire row to 0
-            mask:setrow(action_idx, zero_row)
-        else
-            -- Validate individual parameters for this action type
-            for param_idx = 1, MAX_ACTION_PARAMS do
-                local param_name = ACTION_PARAM_ORDER[param_idx]
-                local valid = false
-                
-                -- Handle EndTurn case separately
-                if action_type == "EndTurn" then
-                    valid = false  -- EndTurn doesn't need parameters
-                else
-                    -- Only try to iterate if it's actually a table of actions
-                    local actions = possible_actions[action_type]
-                    if type(actions) == "table" then
-                        for _, action in ipairs(actions) do
-                            if action[param_name] ~= nil then
-                                valid = true
-                                break
-                            end
-                        end
-                    end
-                end
-                
-                mask:setelement(action_idx, param_idx, valid and 1 or 0)
-            end
+        end
+        
+        -- Set mask to 1 if action type is valid and has possible actions
+        if idx and (action_type == "EndTurn" or (type(actions) == "table" and #actions > 0)) then
+            action_mask:setelement(idx, 1, 1)
         end
     end
     
-    return mask
+    -- Debug print
+    print("\nAction Mask:")
+    for i = 1, #ACTION_TYPES do
+        print(string.format("%s: %d", ACTION_TYPES[i], action_mask:getelement(i, 1)))
+    end
+    
+    return action_mask
 end
 
 function CivTransformerPolicy:Attention(query, key, value, mask)
@@ -1517,32 +1652,46 @@ function CivTransformerPolicy:Forward(state_mtx, possible_actions)
     print("\nTransformer Forward Pass:")
     
     -- Create attention mask from possible actions
-    local mask = self:CreateAttentionMask(possible_actions)
+    local action_mask = self:CreateAttentionMask(possible_actions)
     
     -- Process through transformer
     local embedded_state = matrix.mul(state_mtx, self.state_embedding_weights)
     print("Embedded state size:", embedded_state:size()[1], "x", embedded_state:size()[2])
     
     embedded_state = self:AddPositionalEncoding(embedded_state)
-    local transformer_output = self:TransformerEncoder(embedded_state, mask)
+    local transformer_output = self:TransformerEncoder(embedded_state, action_mask)
     
     -- Convert transformer output to action encoding
     print("Transformer output size:", transformer_output:size()[1], "x", transformer_output:size()[2])
-    local action_encoding = matrixToTable(transformer_output)[1]  -- Take first row
-    print("Action encoding size:", #action_encoding)
+    local action_encoding = matrixToTable(transformer_output)[1]
     
-    -- Decode action
-    local decoded_action = DecodeAction(action_encoding, possible_actions)
+    -- Extract action type logits (first N elements where N is #ACTION_TYPES)
+    local action_logits = {}
+    for i = 1, #ACTION_TYPES do
+        action_logits[i] = action_encoding[i]
+    end
     
-    -- -- Validate decoded action before execution
-    -- if decoded_action and decoded_action.ActionType then
-    --     print("Executing action:", decoded_action.ActionType)
-    --     RLv1.ExecuteAction(decoded_action.ActionType, decoded_action.Parameters or {})
-    -- else
-    --     print("WARNING: Invalid decoded action, skipping execution")
-    -- end
+    -- Apply mask to logits
+    for i = 1, #action_logits do
+        if action_mask:getelement(i, 1) == 0 then
+            action_logits[i] = -1e9 -- Effectively zero probability after softmax
+        end
+    end
     
-    return decoded_action
+    -- Print masked logits for debugging
+    print("\nMasked Action Logits:")
+    for i = 1, #ACTION_TYPES do
+        print(string.format("%s: %.4f", ACTION_TYPES[i], action_logits[i]))
+    end
+    
+    local decoded_action = DecodeAction(action_encoding, possible_actions, action_logits)
+    
+    return {
+        action = decoded_action,
+        action_encoding = action_encoding,
+        action_probabilities = decoded_action.Probabilities,
+        selected_probability = decoded_action.SelectedProbability
+    }
 end
 
 function CivTransformerPolicy:SaveWeights(identifier)

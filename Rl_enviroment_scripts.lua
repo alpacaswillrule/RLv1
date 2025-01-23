@@ -13,7 +13,7 @@ include("storage");
 include("matrix");
 include("ValueNetwork");
 include("RL_Update");
-local m_isAgentEnabled = true; -- Default to disabled
+local m_isAgentEnabled = false; -- Default to disabled
 local m_isInitialized = false;
 local m_localPlayerID = -1;
 local gameId = GenerateGameID()
@@ -87,7 +87,6 @@ end
 function OnLoadGameViewStateDone()
     print("RL OnLoadGameViewStateDone fired");
     InitializeRL();  -- Initialize immediately when view is loaded
-    CivTransformerPolicy:Init()
     SendRLNotification("RL Agent loaded successfully!");
 end
 
@@ -230,8 +229,9 @@ function RLv1.OnTurnBegin()
 
     m_currentGameTurn = Game.GetCurrentGameTurn();
     print("RLv1.OnTurnBegin: Turn " .. m_currentGameTurn .. " started");
-
+    index = 0
     while true do
+        index = index + 1
         -- Perform inference
         state = GetPlayerData(Game.GetLocalPlayer())
         local forward_result = CivTransformerPolicy:Forward(
@@ -242,7 +242,9 @@ function RLv1.OnTurnBegin()
         -- Get value estimate separately
         local value_estimate = ValueNetwork:GetValue(state)
         
+        -- Extract action from forward result's action field
         local action = forward_result.action
+        
         if action and action.ActionType then
             if action.ActionType == "EndTurn" then
                 RLv1.ExecuteAction(action.ActionType, action.Parameters or {})
@@ -250,13 +252,16 @@ function RLv1.OnTurnBegin()
             else
                 RLv1.ExecuteAction(action.ActionType, action.Parameters or {})
             end
-
         end
         
         -- Get state after action
         local nextState = GetPlayerData(Game.GetLocalPlayer())
-        
-        -- Record transition with value estimate
+        local value = ValueNetwork:GetValue(nextState)
+        if value == nil then
+            print("Value is nil ERROR")
+            return
+        end
+        -- Record transition with value estimate and new probability information
         table.insert(m_gameHistory.transitions, {
             turn = m_currentGameTurn,
             action = {
@@ -268,10 +273,27 @@ function RLv1.OnTurnBegin()
             next_state = nextState,
             value_estimate = value_estimate,
             action_encoding = forward_result.action_encoding,
-            next_value_estimate = ValueNetwork:GetValue(nextState)
+            action_probabilities = forward_result.action_probabilities,  -- New field
+            selected_probability = forward_result.selected_probability,  -- New field
+            next_value_estimate = value
         })
+
+        if index >= 250 then -- Prevent infinite loops
+            RLv1.ExecuteAction("EndTurn", {})
+            break
+        end
+
+        -- Debug printing
+        if forward_result.action_probabilities then
+            print("\nAction Probabilities:")
+            for i, prob in ipairs(forward_result.action_probabilities) do
+                print(string.format("%s: %.4f", ACTION_TYPES[i], prob))
+            end
+            print(string.format("Selected action probability: %.4f", forward_result.selected_probability))
+        end
     end
 end
+
 
 -- -- Register our load handler
 Events.LoadGameViewStateDone.Add(OnLoadGameViewStateDone);
@@ -363,54 +385,3 @@ function OnPlayerDefeat(player, defeat, eventID)
         end
     end
 end
-
--- function OnResearchChanged(playerID)
---     -- Only process for local player
---     if playerID ~= Game.GetLocalPlayer() then 
---         return
---     end
-
---     local currentState = GetPlayerData(playerID) -- Get current game state
---     local cleanstate = CleanStateForSerialization(currentState)
-    
---     -- Create a minimal game history with current state
---     local gameHistory = {
---         transitions = {
---             {
---                 turn = Game.GetCurrentGameTurn(),
---                 index = 1,
---                 state = cleanstate,
---                 -- Since this is just a snapshot, we'll leave these empty
---                 action = {},
---                 next_state = nil
---             }
---         },
---         episode_number = 1,
---         victory_type = nil,
---         total_turns = Game.GetCurrentGameTurn()
---     }
-
---     print("=== Saving Game State on Research Change ===")
---     --SaveGameHistory(gameHistory, "testjohan")
-
---     -- Load and print info
---     print("=== Loading Saved Game State ===")
---     local loadedHistory = LoadGameHistory("testjohan")
-    
---     if loadedHistory then
---         print("Total Turns: " .. tostring(loadedHistory.total_turns))
---         print("Episode Number: " .. tostring(loadedHistory.episode_number))
-        
---         -- Print some state info from the first transition
---         if #loadedHistory.transitions > 0 then
---             local state = loadedHistory.transitions[1].state
---             PrintPlayerSummary(state)
---             PrintPlayerUnitsAndCities(state)
---         end
---     else
---         print("Failed to load saved game state")
---     end
--- end
-
--- -- Register the event handler
--- Events.ResearchQueueChanged.Add(OnResearchChanged)
