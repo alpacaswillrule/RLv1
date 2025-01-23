@@ -11,6 +11,12 @@ PPOTraining = {
     entropy_coef = 0.01  -- Entropy bonus coefficient
 }
 
+
+
+function clamp(value, min_val, max_val)
+    return math.min(math.max(value, min_val), max_val)
+end
+
 -- Calculate GAE (Generalized Advantage Estimation)
 function PPOTraining:ComputeGAE(transitions)
     local advantages = {}
@@ -60,22 +66,76 @@ end
 
 -- Calculate PPO Policy Loss
 function PPOTraining:ComputePolicyLoss(old_action_probs, new_action_probs, advantages)
-    local ratio = new_action_probs / old_action_probs
-    local surr1 = ratio * advantages
-    local surr2 = torch.clamp(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon) * advantages
-    
-    return -torch.min(surr1, surr2):mean()
-end
+    -- Convert inputs to matrices if they aren't already
+    local old_probs_mtx = type(old_action_probs.getelement) == "function" and 
+                         old_action_probs or 
+                         tableToMatrix(old_action_probs)
+    local new_probs_mtx = type(new_action_probs.getelement) == "function" and 
+                         new_action_probs or 
+                         tableToMatrix(new_action_probs)
+    local advantages_mtx = type(advantages.getelement) == "function" and 
+                         advantages or 
+                         tableToMatrix(advantages)
 
+    -- Calculate ratio
+    local ratio = matrix.elementwise_div(new_probs_mtx, old_probs_mtx)
+    
+    -- Calculate surrogate objectives
+    local surr1 = matrix.elementwise_mul(ratio, advantages_mtx)
+    local surr2 = matrix.elementwise_mul(
+        matrix.replace(ratio, function(x) return clamp(x, 1 - self.clip_epsilon, 1 + self.clip_epsilon) end),
+        advantages_mtx
+    )
+    
+    -- Take minimum and mean
+    local loss = -matrix.mean(matrix.min(surr1, surr2))
+    return loss
+end
 -- Calculate Value Loss
 function PPOTraining:ComputeValueLoss(values, returns)
-    local diff = values - returns
-    return 0.5 * (diff * diff):mean()
+    local values_mtx = type(values.getelement) == "function" and values or tableToMatrix(values)
+    local returns_mtx = type(returns.getelement) == "function" and returns or tableToMatrix(returns)
+    
+    local diff = matrix.sub(values_mtx, returns_mtx)
+    return 0.5 * matrix.mean(matrix.elementwise_mul(diff, diff))
 end
 
 -- Calculate Entropy Bonus
 function PPOTraining:ComputeEntropyBonus(action_probs)
-    return -(action_probs * torch.log(action_probs + 1e-10)):sum()
+    local probs_mtx = type(action_probs.getelement) == "function" and 
+                      action_probs or 
+                      tableToMatrix(action_probs)
+    
+    return -matrix.sum(matrix.elementwise_mul(
+        probs_mtx,
+        matrix.log(matrix.add_scalar(probs_mtx, 1e-10))
+    ))
+end
+
+-- Add network update implementation
+function PPOTraining:UpdateNetworks(policy_loss, value_loss, entropy_loss)
+    -- Calculate total loss and propagate gradients
+    local total_loss = policy_loss + 
+                      self.value_coef * value_loss - 
+                      self.entropy_coef * entropy_loss
+    
+    -- Zero gradients before backward pass
+    CivTransformerPolicy:zero_grad()
+    ValueNetwork:zero_grad()
+    
+    -- Backward pass through both networks
+    -- Start backward from total loss
+    local initial_grad = matrix:new(1, 1, 1.0)  -- Initial gradient is 1.0
+    
+    -- Backward through policy network
+    CivTransformerPolicy:BackwardPass(
+        initial_grad:elementwise_mul(matrix:new(1, 1, 1.0)),  -- Policy gradient
+        initial_grad:elementwise_mul(matrix:new(1, 1, self.value_coef))  -- Value gradient
+    )
+    
+    -- Update network weights using calculated gradients
+    CivTransformerPolicy:UpdateParams(self.learning_rate)
+    ValueNetwork:UpdateParams(self.learning_rate)
 end
 
 -- Main PPO update function
@@ -134,40 +194,35 @@ function PPOTraining:Update(gameHistory)
             end
             
             -- Forward pass through both networks
-            local new_action_results = {}
-            local new_values = {}
+            local batch_states = matrix.stack(state_batch)  -- Stack states into a batch
+            local policy_output = CivTransformerPolicy:Forward(batch_states, GetPossibleActions())
+            local value_output = ValueNetwork:Forward(batch_states)
             
-            for _, state in ipairs(state_batch) do
-                local state_processed = CivTransformerPolicy:ProcessGameState(state)
-                local forward_result = CivTransformerPolicy:Forward(state_processed, GetPossibleActions())
-                local value = ValueNetwork:GetValue(state)
-                
-                table.insert(new_action_results, forward_result)
-                table.insert(new_values, value)
-            end
+            -- Calculate losses using our matrix operations
+            local policy_loss = self:ComputePolicyLoss(
+                old_probs_batch, 
+                policy_output.action_probs,
+                advantage_batch
+            )
+            local value_loss = self:ComputeValueLoss(value_output, return_batch)
+            local entropy_loss = self:ComputeEntropyBonus(policy_output.action_probs)
             
-            -- Calculate losses
-            local policy_loss = self:ComputePolicyLoss(old_probs_batch, new_action_results, advantage_batch)
-            local value_loss = self:ComputeValueLoss(new_values, return_batch)
-            local entropy_bonus = self:ComputeEntropyBonus(new_action_results)
+            -- Update networks using our backprop implementation
+            self:UpdateNetworks(policy_loss, value_loss, entropy_loss)
             
-            -- Total loss
-            local total_loss = policy_loss + 
-                             self.value_coef * value_loss - 
-                             self.entropy_coef * entropy_bonus
-            
-            -- Update networks (placeholder for now)
-            -- We'll need to implement gradient calculation and weight updates
-            -- This will depend on how we want to handle optimization
-            
-            print(string.format("Batch %d/%d - Policy Loss: %.4f, Value Loss: %.4f, Entropy: %.4f",
+            print(string.format(
+                "Batch %d/%d - Policy Loss: %.4f, Value Loss: %.4f, Entropy: %.4f",
                 math.floor(i/batch_size) + 1, 
                 math.ceil(#transitions/batch_size),
                 policy_loss,
                 value_loss,
-                entropy_bonus))
+                entropy_loss
+            ))
+
         end
     end
 end
+
+
 
 return PPOTraining

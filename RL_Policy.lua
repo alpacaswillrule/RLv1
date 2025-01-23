@@ -1338,16 +1338,16 @@ function CivTransformerPolicy:LayerNorm(input_mtx)
 end
 
 -- 5. Transformer Layer (Complete with Feedforward, Residual Connections, and Layer Normalization)
-function CivTransformerPolicy:TransformerLayer(input, mask)
-    print("\nTransformerLayer:")
+function CivTransformerPolicy:TransformerLayer(input, mask, layer_index)
+    print("\nTransformerLayer:", layer_index)
     -- Convert input to matrix if needed
     local input_mtx = type(input.size) == "function" and input or tableToMatrix(input)
     local input_size = input_mtx:size()
     print("Input matrix shape:", input_size[1], "x", input_size[2])
 
-    -- Multi-Head Attention
+    -- Multi-Head Attention with layer index
     print("Calling MultiHeadAttention...")
-    local attention_output = self:MultiHeadAttention(input_mtx, input_mtx, input_mtx, mask)
+    local attention_output = self:MultiHeadAttention(input_mtx, input_mtx, input_mtx, mask, layer_index)
     local attention_size = attention_output:size()
     print("Attention output shape:", attention_size[1], "x", attention_size[2])
     assert(attention_size[1] == input_size[1] and attention_size[2] == input_size[2],
@@ -1358,9 +1358,9 @@ function CivTransformerPolicy:TransformerLayer(input, mask)
     local norm1_size = add_norm_output_1:size()
     print("First LayerNorm output shape:", norm1_size[1], "x", norm1_size[2])
     
-    -- Feedforward
+    -- Feedforward with layer index
     print("Calling Feedforward...")
-    local ff_output = self:Feedforward(add_norm_output_1)
+    local ff_output = self:Feedforward(add_norm_output_1, layer_index)
     local ff_size = ff_output:size()
     print("Feedforward output shape:", ff_size[1], "x", ff_size[2])
     
@@ -1371,7 +1371,6 @@ function CivTransformerPolicy:TransformerLayer(input, mask)
     
     return final_output
 end
-
 -- 6. Transformer Encoder 
 function CivTransformerPolicy:TransformerEncoder(input, mask)
     -- Verify input shape
@@ -1390,7 +1389,7 @@ function CivTransformerPolicy:TransformerEncoder(input, mask)
               table.concat(encoder_output:size(), "x") or 
               #encoder_output .. "x" .. #encoder_output[1])
         
-        encoder_output = self:TransformerLayer(encoder_output, mask)
+        encoder_output = self:TransformerLayer(encoder_output, mask, i)
         
         -- Verify output shape hasn't changed
         local output_size = type(encoder_output.size) == "function" and 
@@ -1523,6 +1522,120 @@ function CivTransformerPolicy:Forward(state_mtx, possible_actions)
     end
     
     return decoded_action
+end
+
+
+
+-- STORAGE FUNCTIONS ALL PLACEHOLDERS
+
+-- Storage functions
+function CivTransformerPolicy:SaveWeights(filename)
+    -- For now this is a placeholder that describes what we'll save
+    local weights = {
+        state_embedding = self.state_embedding_weights,
+        head_projections = self.head_projections,
+        w_o = self.w_o,
+        ff1_weights = self.ff1_weights,
+        ff2_weights = self.ff2_weights,
+        ff1_bias = self.ff1_bias,
+        ff2_bias = self.ff2_bias,
+        -- Add any other weights we need to save
+    }
+    print("Placeholder: Saving weights to " .. filename)
+    -- TODO: Implement actual saving mechanism
+end
+
+function CivTransformerPolicy:LoadWeights(filename)
+    print("Placeholder: Loading weights from " .. filename)
+    -- TODO: Implement actual loading mechanism
+end
+
+-- Add to ValueNetwork
+function ValueNetwork:SaveWeights(filename)
+    local weights = {
+        value_hidden = self.value_hidden,
+        value_hidden2 = self.value_hidden2,
+        value_out = self.value_out,
+        value_hidden_bias = self.value_hidden_bias,
+        value_hidden2_bias = self.value_hidden2_bias,
+        value_out_bias = self.value_out_bias
+    }
+    print("Placeholder: Saving value network weights to " .. filename)
+    -- TODO: Implement actual saving mechanism
+end
+
+function ValueNetwork:LoadWeights(filename)
+    print("Placeholder: Loading value network weights from " .. filename)
+    -- TODO: Implement actual loading mechanism
+end
+
+-- Add resume training initialization
+function CivTransformerPolicy:InitForTraining(resume_from)
+    if self.initialized then
+        print("CivTransformerPolicy already initialized")
+        return
+    end
+
+    if resume_from then
+        -- Try to load existing weights
+        print("Resuming training from " .. resume_from)
+        self:LoadWeights(resume_from .. "_policy.weights")
+        ValueNetwork:LoadWeights(resume_from .. "_value.weights")
+    else
+        -- Initialize new weights
+        print("Initializing new weights for training")
+        self:Init()
+        ValueNetwork:Init()
+    end
+
+    -- Initialize training-specific components
+    self:InitializeCache()
+    
+    -- Initialize optimizer state (placeholder for now)
+    self.optimizer = {
+        learning_rate = 0.0001,
+        beta1 = 0.9,
+        beta2 = 0.999,
+        epsilon = 1e-8,
+        -- Add momentum buffers or other optimizer state here
+    }
+
+    print("Training initialization complete")
+end
+
+-- Add save checkpoint function
+function CivTransformerPolicy:SaveCheckpoint(checkpoint_dir, episode)
+    local checkpoint_name = string.format("%s/checkpoint_%d", checkpoint_dir, episode)
+    
+    -- Save network weights
+    self:SaveWeights(checkpoint_name .. "_policy.weights")
+    ValueNetwork:SaveWeights(checkpoint_name .. "_value.weights")
+    
+    -- Save optimizer state
+    local optimizer_state = {
+        learning_rate = self.optimizer.learning_rate,
+        beta1 = self.optimizer.beta1,
+        beta2 = self.optimizer.beta2,
+        epsilon = self.optimizer.epsilon,
+        -- Add any other optimizer state we need to save
+    }
+    
+    print(string.format("Saved checkpoint %d to %s", episode, checkpoint_name))
+end
+
+-- Add load checkpoint function
+function CivTransformerPolicy:LoadCheckpoint(checkpoint_dir, episode)
+    local checkpoint_name = string.format("%s/checkpoint_%d", checkpoint_dir, episode)
+    
+    -- Load network weights
+    self:LoadWeights(checkpoint_name .. "_policy.weights")
+    ValueNetwork:LoadWeights(checkpoint_name .. "_value.weights")
+    
+    -- Initialize optimizer with saved state
+    -- TODO: Implement actual loading of optimizer state
+    
+    print(string.format("Loaded checkpoint %d from %s", episode, checkpoint_name))
+    return true
 end
 --[[
 -- Example usage (for now, without actual actions or parameters)
