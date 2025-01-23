@@ -82,6 +82,8 @@ end
 function OnLoadGameViewStateDone()
     print("RL OnLoadGameViewStateDone fired");
     InitializeRL();  -- Initialize immediately when view is loaded
+    CivTransformerPolicy:Init()
+    SendRLNotification("RL Agent loaded successfully!");
 end
 
 
@@ -98,6 +100,20 @@ function OnInputHandler(pInputStruct)
     return false;
 end
 
+function Inference(playerID, state)
+    -- Only process for local player
+    if playerID ~= Game.GetLocalPlayer() then 
+        return
+    end
+    -- 1. Get and Encode Game State
+    state_mtx = CivTransformerPolicy:ProcessGameState(state)
+
+    local possibleActions = GetPossibleActions()
+    -- local action_type_probs, action_params_probs, value = 
+    action = CivTransformerPolicy:Forward(state_mtx, possibleActions)
+    
+    return action
+end
 
 function InitializeRL()
     print("RL InitializeRL called");
@@ -157,22 +173,15 @@ function RLv1.OnTurnBegin()
     --get reward, and state
     state = GetPlayerData(Game.GetLocalPlayer())
     reward = CalculateReward(state)
-    --print
-    print("Reward: ", reward)
 
     m_currentGameTurn = Game.GetCurrentGameTurn();
     print("RLv1.OnTurnBegin: Turn " .. m_currentGameTurn .. " started");
 
     while true do
-        local possibleActions = GetPossibleActions()
-        local currentState = GetPlayerData(Game.GetLocalPlayer())
-        
-    if actionType == "ENDTURN" then
-        EndTurn(true)
-        break
-    elseif actionType then
-        -- Execute action
-        RLv1.ExecuteAction(actionType, actionParams)
+        -- performn inference
+        state = GetPlayerData(Game.GetLocalPlayer())
+        action = Inference(Game.GetLocalPlayer(), state)
+        RLv1.ExecuteAction(action.ActionType, action.Parameters or {})
         
         -- Get state after action
         local nextState = GetPlayerData(Game.GetLocalPlayer())
@@ -183,22 +192,14 @@ function RLv1.OnTurnBegin()
             turn = m_currentGameTurn,
             index = index,
             action = {
-                type = actionType,
-                params = actionParams
+                type = action.ActionType,
+                params = action.Parameters or {}
             },
-            state = currentState,
+            reward = CalculateReward(nextState),
+            state = state,
             next_state = nextState
         })
-        
-        -- Update possible actions
-        possibleActions = GetPossibleActions()
-        if not possibleActions then return end
-    else
-        print("NO ACTION SELECTED, NOT EVEN ENDTURN, SOMETHING WENT WRONG. Force ending turn")
-        EndTurn(true) --we have no actions left, force end turn, but something must've gone wrong
-        break
     end
-end -- end of while loop
 end
 
 
@@ -281,53 +282,6 @@ function OnPlayerDefeat(player, defeat, eventID)
     end
 end
 
-function OnResearchChanged(playerID)
-    -- Only process for local player
-    if playerID ~= Game.GetLocalPlayer() then 
-        return
-    end
-    
-
-    print("=== OnResearchChanged: Research Change Detected ===")
-
-    CivTransformerPolicy:Init()
-
-    -- 1. Get and Encode Game State
-    local currentState = GetPlayerData(playerID)
-    state_mtx = CivTransformerPolicy:ProcessGameState(currentState)
-
-    local possibleActions = GetPossibleActions()
-    -- local action_type_probs, action_params_probs, value = 
-    CivTransformerPolicy:Forward(state_mtx, possibleActions)
-
-    -- 4. Print Outputs for Debugging
-    print("=== Forward Pass Outputs ===")
-    --print("Action Type Probabilities:", action_type_probs) -- Might be large, depending on the number of action types
-    --print("Action Parameter Probabilities:", action_params_probs) -- Might be large
-    --print("Value:", value)
-
-    -- 5. Test Matrix Operations (Optional)
-    print("=== Testing Matrix Operations ===")
-    local testMatrix = matrix:new(3, 3, 2) -- Create a 3x3 matrix filled with 2s
-    local testMatrix2 = matrix:new({{1, 2, 3}, {4, 5, 6}, {7, 8, 9}})
-    print("Test Matrix 1:")
-    testMatrix:print()
-    print("Test Matrix 2:")
-    testMatrix2:print()
-
-    local sumMatrix = matrix.add(testMatrix, testMatrix2)
-    print("Sum of Matrices:")
-    sumMatrix:print()
-
-    local mulMatrix = matrix.mulnum(testMatrix, 5)
-    print("Matrix Multiplied by 5:")
-    mulMatrix:print()
-
-    local transposedMatrix = matrix.transpose(testMatrix2)
-    print("Transposed Matrix:")
-    transposedMatrix:print()
-
-end
 
 -- Register the event handler
 Events.ResearchQueueChanged.Add(OnResearchChanged)
