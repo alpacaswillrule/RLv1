@@ -124,4 +124,36 @@ function ValueNetwork:GetValueBatch(states)
     return values
 end
 
+
+function ValueNetwork:LoadWeights(identifier)
+    local weights = Read_tableString("value_weights_" .. identifier)
+    if not weights then return false end
+    
+    self.value_hidden = tableToMatrix(weights.value_hidden)
+    self.value_hidden2 = tableToMatrix(weights.value_hidden2)
+    self.value_out = tableToMatrix(weights.value_out)
+    self.value_hidden_bias = tableToMatrix(weights.value_hidden_bias)
+    self.value_hidden2_bias = tableToMatrix(weights.value_hidden2_bias)
+    self.value_out_bias = tableToMatrix(weights.value_out_bias)
+    
+    return true
+end
+
+
+function ValueNetwork:SaveWeights(identifier)
+    local weights = {
+        value_hidden = matrixToTable(self.value_hidden),
+        value_hidden2 = matrixToTable(self.value_hidden2),
+        value_out = matrixToTable(self.value_out),
+        value_hidden_bias = matrixToTable(self.value_hidden_bias),
+        value_hidden2_bias = matrixToTable(self.value_hidden2_bias),
+        value_out_bias = matrixToTable(self.value_out_bias)
+    }
+    
+    Storage_table(weights, "value_weights_" .. identifier)
+end
+
+
+
+
 return ValueNetwork

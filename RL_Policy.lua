@@ -1524,133 +1524,75 @@ function CivTransformerPolicy:Forward(state_mtx, possible_actions)
     return decoded_action
 end
 
-
-
--- STORAGE FUNCTIONS ALL PLACEHOLDERS
-
--- Storage functions
-function CivTransformerPolicy:SaveWeights(filename)
-    -- For now this is a placeholder that describes what we'll save
+function CivTransformerPolicy:SaveWeights(identifier)
+    -- Convert network weights to serializable tables
     local weights = {
-        state_embedding = self.state_embedding_weights,
-        head_projections = self.head_projections,
-        w_o = self.w_o,
-        ff1_weights = self.ff1_weights,
-        ff2_weights = self.ff2_weights,
-        ff1_bias = self.ff1_bias,
-        ff2_bias = self.ff2_bias,
-        -- Add any other weights we need to save
+        state_embedding = matrixToTable(self.state_embedding_weights),
+        head_projections = {
+            w_q = {},
+            w_k = {},
+            w_v = {}
+        },
+        w_o = matrixToTable(self.w_o),
+        ff1_weights = {},
+        ff2_weights = {},
+        ff1_bias = {},
+        ff2_bias = {}
     }
-    print("Placeholder: Saving weights to " .. filename)
-    -- TODO: Implement actual saving mechanism
-end
 
-function CivTransformerPolicy:LoadWeights(filename)
-    print("Placeholder: Loading weights from " .. filename)
-    -- TODO: Implement actual loading mechanism
-end
-
--- Add to ValueNetwork
-function ValueNetwork:SaveWeights(filename)
-    local weights = {
-        value_hidden = self.value_hidden,
-        value_hidden2 = self.value_hidden2,
-        value_out = self.value_out,
-        value_hidden_bias = self.value_hidden_bias,
-        value_hidden2_bias = self.value_hidden2_bias,
-        value_out_bias = self.value_out_bias
-    }
-    print("Placeholder: Saving value network weights to " .. filename)
-    -- TODO: Implement actual saving mechanism
-end
-
-function ValueNetwork:LoadWeights(filename)
-    print("Placeholder: Loading value network weights from " .. filename)
-    -- TODO: Implement actual loading mechanism
-end
-
--- Add resume training initialization
-function CivTransformerPolicy:InitForTraining(resume_from)
-    if self.initialized then
-        print("CivTransformerPolicy already initialized")
-        return
+    -- Convert head projections
+    for i = 1, self.num_heads do
+        weights.head_projections.w_q[i] = matrixToTable(self.head_projections.w_q[i])
+        weights.head_projections.w_k[i] = matrixToTable(self.head_projections.w_k[i])
+        weights.head_projections.w_v[i] = matrixToTable(self.head_projections.w_v[i])
     end
 
-    if resume_from then
-        -- Try to load existing weights
-        print("Resuming training from " .. resume_from)
-        self:LoadWeights(resume_from .. "_policy.weights")
-        ValueNetwork:LoadWeights(resume_from .. "_value.weights")
-    else
-        -- Initialize new weights
-        print("Initializing new weights for training")
-        self:Init()
-        ValueNetwork:Init()
+    -- Convert feedforward weights
+    for i = 1, TRANSFORMER_LAYERS do
+        weights.ff1_weights[i] = matrixToTable(self.ff1_weights[i])
+        weights.ff2_weights[i] = matrixToTable(self.ff2_weights[i])
+        weights.ff1_bias[i] = matrixToTable(self.ff1_bias[i])
+        weights.ff2_bias[i] = matrixToTable(self.ff2_bias[i])
     end
 
-    -- Initialize training-specific components
-    self:InitializeCache()
-    
-    -- Initialize optimizer state (placeholder for now)
-    self.optimizer = {
-        learning_rate = 0.0001,
-        beta1 = 0.9,
-        beta2 = 0.999,
-        epsilon = 1e-8,
-        -- Add momentum buffers or other optimizer state here
-    }
-
-    print("Training initialization complete")
+    -- Save using storage utility
+    Storage_table(weights, "policy_weights_" .. identifier)
 end
 
--- Add save checkpoint function
-function CivTransformerPolicy:SaveCheckpoint(checkpoint_dir, episode)
-    local checkpoint_name = string.format("%s/checkpoint_%d", checkpoint_dir, episode)
+function CivTransformerPolicy:LoadWeights(identifier)
+    local weights = Read_tableString("policy_weights_" .. identifier)
+    if not weights then return false end
     
-    -- Save network weights
-    self:SaveWeights(checkpoint_name .. "_policy.weights")
-    ValueNetwork:SaveWeights(checkpoint_name .. "_value.weights")
+    -- Convert tables back to matrices
+    self.state_embedding_weights = tableToMatrix(weights.state_embedding)
+    self.w_o = tableToMatrix(weights.w_o)
     
-    -- Save optimizer state
-    local optimizer_state = {
-        learning_rate = self.optimizer.learning_rate,
-        beta1 = self.optimizer.beta1,
-        beta2 = self.optimizer.beta2,
-        epsilon = self.optimizer.epsilon,
-        -- Add any other optimizer state we need to save
+    -- Initialize head projections
+    self.head_projections = {
+        w_q = {},
+        w_k = {},
+        w_v = {}
     }
     
-    print(string.format("Saved checkpoint %d to %s", episode, checkpoint_name))
-end
-
--- Add load checkpoint function
-function CivTransformerPolicy:LoadCheckpoint(checkpoint_dir, episode)
-    local checkpoint_name = string.format("%s/checkpoint_%d", checkpoint_dir, episode)
+    for i = 1, self.num_heads do
+        self.head_projections.w_q[i] = tableToMatrix(weights.head_projections.w_q[i])
+        self.head_projections.w_k[i] = tableToMatrix(weights.head_projections.w_k[i])
+        self.head_projections.w_v[i] = tableToMatrix(weights.head_projections.w_v[i])
+    end
     
-    -- Load network weights
-    self:LoadWeights(checkpoint_name .. "_policy.weights")
-    ValueNetwork:LoadWeights(checkpoint_name .. "_value.weights")
+    -- Initialize feedforward weights
+    self.ff1_weights = {}
+    self.ff2_weights = {}
+    self.ff1_bias = {}
+    self.ff2_bias = {}
     
-    -- Initialize optimizer with saved state
-    -- TODO: Implement actual loading of optimizer state
+    for i = 1, TRANSFORMER_LAYERS do
+        self.ff1_weights[i] = tableToMatrix(weights.ff1_weights[i])
+        self.ff2_weights[i] = tableToMatrix(weights.ff2_weights[i])
+        self.ff1_bias[i] = tableToMatrix(weights.ff1_bias[i])
+        self.ff2_bias[i] = tableToMatrix(weights.ff2_bias[i])
+    end
     
-    print(string.format("Loaded checkpoint %d from %s", episode, checkpoint_name))
     return true
 end
---[[
--- Example usage (for now, without actual actions or parameters)
-local state = GetPlayerData(Game.GetLocalPlayer())
-local encoded_state = EncodeGameState(state)
-local possible_actions = GetPossibleActions()
 
-CivTransformerPolicy:Init()
-local action_type_probs, action_params_probs, value = CivTransformerPolicy:Forward(encoded_state, possible_actions)
-
--- Print the outputs (for demonstration purposes)
-print("Action Type Probabilities:", action_type_probs)
-print("Action Parameter Probabilities:", action_params_probs)
-print("Value:", value)
---]]
-
--- Main state encoding function
--- Add encoding for tech/civic progress

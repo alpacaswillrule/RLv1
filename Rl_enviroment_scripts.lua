@@ -12,6 +12,7 @@ include("rewardFunction");
 include("storage");
 include("matrix");
 include("ValueNetwork");
+include("RL_Update");
 local m_isAgentEnabled = false; -- Default to disabled
 local m_isInitialized = false;
 local m_localPlayerID = -1;
@@ -25,8 +26,11 @@ m_gameHistory = {
 }
 
 local num_games_run = 0 --ONCE THIS NUMBER HITS 10, WE RETRAIN
+local threshold_games_run = 10
 
-function retrain()
+function retrain(m_gameHistory)
+PPOTraining:Update(m_gameHistory);
+SaveNetworks("johanweights");
 end
 
 function RLv1.ToggleAgent()
@@ -116,11 +120,17 @@ function Inference(playerID, state)
     return action
 end
 
+local load_weights_from_past_session = false
 function InitializeRL()
     print("RL InitializeRL called");
     if m_isInitialized then 
         print("RLv1.InitializeRL: Already initialized.");
         return; 
+    end
+    if load_weights_from_past_session then
+        InitializeNetworks("johanweights")
+    else
+        InitializeNetworks()
     end
 
     -- Force immediate UI update and ensure context is active
@@ -168,18 +178,53 @@ function InitializeRL()
     print("RLv1: Agent initialized successfully!");
 end
 
+function InitializeNetworks(identifier)
+    -- Try to load existing weights first
+    local policy_loaded = false
+    local value_loaded = false
+    
+    if identifier then
+        print("Attempting to load saved weights with identifier: " .. identifier)
+        policy_loaded = CivTransformerPolicy:LoadWeights(identifier)
+        value_loaded = ValueNetwork:LoadWeights(identifier)
+    end
+    
+    -- Initialize networks that couldn't be loaded
+    if not policy_loaded then
+        print("Initializing new policy network")
+        CivTransformerPolicy:Init()
+    else
+        print("Successfully loaded policy network weights")
+        CivTransformerPolicy.initialized = true
+    end
+    
+    if not value_loaded then
+        print("Initializing new value network")
+        ValueNetwork:Init()
+    else
+        print("Successfully loaded value network weights")
+        ValueNetwork.initialized = true
+    end
+    
+    return policy_loaded, value_loaded
+end
+
+-- Save current weights
+function SaveNetworks(identifier)
+    CivTransformerPolicy:SaveWeights(identifier)
+    ValueNetwork:SaveWeights(identifier)
+    print("Saved network weights with identifier: " .. identifier)
+end
 
 function RLv1.OnTurnBegin()
     if not m_isAgentEnabled then return end
     
     -- Initialize both networks if needed
-    if not CivTransformerPolicy.initialized then
-        CivTransformerPolicy:Init()
+    if not CivTransformerPolicy.initialized and not ValueNetwork.initialized then
+        InitializeNetworks()
+        print("Initialized networks on turn start WARNING")
     end
-    if not ValueNetwork.initialized then
-        ValueNetwork:Init()
-    end
-    
+
     state = GetPlayerData(Game.GetLocalPlayer())
     reward = CalculateReward(state)
 
@@ -277,6 +322,18 @@ function CheckRestartTimer()
 end
 
 function AutoRestartGame()
+    num_games_run = num_games_run + 1
+    if num_games_run >= threshold_games_run then
+        retrain(m_gameHistory)
+        num_games_run = 0
+        m_gameHistory = { --RESETING THE GAME HISTORY
+            transitions = {},
+            episode_number = 0,
+            victory_type = nil,
+            total_turns = 0,
+            game_id = gameId  -- Store the ID with the history
+        }
+    end
     Events.GameCoreEventPublishComplete.Add(CheckRestartTimer)
     coroutine.resume(RestartOperation)
 end
