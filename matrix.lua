@@ -240,6 +240,45 @@ function matrix.add( m1, m2 )
 	return setmetatable( mtx, matrix_meta )
 end
 
+-- Add this to the matrix library (matrix.lua)
+function matrix.stack(matrices)
+    if #matrices == 0 then
+        return nil
+    end
+    
+    -- Get dimensions from first matrix
+    local first = matrices[1]
+    if type(first) ~= "table" then
+        error("Input must be a table of matrices or tables")
+    end
+    
+    -- If input is already a matrix object, return it directly
+    if type(first.getelement) == "function" then
+        return first
+    end
+    
+    -- Create result matrix
+    local rows = #matrices
+    local cols = #first
+    local result = matrix:new(rows, cols)
+    
+    -- Fill result matrix
+    for i = 1, rows do
+        local current = matrices[i]
+        -- Validate dimensions
+        if #current ~= cols then
+            error(string.format("Dimension mismatch at index %d: expected length %d, got %d", 
+                i, cols, #current))
+        end
+        -- Copy values
+        for j = 1, cols do
+            result:setelement(i, j, current[j])
+        end
+    end
+    
+    return result
+end
+
 --// matrix.sub ( m1 ,m2 )
 -- Subtract two matrices; m2 may be of bigger size than m1
 function matrix.sub( m1, m2 )

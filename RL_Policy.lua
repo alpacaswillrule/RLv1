@@ -887,9 +887,20 @@ function MatchToValidAction(action_type, params, possible_actions)
         
         for param, value in pairs(params) do
             if valid_action[param] then
-                score = score + (1 - math.abs((value - valid_action[param]) / 
-                    (math.max(math.abs(value), math.abs(valid_action[param])) + 1e-6)))
-                param_count = param_count + 1
+                -- Convert both values to numbers if possible
+                local val1 = tonumber(value)
+                local val2 = tonumber(valid_action[param])
+                
+                -- Only compare if both values are numbers
+                if val1 and val2 then
+                    score = score + (1 - math.abs((val1 - val2) / 
+                        (math.max(math.abs(val1), math.abs(val2)) + 1e-6)))
+                    param_count = param_count + 1
+                -- If values are strings, check for exact match
+                elseif value == valid_action[param] then
+                    score = score + 1
+                    param_count = param_count + 1
+                end
             end
         end
         
