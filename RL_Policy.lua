@@ -1662,10 +1662,15 @@ end
 function CivTransformerPolicy:Forward(state_mtx, possible_actions)
     print("\nTransformer Forward Pass:")
     
+    -- Convert state_mtx to proper matrix if it isn't already
+    if type(state_mtx) ~= "table" or not state_mtx.getelement then
+        state_mtx = tableToMatrix(state_mtx)
+    end
+    
     -- Create attention mask from possible actions
     local action_mask = self:CreateAttentionMask(possible_actions)
     
-    -- Process through transformer
+    -- Process through transformer and save intermediate states
     local embedded_state = matrix.mul(state_mtx, self.state_embedding_weights)
     print("Embedded state size:", embedded_state:size()[1], "x", embedded_state:size()[2])
     
@@ -1676,32 +1681,31 @@ function CivTransformerPolicy:Forward(state_mtx, possible_actions)
     print("Transformer output size:", transformer_output:size()[1], "x", transformer_output:size()[2])
     local action_encoding = matrixToTable(transformer_output)[1]
     
-    -- Extract action type logits (first N elements where N is #ACTION_TYPES)
+    -- Extract action logits
     local action_logits = {}
     for i = 1, #ACTION_TYPES do
         action_logits[i] = action_encoding[i]
     end
     
     -- Apply mask to logits
+    local masked_logits = {}
     for i = 1, #action_logits do
-        if action_mask:getelement(i, 1) == 0 then
-            action_logits[i] = -1e9 -- Effectively zero probability after softmax
-        end
+        masked_logits[i] = action_mask:getelement(i, 1) == 0 and -1e9 or action_logits[i]
     end
     
-    -- Print masked logits for debugging
-    print("\nMasked Action Logits:")
-    for i = 1, #ACTION_TYPES do
-        print(string.format("%s: %.4f", ACTION_TYPES[i], action_logits[i]))
-    end
+    local decoded_action = DecodeAction(action_encoding, possible_actions, masked_logits)
     
-    local decoded_action = DecodeAction(action_encoding, possible_actions, action_logits)
-    
+    -- Return both the action and the tensors needed for backprop
     return {
         action = decoded_action,
         action_encoding = action_encoding,
         action_probabilities = decoded_action.Probabilities,
-        selected_probability = decoded_action.SelectedProbability
+        selected_probability = decoded_action.SelectedProbability,
+        -- Add intermediate tensors for backprop
+        embedded_state = embedded_state,
+        transformer_output = transformer_output,
+        action_logits = tableToMatrix(masked_logits),
+        attention_mask = action_mask
     }
 end
 

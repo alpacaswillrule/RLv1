@@ -141,84 +141,63 @@ end
 -- Main PPO update function
 function PPOTraining:Update(gameHistory)
     print("Starting PPO Update")
-    
-    -- Get transitions from game history
-    local transitions = gameHistory.transitions
-    if #transitions == 0 then
+    if #gameHistory.transitions == 0 then
         print("No transitions to train on")
         return
     end
     
     -- Compute advantages and returns
-    local advantages, returns = self:ComputeGAE(transitions)
+    local advantages, returns = self:ComputeGAE(gameHistory.transitions)
     
-    -- Collect states and process them in batches
-    local states = {}
-    local actions = {}
-    local old_action_probs = {}
-    
-    for _, transition in ipairs(transitions) do
-        table.insert(states, transition.state)
-        table.insert(actions, transition.action)
-        table.insert(old_action_probs, transition.action_encoding)  -- Saved during forward pass
-    end
-    
-    -- PPO update loop (multiple epochs)
-    local num_epochs = 4
+    -- Process in mini-batches
     local batch_size = 64
-    
-    for epoch = 1, num_epochs do
+    for epoch = 1, 4 do  -- 4 epochs
         print("PPO Epoch:", epoch)
         
-        -- Process in mini-batches
-        for i = 1, #transitions, batch_size do
-            local batch_end = math.min(i + batch_size - 1, #transitions)
-            local batch_indices = {}
+        for i = 1, #gameHistory.transitions, batch_size do
+            local batch_end = math.min(i + batch_size - 1, #gameHistory.transitions)
+            
+            -- Prepare batch data
+            local states = {}
+            local actions = {}
+            local old_action_probs = {}
+            local batch_advantages = {}
+            local batch_returns = {}
+            
             for j = i, batch_end do
-                table.insert(batch_indices, j)
+                table.insert(states, gameHistory.transitions[j].state)
+                table.insert(actions, gameHistory.transitions[j].action)
+                table.insert(old_action_probs, gameHistory.transitions[j].action_encoding)
+                table.insert(batch_advantages, advantages[j])
+                table.insert(batch_returns, returns[j])
             end
             
-            -- Get batch data
-            local state_batch = {}
-            local action_batch = {}
-            local old_probs_batch = {}
-            local advantage_batch = {}
-            local return_batch = {}
-            
-            for _, idx in ipairs(batch_indices) do
-                table.insert(state_batch, states[idx])
-                table.insert(action_batch, actions[idx])
-                table.insert(old_probs_batch, old_action_probs[idx])
-                table.insert(advantage_batch, advantages[idx])
-                table.insert(return_batch, returns[idx])
-            end
-            
-            -- Forward pass through both networks
-            local batch_states = matrix.stack(state_batch)  -- Stack states into a batch
+            -- Forward pass through policy network
+            local batch_states = matrix.stack(states)  -- Need to implement stack function
             local policy_output = CivTransformerPolicy:Forward(batch_states, GetPossibleActions())
             local value_output = ValueNetwork:Forward(batch_states)
             
-            -- Calculate losses using our matrix operations
+            -- Calculate losses
             local policy_loss = self:ComputePolicyLoss(
-                old_probs_batch, 
-                policy_output.action_probs,
-                advantage_batch
+                tableToMatrix(old_action_probs),
+                policy_output.action_logits,
+                tableToMatrix(batch_advantages)
             )
-            local value_loss = self:ComputeValueLoss(value_output, return_batch)
-            local entropy_loss = self:ComputeEntropyBonus(policy_output.action_probs)
             
-            -- Update networks using our backprop implementation
+            local value_loss = self:ComputeValueLoss(value_output, tableToMatrix(batch_returns))
+            local entropy_loss = self:ComputeEntropyBonus(policy_output.action_probabilities)
+            
+            -- Backward pass
             self:UpdateNetworks(policy_loss, value_loss, entropy_loss)
             
             print(string.format(
                 "Batch %d/%d - Policy Loss: %.4f, Value Loss: %.4f, Entropy: %.4f",
-                math.floor(i/batch_size) + 1, 
-                math.ceil(#transitions/batch_size),
+                math.floor(i/batch_size) + 1,
+                math.ceil(#gameHistory.transitions/batch_size),
                 policy_loss,
                 value_loss,
                 entropy_loss
             ))
-
         end
     end
 end
