@@ -1666,6 +1666,8 @@ function CivTransformerPolicy:Forward(state_mtx, possible_actions)
     if type(state_mtx) ~= "table" or not state_mtx.getelement then
         state_mtx = tableToMatrix(state_mtx)
     end
+    print("State matrix dimensions:", state_mtx:size()[1], "x", state_mtx:size()[2])
+    print("Embedding weights dimensions:", self.state_embedding_weights:size()[1], "x", self.state_embedding_weights:size()[2])
     
     -- Create attention mask from possible actions
     local action_mask = self:CreateAttentionMask(possible_actions)
@@ -1693,6 +1695,12 @@ function CivTransformerPolicy:Forward(state_mtx, possible_actions)
         masked_logits[i] = action_mask:getelement(i, 1) == 0 and -1e9 or action_logits[i]
     end
     
+    -- Convert masked_logits to matrix properly (as a column vector)
+    local masked_logits_matrix = matrix:new(#masked_logits, 1)
+    for i = 1, #masked_logits do
+        masked_logits_matrix:setelement(i, 1, masked_logits[i])
+    end
+    
     local decoded_action = DecodeAction(action_encoding, possible_actions, masked_logits)
     
     -- Return both the action and the tensors needed for backprop
@@ -1704,7 +1712,7 @@ function CivTransformerPolicy:Forward(state_mtx, possible_actions)
         -- Add intermediate tensors for backprop
         embedded_state = embedded_state,
         transformer_output = transformer_output,
-        action_logits = tableToMatrix(masked_logits),
+        action_logits = masked_logits_matrix,  -- Now using the properly formatted matrix
         attention_mask = action_mask
     }
 end
