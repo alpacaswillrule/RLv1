@@ -569,7 +569,7 @@ function EncodeAction(action_type, action_params)
     local encoded = {}
     
     -- Action type one-hot (7 elements)
-    local action_types = {"CityProduction", "UnitMove", "CityManagement", 
+    local action_types = {"CityProduction", "MoveUnit", "CityManagement",  -- Changed UnitMove to MoveUnit
                          "Diplomacy", "Research", "Civic", "EndTurn"}
     for _, atype in ipairs(action_types) do
         table.insert(encoded, atype == action_type and 1 or 0)
@@ -673,7 +673,7 @@ function DecodeAction(encoded, possible_actions)
     print("\nDecoding Action:")
     print("Encoded size:", #encoded)
     
-    local action_types = {"CityProduction", "UnitMove", "CityManagement",
+    local action_types = {"CityProduction", "MoveUnit", "CityManagement",  -- Changed UnitMove to MoveUnit
                          "Diplomacy", "Research", "Civic", "EndTurn"}
     
     -- Get action type probabilities
@@ -847,48 +847,44 @@ function CivTransformerPolicy:AddPositionalEncoding(state_embedding)
     return pos_encoding
 end
 
-function CivTransformerPolicy:CreateAttentionMask(possible_actions)
-    local action_types = {
-        "CityProduction", "UnitMove", "CityManagement", 
-        "Diplomacy", "Research", "Civic", "EndTurn"
-    }
-    local mask = matrix:new(#action_types, #ACTION_PARAM_ORDER, 1)
+-- function CivTransformerPolicy:CreateAttentionMask(possible_actions)
+--     local action_types = {"CityProduction", "MoveUnit", "CityManagement",  -- Changed UnitMove to MoveUnit
+--                          "Diplomacy", "Research", "Civic", "EndTurn"}
+--     local mask = matrix:new(#action_types, #ACTION_PARAM_ORDER, 1)
 
-    for action_idx, action_type in ipairs(action_types) do
-        -- Special handling for EndTurn
-        if action_type == "EndTurn" then
-            for param_idx = 1, #ACTION_PARAM_ORDER do
-                mask:setelement(action_idx, param_idx, 0) -- Mask all params
-            end
-        else
-            -- Existing logic for other actions
-            if not possible_actions[action_type] or #possible_actions[action_type] == 0 then
-                for param_idx = 1, #ACTION_PARAM_ORDER do
-                    mask:setelement(action_idx, param_idx, 0)
-                end
-            else
-            -- Check valid parameters for this action type
-            for param_idx, param_name in ipairs(ACTION_PARAM_ORDER) do
-                local valid = false
-                for _, action in ipairs(possible_actions[action_type]) do
-                    if action[param_name] ~= nil then
-                        valid = true
-                        break
-                    end
-                end
-                mask:setelement(action_idx, param_idx, valid and 1 or 0)
-            end
-        end
-    end
-    return mask
-end
-end
+--     for action_idx, action_type in ipairs(action_types) do
+--         -- Special handling for EndTurn
+--         if action_type == "EndTurn" then
+--             for param_idx = 1, #ACTION_PARAM_ORDER do
+--                 mask:setelement(action_idx, param_idx, 0) -- Mask all params
+--             end
+--         else
+--             -- Existing logic for other actions
+--             if not possible_actions[action_type] or #possible_actions[action_type] == 0 then
+--                 for param_idx = 1, #ACTION_PARAM_ORDER do
+--                     mask:setelement(action_idx, param_idx, 0)
+--                 end
+--             else
+--             -- Check valid parameters for this action type
+--             for param_idx, param_name in ipairs(ACTION_PARAM_ORDER) do
+--                 local valid = false
+--                 for _, action in ipairs(possible_actions[action_type]) do
+--                     if action[param_name] ~= nil then
+--                         valid = true
+--                         break
+--                     end
+--                 end
+--                 mask:setelement(action_idx, param_idx, valid and 1 or 0)
+--             end
+--         end
+--     end
+--     return mask
+-- end
+-- end
 
 function CivTransformerPolicy:CreateAttentionMask(possible_actions)
-    local action_types = {
-        "CityProduction", "UnitMove", "CityManagement", 
-        "Diplomacy", "Research", "Civic", "EndTurn"
-    }
+    local action_types = {"CityProduction", "MoveUnit", "CityManagement",  -- Changed UnitMove to MoveUnit
+                         "Diplomacy", "Research", "Civic", "EndTurn"}
     local MAX_ACTION_PARAMS = 9  -- From ACTION_PARAM_ORDER length
     
     -- Create mask matrix with proper initialization
