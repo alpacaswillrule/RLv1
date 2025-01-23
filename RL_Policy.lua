@@ -632,6 +632,7 @@ function EncodeActionParam(param_name, value, encoded)
     end
     return encoded
 end
+
 function DecodeActionParam(param_name, encoded_values)
     -- Handle potential missing values
     if #encoded_values < 6 then
@@ -821,6 +822,50 @@ function CivTransformerPolicy:InitStateEmbedding()
             local val = self.state_embedding_weights:getelement(i, j)
             self.state_embedding_weights:setelement(i, j, val * 1.9 + 0.1)
         end
+    end
+end
+
+function CivTransformerPolicy:BackwardPass(action_grad, value_grad)
+    -- Backward through value head
+    local transformer_grad_from_value = ValueNetwork:BackwardPass(value_grad)
+    
+    -- Backward through action head
+    local transformer_grad_from_action = self:ActionHeadBackward(action_grad)
+    
+    -- Combine gradients
+    local total_transformer_grad = matrix.add(
+        transformer_grad_from_value,
+        transformer_grad_from_action
+    )
+    
+    -- Backward through transformer layers
+    self:TransformerBackward(total_transformer_grad)
+end
+
+function CivTransformerPolicy:TransformerBackward(grad)
+    -- Backward through each transformer layer
+    local layer_grad = grad
+    for i = TRANSFORMER_LAYERS, 1, -1 do
+        layer_grad = self:TransformerLayerBackward(layer_grad, i)
+    end
+    
+    -- Backward through initial embedding
+    self.state_embedding_weights:backward(layer_grad)
+end
+
+function CivTransformerPolicy:UpdateParams(learning_rate)
+    -- Update all network parameters
+    self.state_embedding_weights:update_weights(learning_rate)
+    
+    -- Update transformer layer weights
+    for i = 1, TRANSFORMER_LAYERS do
+        -- Update attention weights
+        for h = 1, self.num_heads do
+            self.head_projections.w_q[h]:update_weights(learning_rate)
+            self.head_projections.w_k[h]:update_weights(learning_rate)
+            self.head_projections.w_v[h]:update_weights(learning_rate)
+        end
+        self.w_o:update_weights(learning_rate)
     end
 end
 

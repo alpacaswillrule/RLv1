@@ -57,6 +57,27 @@ function ValueNetwork:Init()
     print("Initialized Value Network")
 end
 
+function ValueNetwork:BackwardPass(grad)
+    -- Backward through final layer
+    local value_out_grad = grad
+    self.value_out:backward(value_out_grad)
+    
+    -- Backward through hidden layers
+    local hidden2_grad = matrix.mul_with_grad(value_out_grad, matrix.transpose(self.value_out))
+    self.value_hidden2:backward(hidden2_grad)
+    
+    local hidden_grad = matrix.mul_with_grad(hidden2_grad, matrix.transpose(self.value_hidden2))
+    self.value_hidden:backward(hidden_grad)
+    
+    return hidden_grad
+end
+
+function ValueNetwork:UpdateParams(learning_rate)
+    self.value_out:update_weights(learning_rate)
+    self.value_hidden2:update_weights(learning_rate)
+    self.value_hidden:update_weights(learning_rate)
+end
+
 function ValueNetwork:Forward(state_encoding)
     -- Ensure we have a matrix
     local state_mtx = type(state_encoding.getelement) == "function" and 

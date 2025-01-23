@@ -634,6 +634,124 @@ function matrix.sqrt( m1, iters )
 	return y,z,get_abs_avg(matrix.mul(y,y),m1)
 end
 
+-- Add to matrix.lua or create new GradientMatrix.lua
+
+-- Add gradient storage and operations to matrix class
+function matrix:initGrad()
+    self.grad = matrix:new(self:rows(), self:columns(), 0)
+    self.requires_grad = true
+end
+
+function matrix:backward(grad)
+    if not self.requires_grad then return end
+    if not self.grad then self:initGrad() end
+    
+    -- Accumulate gradients (useful for multiple backward passes)
+    self.grad = matrix.add(self.grad, grad)
+end
+
+-- Add gradient versions of our operations
+function matrix.add_with_grad(a, b)
+    local result = matrix.add(a, b)
+    result.requires_grad = (a.requires_grad or b.requires_grad)
+    
+    -- Store backward function
+    result.backward_fn = function(grad)
+        if a.requires_grad then
+            a:backward(grad)
+        end
+        if b.requires_grad then
+            b:backward(grad)
+        end
+    end
+    
+    return result
+end
+
+function matrix.mul_with_grad(a, b)
+    local result = matrix.mul(a, b)
+    result.requires_grad = (a.requires_grad or b.requires_grad)
+    
+    -- Store backward function
+    result.backward_fn = function(grad)
+        if a.requires_grad then
+            local a_grad = matrix.mul(grad, matrix.transpose(b))
+            a:backward(a_grad)
+        end
+        if b.requires_grad then
+            local b_grad = matrix.mul(matrix.transpose(a), grad)
+            b:backward(b_grad)
+        end
+    end
+    
+    return result
+end
+
+-- ReLU with gradient
+function matrix.relu_with_grad(x)
+    local result = matrix.relu(x)
+    result.requires_grad = x.requires_grad
+    
+    result.backward_fn = function(grad)
+        if x.requires_grad then
+            -- ReLU gradient is 1 where input was > 0, 0 otherwise
+            local relu_grad = matrix.replace(x, function(val)
+                return val > 0 and 1 or 0
+            end)
+            x:backward(matrix.elementwise_mul(grad, relu_grad))
+        end
+    end
+    
+    return result
+end
+
+-- Softmax with gradient
+function matrix.softmax_with_grad(x)
+    local result = matrix.softmax(x)
+    result.requires_grad = x.requires_grad
+    
+    result.backward_fn = function(grad)
+        if x.requires_grad then
+            -- Softmax gradient calculation
+            local s = result
+            local grad_s = matrix:new(s:rows(), s:columns())
+            
+            for i = 1, s:rows() do
+                for j = 1, s:columns() do
+                    for k = 1, s:columns() do
+                        local delta = j == k and 1 or 0
+                        local val = s:getelement(i,j) * (delta - s:getelement(i,k))
+                        grad_s:setelement(i,j, grad_s:getelement(i,j) + val * grad:getelement(i,k))
+                    end
+                end
+            end
+            x:backward(grad_s)
+        end
+    end
+    
+    return result
+end
+
+-- Optimization utilities
+function matrix:zero_grad()
+    if self.grad then
+        self.grad = matrix:new(self:rows(), self:columns(), 0)
+    end
+end
+
+function matrix:update_weights(learning_rate)
+    if self.grad then
+        -- Update weights using gradient descent
+        for i = 1, self:rows() do
+            for j = 1, self:columns() do
+                local new_val = self:getelement(i,j) - learning_rate * self.grad:getelement(i,j)
+                self:setelement(i,j, new_val)
+            end
+        end
+        self:zero_grad()
+    end
+end
+
 -- Add this function to the matrix library
 function matrix.repmat(mtx, rows, cols)
     -- Get input dimensions
