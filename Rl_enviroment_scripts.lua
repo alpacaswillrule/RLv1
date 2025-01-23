@@ -278,7 +278,7 @@ function RLv1.OnTurnBegin()
             next_value_estimate = value
         })
 
-        if index >= 250 then -- Prevent infinite loops
+        if index >= 175 then -- Prevent infinite loops
             RLv1.ExecuteAction("EndTurn", {})
             break
         end

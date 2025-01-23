@@ -11,7 +11,7 @@ PPOTraining = {
     entropy_coef = 0.01  -- Entropy bonus coefficient
 }
 
-
+STATE_EMBED_SIZE = 4863
 
 function clamp(value, min_val, max_val)
     return math.min(math.max(value, min_val), max_val)

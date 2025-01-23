@@ -1425,25 +1425,56 @@ end
 -- end
 
 function CivTransformerPolicy:Feedforward(input, layer_index)
-    -- Save input
+    -- Debug prints and error checking
+    print("Feedforward layer:", layer_index)
+    print("Input dimensions:", input:size()[1], "x", input:size()[2])
+    
+    -- Check if weights/biases exist for this layer
+    if not self.ff1_weights[layer_index] then
+        print("ERROR: ff1_weights missing for layer", layer_index)
+        return nil
+    end
+    if not self.ff2_weights[layer_index] then
+        print("ERROR: ff2_weights missing for layer", layer_index)
+        return nil
+    end
+    if not self.ff1_bias[layer_index] then
+        print("ERROR: ff1_bias missing for layer", layer_index)
+        return nil
+    end
+    if not self.ff2_bias[layer_index] then
+        print("ERROR: ff2_bias missing for layer", layer_index)
+        return nil
+    end
+
+    -- Print weight dimensions
+    print("FF1 weights dimensions:", self.ff1_weights[layer_index]:size()[1], "x", self.ff1_weights[layer_index]:size()[2])
+    print("FF1 bias dimensions:", self.ff1_bias[layer_index]:size()[1], "x", self.ff1_bias[layer_index]:size()[2])
+    
+    -- Save input to cache
     self:SaveToCache(layer_index, nil, "ff1_input", input)
     
-    -- First linear layer + ReLU
-    local ff1_output = matrix.relu(matrix.add(
-        matrix.mul(input, self.ff1_weights[layer_index]),
-        self.ff1_bias[layer_index]
-    ))
+    -- First linear layer
+    local ff1_mul = matrix.mul(input, self.ff1_weights[layer_index])
+    print("FF1 multiplication result dimensions:", ff1_mul:size()[1], "x", ff1_mul:size()[2])
+    
+    -- Reshape bias if needed
+    local batch_size = input:size()[1]
+    local bias1 = matrix.repmat(self.ff1_bias[layer_index], batch_size, 1)
+    
+    -- First layer with ReLU
+    local ff1_output = matrix.relu(matrix.add(ff1_mul, bias1))
     
     -- Save intermediate output
     self:SaveToCache(layer_index, nil, "ff1_output", ff1_output)
     
     -- Second linear layer
-    return matrix.add(
-        matrix.mul(ff1_output, self.ff2_weights[layer_index]),
-        self.ff2_bias[layer_index]
-    )
+    local ff2_mul = matrix.mul(ff1_output, self.ff2_weights[layer_index])
+    local bias2 = matrix.repmat(self.ff2_bias[layer_index], batch_size, 1)
+    
+    -- Return final output
+    return matrix.add(ff2_mul, bias2)
 end
-
 -- Helper function for layer normalization (simplified for now)
 function CivTransformerPolicy:LayerNorm(input_mtx)
     local epsilon = 1e-6
@@ -1526,18 +1557,18 @@ function CivTransformerPolicy:TransformerEncoder(input, mask)
     -- Verify input shape
     print("\nTransformerEncoder:")
     local input_size = type(input.size) == "function" and input:size() or {#input, #input[1]}
-    print("TransformerEncoder Input Shape:", input_size[1], "x", input_size[2])
+    --print("TransformerEncoder Input Shape:", input_size[1], "x", input_size[2])
     assert(input_size[2] == TRANSFORMER_DIM, 
            "Input dimension mismatch. Expected " .. TRANSFORMER_DIM .. 
            ", got " .. input_size[2])
 
     local encoder_output = input
     for i = 1, TRANSFORMER_LAYERS do
-        print("\nTransformer Layer", i)
-        print("Encoder input shape:", 
-              type(encoder_output.size) == "function" and 
-              table.concat(encoder_output:size(), "x") or 
-              #encoder_output .. "x" .. #encoder_output[1])
+        --print("\nTransformer Layer", i)
+        -- print("Encoder input shape:", 
+        --       type(encoder_output.size) == "function" and 
+        --       table.concat(encoder_output:size(), "x") or 
+        --       #encoder_output .. "x" .. #encoder_output[1])
         
         encoder_output = self:TransformerLayer(encoder_output, mask, i)
         
@@ -1545,7 +1576,7 @@ function CivTransformerPolicy:TransformerEncoder(input, mask)
         local output_size = type(encoder_output.size) == "function" and 
                            encoder_output:size() or 
                            {#encoder_output, #encoder_output[1]}
-        print("Encoder output shape:", output_size[1], "x", output_size[2])
+        -- print("Encoder output shape:", output_size[1], "x", output_size[2])
         assert(output_size[1] == input_size[1] and output_size[2] == input_size[2],
                "Encoder output shape changed from " .. input_size[1] .. "x" .. input_size[2] ..
                " to " .. output_size[1] .. "x" .. output_size[2])
