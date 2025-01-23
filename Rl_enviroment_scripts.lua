@@ -26,7 +26,7 @@ m_gameHistory = {
 }
 
 local num_games_run = 0 --ONCE THIS NUMBER HITS 10, WE RETRAIN
-local threshold_games_run = 10
+local threshold_games_run = 1
 
 function retrain(m_gameHistory)
 PPOTraining:Update(m_gameHistory);
@@ -67,7 +67,7 @@ local VICTORY_TYPES = {
 };
 
 -- Configuration variables
-local TURN_LIMIT = 10;
+local TURN_LIMIT = 20;
 local AUTO_RESTART_ENABLED = true;
 
 
