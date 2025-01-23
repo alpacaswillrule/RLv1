@@ -11,6 +11,27 @@ include("rewardFunction");
 include("storage");
 include("matrix");
 
+-- Get map dimensions
+local mapWidth, mapHeight = Map.GetGridSize()
+local MAP_DIMENSION = math.max(mapWidth, mapHeight)
+
+-- Hash function for action parameters
+function Hash(value)
+    if type(value) == "string" then
+        local hash = 0
+        for i = 1, #value do
+            -- Use multiplication instead of bit shift
+            hash = (hash * 32 + hash) + string.byte(value, i)
+            -- Use modulo to keep within 32 bits
+            hash = hash % 0x100000000
+        end
+        return math.abs(hash)
+    elseif type(value) == "number" then
+        return math.abs(value)
+    end
+    return 0
+end
+
 -- Constants for embedding sizes and transformer config
 local STATE_EMBED_SIZE = 256 -- This needs to be calculated based on your encoding
 local CITY_EMBED_SIZE = 64 
