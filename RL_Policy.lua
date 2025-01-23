@@ -842,6 +842,178 @@ function CivTransformerPolicy:BackwardPass(action_grad, value_grad)
     self:TransformerBackward(total_transformer_grad)
 end
 
+
+function CivTransformerPolicy:TransformerLayerBackward(grad_output, layer_index)
+    -- Backward through second Add & Norm
+    local ff_grad = self:LayerNormBackward(grad_output)
+    
+    -- Backward through Feedforward
+    local ff_input_grad = self:FeedforwardBackward(ff_grad, layer_index)
+    
+    -- Backward through first Add & Norm
+    local attention_grad = self:LayerNormBackward(ff_input_grad)
+    
+    -- Backward through Multi-Head Attention
+    return self:MultiHeadAttentionBackward(attention_grad, layer_index)
+end
+
+function CivTransformerPolicy:LayerNormBackward(grad_output)
+    -- Layer normalization backward pass
+    -- grad_output: gradient from the next layer
+    local epsilon = 1e-6
+    local rows, cols = grad_output:size()[1], grad_output:size()[2]
+    
+    -- Calculate mean and variance gradients
+    local grad_input = matrix:new(rows, cols)
+    
+    for i = 1, rows do
+        local mean = 0
+        local var = 0
+        
+        -- Calculate mean and variance for this row
+        for j = 1, cols do
+            mean = mean + grad_output:getelement(i, j)
+            var = var + grad_output:getelement(i, j) * grad_output:getelement(i, j)
+        end
+        mean = mean / cols
+        var = var / cols - mean * mean
+        
+        -- Calculate gradients
+        for j = 1, cols do
+            local grad = grad_output:getelement(i, j)
+            local x_normalized = (grad_output:getelement(i, j) - mean) / math.sqrt(var + epsilon)
+            
+            -- Gradient with respect to input
+            local grad_in = grad * (1 / math.sqrt(var + epsilon))
+            grad_in = grad_in - mean / cols
+            grad_in = grad_in - x_normalized * var / (2 * cols * (var + epsilon))
+            
+            grad_input:setelement(i, j, grad_in)
+        end
+    end
+    
+    return grad_input
+end
+
+function CivTransformerPolicy:FeedforwardBackward(grad_output, layer_index)
+    -- Unpack saved tensors for this layer
+    local layer_cache = self.layer_caches[layer_index]
+    local ff1_output = layer_cache.ff1_output
+    local ff1_input = layer_cache.ff1_input
+    
+    -- Backward through second linear layer
+    local grad_ff2 = matrix.mul_with_grad(grad_output, matrix.transpose(self.ff2_weights[layer_index]))
+    self.ff2_weights[layer_index]:backward(matrix.mul_with_grad(matrix.transpose(ff1_output), grad_output))
+    self.ff2_bias[layer_index]:backward(grad_output)
+    
+    -- Backward through ReLU
+    local grad_relu = matrix.replace(grad_ff2, function(val, i, j)
+        return ff1_output:getelement(i, j) > 0 and val or 0
+    end)
+    
+    -- Backward through first linear layer
+    local grad_input = matrix.mul_with_grad(grad_relu, matrix.transpose(self.ff1_weights[layer_index]))
+    self.ff1_weights[layer_index]:backward(matrix.mul_with_grad(matrix.transpose(ff1_input), grad_relu))
+    self.ff1_bias[layer_index]:backward(grad_relu)
+    
+    return grad_input
+end
+
+function CivTransformerPolicy:MultiHeadAttentionBackward(grad_output, layer_index)
+    local total_grad_input = matrix:new(grad_output:rows(), self.d_model, 0)
+    
+    -- Backward through each attention head
+    for h = 1, self.num_heads do
+        local head_grad = self:SingleHeadAttentionBackward(
+            grad_output, 
+            layer_index,
+            h
+        )
+        total_grad_input = matrix.add(total_grad_input, head_grad)
+    end
+    
+    -- Backward through output projection
+    local grad_input = matrix.mul_with_grad(grad_output, matrix.transpose(self.w_o))
+    self.w_o:backward(matrix.mul_with_grad(
+        matrix.transpose(total_grad_input), 
+        grad_output
+    ))
+    
+    return grad_input
+end
+
+function CivTransformerPolicy:SingleHeadAttentionBackward(grad_output, layer_index, head_index)
+    -- Unpack saved tensors for this head
+    local head_cache = self.attention_caches[layer_index][head_index]
+    local Q = head_cache.Q
+    local K = head_cache.K
+    local V = head_cache.V
+    local attention_weights = head_cache.attention_weights
+    
+    -- Scale factor for attention
+    local d_k_sqrt = math.sqrt(self.d_k)
+    
+    -- Backward through attention mechanism
+    -- 1. Gradient to V
+    local grad_v = matrix.mul_with_grad(matrix.transpose(attention_weights), grad_output)
+    
+    -- 2. Gradient to attention weights
+    local grad_weights = matrix.mul_with_grad(grad_output, matrix.transpose(V))
+    
+    -- 3. Gradient to scaled dot product
+    local grad_dot = matrix.mul(grad_weights, 1/d_k_sqrt)
+    
+    -- 4. Gradients to Q and K
+    local grad_q = matrix.mul_with_grad(grad_dot, K)
+    local grad_k = matrix.mul_with_grad(matrix.transpose(grad_dot), Q)
+    
+    -- Backward through projection matrices
+    self.head_projections.w_v[head_index]:backward(matrix.mul_with_grad(
+        matrix.transpose(V), 
+        grad_v
+    ))
+    
+    self.head_projections.w_q[head_index]:backward(matrix.mul_with_grad(
+        matrix.transpose(Q), 
+        grad_q
+    ))
+    
+    self.head_projections.w_k[head_index]:backward(matrix.mul_with_grad(
+        matrix.transpose(K), 
+        grad_k
+    ))
+    
+    -- Combine gradients
+    return matrix.add(matrix.add(grad_q, grad_k), grad_v)
+end
+
+function CivTransformerPolicy:InitializeCache()
+    self.layer_caches = {}
+    self.attention_caches = {}
+    
+    for i = 1, TRANSFORMER_LAYERS do
+        self.layer_caches[i] = {}
+        self.attention_caches[i] = {}
+        
+        for h = 1, self.num_heads do
+            self.attention_caches[i][h] = {}
+        end
+    end
+end
+
+function CivTransformerPolicy:SaveToCache(layer_index, head_index, key, value)
+    if head_index then
+        self.attention_caches[layer_index][head_index][key] = value
+    else
+        self.layer_caches[layer_index][key] = value
+    end
+end
+
+function CivTransformerPolicy:ClearCache()
+    self:InitializeCache()
+end
+
+
 function CivTransformerPolicy:TransformerBackward(grad)
     -- Backward through each transformer layer
     local layer_grad = grad
@@ -996,7 +1168,7 @@ function CivTransformerPolicy:Attention(query, key, value, mask)
 end
 
 -- Multi-Head Attention
-function CivTransformerPolicy:MultiHeadAttention(query, key, value, mask)
+function CivTransformerPolicy:MultiHeadAttention(query, key, value, mask, layer_index)
     print("\nMultiHeadAttention:")
     -- Verify input shapes
     local q_size = query:size()
@@ -1020,17 +1192,22 @@ function CivTransformerPolicy:MultiHeadAttention(query, key, value, mask)
 
     -- Process each attention head
     for h = 1, self.num_heads do
-        print("Processing head", h)
-        
         -- Project queries, keys, and values
         local q_proj = matrix.mul(query, self.head_projections.w_q[h])
         local k_proj = matrix.mul(key, self.head_projections.w_k[h])
         local v_proj = matrix.mul(value, self.head_projections.w_v[h])
         
-        -- Compute attention scores
-        local attention_scores = matrix.mul(q_proj, matrix.transpose(k_proj))
-        attention_scores = matrix.divnum(attention_scores, math.sqrt(self.d_k))
+        -- Save projections to cache
+        self:SaveToCache(layer_index, h, "Q", q_proj)
+        self:SaveToCache(layer_index, h, "K", k_proj)
+        self:SaveToCache(layer_index, h, "V", v_proj)
         
+        -- Calculate attention scores
+        local attention_scores = matrix.mul(q_proj, matrix.transpose(k_proj))
+        local attention_weights = matrix.softmax(attention_scores)
+        
+        -- Save attention weights to cache
+        self:SaveToCache(layer_index, h, "attention_weights", attention_weights)
         -- Apply mask if provided
         if mask then
             attention_scores = matrix.replace(attention_scores, function(score, i, j)
@@ -1078,23 +1255,43 @@ function CivTransformerPolicy:ConcatenateAndProject(attention_outputs)
     return matrix.mul(concatenated, self.w_o)
 end
 
-function CivTransformerPolicy:Feedforward(input_mtx)
-    -- Define dimensions
-    local d_model = input_mtx:columns()
-    local d_ff = 2048
+-- function CivTransformerPolicy:Feedforward(input_mtx)
+--     -- Define dimensions
+--     local d_model = input_mtx:columns()
+--     local d_ff = 2048
 
-    -- Initialize weights and biases as matrices
-    local w1 = matrix.random(matrix:new(d_model, d_ff))
-    local b1 = matrix.random(matrix:new(1, d_ff))
-    local w2 = matrix.random(matrix:new(d_ff, d_model))
-    local b2 = matrix.random(matrix:new(1, d_model))
+--     -- Initialize weights and biases as matrices
+--     local w1 = matrix.random(matrix:new(d_model, d_ff))
+--     local b1 = matrix.random(matrix:new(1, d_ff))
+--     local w2 = matrix.random(matrix:new(d_ff, d_model))
+--     local b2 = matrix.random(matrix:new(1, d_model))
 
-    -- First linear layer + ReLU activation
-    local layer1_output = matrix.add(matrix.mul(input_mtx, w1), matrix.repmat(b1, input_mtx:rows(), 1))
-    layer1_output = matrix.relu(layer1_output)
+--     -- First linear layer + ReLU activation
+--     local layer1_output = matrix.add(matrix.mul(input_mtx, w1), matrix.repmat(b1, input_mtx:rows(), 1))
+--     layer1_output = matrix.relu(layer1_output)
 
+--     -- Second linear layer
+--     return matrix.add(matrix.mul(layer1_output, w2), matrix.repmat(b2, input_mtx:rows(), 1))
+-- end
+
+function CivTransformerPolicy:Feedforward(input, layer_index)
+    -- Save input
+    self:SaveToCache(layer_index, nil, "ff1_input", input)
+    
+    -- First linear layer + ReLU
+    local ff1_output = matrix.relu(matrix.add(
+        matrix.mul(input, self.ff1_weights[layer_index]),
+        self.ff1_bias[layer_index]
+    ))
+    
+    -- Save intermediate output
+    self:SaveToCache(layer_index, nil, "ff1_output", ff1_output)
+    
     -- Second linear layer
-    return matrix.add(matrix.mul(layer1_output, w2), matrix.repmat(b2, input_mtx:rows(), 1))
+    return matrix.add(
+        matrix.mul(ff1_output, self.ff2_weights[layer_index]),
+        self.ff2_bias[layer_index]
+    )
 end
 
 -- Helper function for layer normalization (simplified for now)
