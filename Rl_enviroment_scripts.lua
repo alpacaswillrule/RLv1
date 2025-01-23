@@ -11,6 +11,7 @@ include("RL_Policy");
 include("rewardFunction");
 include("storage");
 include("matrix");
+include("ValueNetwork");
 local m_isAgentEnabled = false; -- Default to disabled
 local m_isInitialized = false;
 local m_localPlayerID = -1;
@@ -170,7 +171,15 @@ end
 
 function RLv1.OnTurnBegin()
     if not m_isAgentEnabled then return end
-    --get reward, and state
+    
+    -- Initialize both networks if needed
+    if not CivTransformerPolicy.initialized then
+        CivTransformerPolicy:Init()
+    end
+    if not ValueNetwork.initialized then
+        ValueNetwork:Init()
+    end
+    
     state = GetPlayerData(Game.GetLocalPlayer())
     reward = CalculateReward(state)
 
@@ -178,15 +187,23 @@ function RLv1.OnTurnBegin()
     print("RLv1.OnTurnBegin: Turn " .. m_currentGameTurn .. " started");
 
     while true do
-        -- performn inference
+        -- Perform inference
         state = GetPlayerData(Game.GetLocalPlayer())
-        action = Inference(Game.GetLocalPlayer(), state)
+        local forward_result = CivTransformerPolicy:Forward(
+            CivTransformerPolicy:ProcessGameState(state),
+            GetPossibleActions()
+        )
+        
+        -- Get value estimate separately
+        local value_estimate = ValueNetwork:GetValue(state)
+        
+        local action = forward_result.action
         RLv1.ExecuteAction(action.ActionType, action.Parameters or {})
         
         -- Get state after action
         local nextState = GetPlayerData(Game.GetLocalPlayer())
         
-        -- Record state-action-nextstate transition
+        -- Record transition with value estimate
         index = index + 1
         table.insert(m_gameHistory.transitions, {
             turn = m_currentGameTurn,
@@ -197,11 +214,13 @@ function RLv1.OnTurnBegin()
             },
             reward = CalculateReward(nextState),
             state = state,
-            next_state = nextState
+            next_state = nextState,
+            value_estimate = value_estimate,
+            action_encoding = forward_result.action_encoding,
+            next_value_estimate = ValueNetwork:GetValue(nextState)
         })
     end
 end
-
 
 -- -- Register our load handler
 Events.LoadGameViewStateDone.Add(OnLoadGameViewStateDone);
