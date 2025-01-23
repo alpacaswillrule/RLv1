@@ -13,7 +13,7 @@ include("storage");
 include("matrix");
 include("ValueNetwork");
 include("RL_Update");
-local m_isAgentEnabled = false; -- Default to disabled
+local m_isAgentEnabled = true; -- Default to disabled
 local m_isInitialized = false;
 local m_localPlayerID = -1;
 local gameId = GenerateGameID()
@@ -67,7 +67,7 @@ local VICTORY_TYPES = {
 };
 
 -- Configuration variables
-local TURN_LIMIT = 20;
+local TURN_LIMIT = 10;
 local AUTO_RESTART_ENABLED = true;
 
 
@@ -243,21 +243,22 @@ function RLv1.OnTurnBegin()
         local value_estimate = ValueNetwork:GetValue(state)
         
         local action = forward_result.action
-        if action.ActionType == "EndTurn" then
-            RLv1.ExecuteAction(action.ActionType, action.Parameters or {})
-            break
-        end
+        if action and action.ActionType then
+            if action.ActionType == "EndTurn" then
+                RLv1.ExecuteAction(action.ActionType, action.Parameters or {})
+                break
+            else
+                RLv1.ExecuteAction(action.ActionType, action.Parameters or {})
+            end
 
-        RLv1.ExecuteAction(action.ActionType, action.Parameters or {})
+        end
         
         -- Get state after action
         local nextState = GetPlayerData(Game.GetLocalPlayer())
         
         -- Record transition with value estimate
-        index = index + 1
         table.insert(m_gameHistory.transitions, {
             turn = m_currentGameTurn,
-            index = index,
             action = {
                 type = action.ActionType,
                 params = action.Parameters or {}
@@ -362,12 +363,6 @@ function OnPlayerDefeat(player, defeat, eventID)
         end
     end
 end
-
-
--- Register the event handler
-Events.ResearchQueueChanged.Add(OnResearchChanged)
-
-
 
 -- function OnResearchChanged(playerID)
 --     -- Only process for local player

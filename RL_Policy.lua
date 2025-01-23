@@ -988,17 +988,21 @@ function CivTransformerPolicy:SingleHeadAttentionBackward(grad_output, layer_ind
 end
 
 function CivTransformerPolicy:InitializeCache()
+    print("Initializing cache...")
     self.layer_caches = {}
     self.attention_caches = {}
     
     for i = 1, TRANSFORMER_LAYERS do
+        print("Creating cache for layer " .. i)
         self.layer_caches[i] = {}
         self.attention_caches[i] = {}
         
         for h = 1, self.num_heads do
+            print("Creating cache for head " .. h .. " in layer " .. i)
             self.attention_caches[i][h] = {}
         end
     end
+    print("Cache initialization complete")
 end
 
 function CivTransformerPolicy:SaveToCache(layer_index, head_index, key, value)
@@ -1424,28 +1428,6 @@ function CivTransformerPolicy:ValueHead(input)
 end
 --]]
 
--- Initialization of the Policy Network
-function CivTransformerPolicy:Init()
-
-    if self.initialized then
-        print("CivTransformerPolicy already initialized")
-        return
-    end
-    -- Existing embedding initialization
-    self:InitStateEmbedding()
-    
-    -- Multi-head attention parameters
-    self.num_heads = TRANSFORMER_HEADS
-    self.d_model = TRANSFORMER_DIM
-    self.d_k = self.d_model / self.num_heads
-
-    -- Initialize projection matrices for each head
-    self.head_projections = {
-        w_q = {},  -- (d_model, d_k) per head
-        w_k = {},
-        w_v = {}
-    }
-    
     -- Xavier initialization helper
     local function xavier_init(rows, cols)
         local std = math.sqrt(2.0 / (rows + cols))
@@ -1462,6 +1444,45 @@ function CivTransformerPolicy:Init()
         
         return mtx
     end
+
+-- Initialization of the Policy Network
+function CivTransformerPolicy:Init()
+
+    if self.initialized then
+        print("CivTransformerPolicy already initialized")
+        return
+    end
+    -- Multi-head attention parameters
+    self.num_heads = TRANSFORMER_HEADS
+    self.d_model = TRANSFORMER_DIM
+    self.d_k = self.d_model / self.num_heads
+    self:InitializeCache()
+    -- Existing embedding initialization
+    self:InitStateEmbedding()
+    
+    -- Initialize projection matrices for each head
+    self.head_projections = {
+        w_q = {},  -- (d_model, d_k) per head
+        w_k = {},
+        w_v = {}
+    }
+        -- Initialize feedforward networks for each transformer layer
+    self.ff1_weights = {}
+    self.ff2_weights = {}
+    self.ff1_bias = {}
+    self.ff2_bias = {}
+
+    local d_ff = 2048  -- Feedforward dimension
+    for i = 1, TRANSFORMER_LAYERS do
+        -- First linear layer (d_model -> d_ff)
+        self.ff1_weights[i] = xavier_init(self.d_model, d_ff)
+        self.ff1_bias[i] = matrix:new(1, d_ff, 0)  -- Zero-initialized bias
+        
+        -- Second linear layer (d_ff -> d_model)
+        self.ff2_weights[i] = xavier_init(d_ff, self.d_model)
+        self.ff2_bias[i] = matrix:new(1, self.d_model, 0)  -- Zero-initialized bias
+    end
+    
     for i = 1, self.num_heads do
         self.head_projections.w_q[i] = xavier_init(self.d_model, self.d_k)
         self.head_projections.w_k[i] = xavier_init(self.d_model, self.d_k)
@@ -1513,13 +1534,13 @@ function CivTransformerPolicy:Forward(state_mtx, possible_actions)
     -- Decode action
     local decoded_action = DecodeAction(action_encoding, possible_actions)
     
-    -- Validate decoded action before execution
-    if decoded_action and decoded_action.ActionType then
-        print("Executing action:", decoded_action.ActionType)
-        RLv1.ExecuteAction(decoded_action.ActionType, decoded_action.Parameters or {})
-    else
-        print("WARNING: Invalid decoded action, skipping execution")
-    end
+    -- -- Validate decoded action before execution
+    -- if decoded_action and decoded_action.ActionType then
+    --     print("Executing action:", decoded_action.ActionType)
+    --     RLv1.ExecuteAction(decoded_action.ActionType, decoded_action.Parameters or {})
+    -- else
+    --     print("WARNING: Invalid decoded action, skipping execution")
+    -- end
     
     return decoded_action
 end
