@@ -11,8 +11,8 @@ PPOTraining = {
     entropy_coef = 0.01  -- Entropy bonus coefficient
 }
 
-STATE_EMBED_SIZE = 512
-
+STATE_EMBED_SIZE = 4863
+local TRANSFORMER_DIM = 512
 function clamp(value, min_val, max_val)
     return math.min(math.max(value, min_val), max_val)
 end
@@ -206,7 +206,7 @@ function PPOTraining:Update(gameHistory)
             
             -- Forward passes
             local policy_output = CivTransformerPolicy:Forward(batch_states, GetPossibleActions())
-            local value_output = ValueNetwork:Forward(batch_states)
+            local value_output = ValueNetwork:GetValue(batch_states)
             
             -- Convert advantages and returns to matrices
             local advantages_mtx = matrix:new(#batch_advantages, 1)
