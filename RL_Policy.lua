@@ -103,7 +103,6 @@ function Hash(value)
 end
 
 -- Constants for embedding sizes and transformer config
-local STATE_EMBED_SIZE = 256 -- This needs to be calculated based on your encoding
 local CITY_EMBED_SIZE = 64 
 local UNIT_EMBED_SIZE = 32
 local TILE_EMBED_SIZE = 16
@@ -119,6 +118,21 @@ local MAX_CIVICS = 50       -- Total civics in Civ6
 local MAX_DIPLO_CIVS = 20   -- Max other civilizations
 
 PARAM_ENCODING_SIZE = 18
+
+-- Calculate the actual state embedding size based on your encoding functions and constants
+-- Replace the existing calculation with:
+STATE_EMBED_SIZE = 7
+    + (MAX_CITIES * CITY_EMBED_SIZE)
+    + (MAX_UNITS * UNIT_EMBED_SIZE)
+    + (MAX_TILES * TILE_EMBED_SIZE)
+    + (MAX_TECHS * 3)          -- 3 values per tech
+    + (MAX_CIVICS * 3)         -- 3 values per civic
+    + 2                        -- Victory progress
+    + (MAX_DIPLO_CIVS * 3)     -- 3 values per diplo status
+    + 10                       -- Government
+    + 4                        -- Policies
+    + (5 * MAX_CITIES)         -- Spatial cities
+    + (4 * MAX_UNITS)          -- Spatial units
 
 
 function argmax(t)
@@ -987,20 +1001,7 @@ function SelectRandomAction(possibleActions)
     return actionType, actionParams
 end
 
--- Calculate the actual state embedding size based on your encoding functions and constants
--- Replace the existing calculation with:
-STATE_EMBED_SIZE = 7
-    + (MAX_CITIES * CITY_EMBED_SIZE)
-    + (MAX_UNITS * UNIT_EMBED_SIZE)
-    + (MAX_TILES * TILE_EMBED_SIZE)
-    + (MAX_TECHS * 3)          -- 3 values per tech
-    + (MAX_CIVICS * 3)         -- 3 values per civic
-    + 2                        -- Victory progress
-    + (MAX_DIPLO_CIVS * 3)     -- 3 values per diplo status
-    + 10                       -- Government
-    + 4                        -- Policies
-    + (5 * MAX_CITIES)         -- Spatial cities
-    + (4 * MAX_UNITS)          -- Spatial units
+
 CivTransformerPolicy = {
         initialized = false
     }

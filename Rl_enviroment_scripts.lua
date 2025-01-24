@@ -67,7 +67,7 @@ local VICTORY_TYPES = {
 };
 
 -- Configuration variables
-local TURN_LIMIT = 10;
+local TURN_LIMIT = 20;
 local AUTO_RESTART_ENABLED = true;
 
 

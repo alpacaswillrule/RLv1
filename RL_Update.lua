@@ -61,35 +61,51 @@ function PPOTraining:ComputeGAE(transitions)
     
     return advantages, returns
 end
-
--- Calculate PPO Policy Loss
 function PPOTraining:ComputePolicyLoss(old_probs, new_probs, advantages)
-    -- Handle action type selection loss
-    local action_type_loss = self:ComputeActionTypeLoss(
-        old_probs.action_type_probs,
-        new_probs.action_type_probs,
-        advantages
+    -- Convert single array of probabilities to 2D table/matrix format
+    local old_probs_mtx = self:ProbsToMatrix(old_probs)
+    local new_probs_mtx = self:ProbsToMatrix(new_probs)
+    local advantages_mtx = self:ProbsToMatrix(advantages)
+    
+    -- Calculate probability ratio
+    local ratio = matrix.elementwise_div(new_probs_mtx, old_probs_mtx)
+    
+    -- Calculate surrogate objectives
+    local surr1 = matrix.elementwise_mul(ratio, advantages_mtx)
+    local surr2 = matrix.elementwise_mul(
+        matrix.replace(ratio, function(x) 
+            return clamp(x, 1 - self.clip_epsilon, 1 + self.clip_epsilon) 
+        end),
+        advantages_mtx
     )
     
-    -- Handle option selection loss if applicable
-    local option_loss = 0
-    if old_probs.option_probs then
-        option_loss = self:ComputeOptionLoss(
-            old_probs.option_probs,
-            new_probs.option_probs,
-            advantages
-        )
-    end
-    
-    return action_type_loss + option_loss
+    return -matrix.mean(matrix.min(surr1, surr2))
 end
 
-function PPOTraining:ComputeOptionLoss(old_probs, new_probs, advantages)
-    local old_probs_mtx = tableToMatrix(old_probs)
-    local new_probs_mtx = tableToMatrix(new_probs)
-    local advantages_mtx = tableToMatrix(advantages)
+-- Helper function to convert probability array to matrix format
+function PPOTraining:ProbsToMatrix(probs)
+    -- Check if input is nil
+    if not probs then
+        print("WARNING: Received nil probabilities")
+        return matrix:new(1, 1, 0)
+    end
     
-    -- Same clipped objective as action type loss
+    -- Convert single array of probabilities to 2D table
+    local mtx_data = {{}}
+    for i = 1, #probs do
+        table.insert(mtx_data[1], probs[i])
+    end
+    
+    return tableToMatrix(mtx_data)
+end
+
+-- Update ComputeActionTypeLoss and ComputeOptionLoss similarly
+function PPOTraining:ComputeActionTypeLoss(old_probs, new_probs, advantages)
+    local old_probs_mtx = self:ProbsToMatrix(old_probs)
+    local new_probs_mtx = self:ProbsToMatrix(new_probs)
+    local advantages_mtx = self:ProbsToMatrix(advantages)
+    
+    -- Calculate ratio and objectives
     local ratio = matrix.elementwise_div(new_probs_mtx, old_probs_mtx)
     
     local surr1 = matrix.elementwise_mul(ratio, advantages_mtx)
@@ -103,17 +119,14 @@ function PPOTraining:ComputeOptionLoss(old_probs, new_probs, advantages)
     return -matrix.mean(matrix.min(surr1, surr2))
 end
 
-
-
-function PPOTraining:ComputeActionTypeLoss(old_probs, new_probs, advantages)
-    local old_probs_mtx = tableToMatrix(old_probs)
-    local new_probs_mtx = tableToMatrix(new_probs)
-    local advantages_mtx = tableToMatrix(advantages)
+function PPOTraining:ComputeOptionLoss(old_probs, new_probs, advantages)
+    local old_probs_mtx = self:ProbsToMatrix(old_probs)
+    local new_probs_mtx = self:ProbsToMatrix(new_probs)
+    local advantages_mtx = self:ProbsToMatrix(advantages)
     
-    -- Calculate probability ratio
+    -- Same clipped objective as action type loss
     local ratio = matrix.elementwise_div(new_probs_mtx, old_probs_mtx)
     
-    -- Calculate surrogate objectives
     local surr1 = matrix.elementwise_mul(ratio, advantages_mtx)
     local surr2 = matrix.elementwise_mul(
         matrix.replace(ratio, function(x) 
@@ -151,6 +164,39 @@ function PPOTraining:ComputeEntropyBonus(probs)
     end
     
     return action_type_entropy + option_entropy
+end
+
+function PPOTraining:PrepareBatchStates(states)
+    -- Check if states is empty
+    if #states == 0 then
+        print("WARNING: Empty states batch")
+        return nil
+    end
+
+    -- Get dimensions from first state
+    local state_rows = states[1]:rows()
+    local state_cols = states[1]:columns()
+    
+    -- Create batch matrix with dimensions [batch_size x state_dimension]
+    local batch_matrix = matrix:new(#states, state_cols)
+    
+    -- Fill batch matrix with states
+    for i = 1, #states do
+        local state = states[i]
+        -- Verify state dimensions match
+        if state:rows() ~= state_rows or state:columns() ~= state_cols then
+            print(string.format("WARNING: State %d dimensions mismatch. Expected %dx%d, got %dx%d", 
+                i, state_rows, state_cols, state:rows(), state:columns()))
+            return nil
+        end
+        
+        -- Copy state into batch matrix
+        for j = 1, state_cols do
+            batch_matrix:setelement(i, j, state:getelement(1, j))
+        end
+    end
+    
+    return batch_matrix
 end
 
 

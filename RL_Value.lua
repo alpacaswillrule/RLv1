@@ -84,10 +84,15 @@ function ValueNetwork:Forward(state_encoding)
                      state_encoding or 
                      tableToMatrix({state_encoding})
     
-    -- Apply value network layers with ReLU activations
+    -- First pass through transformer's state processing pipeline
+    local embedded_state = matrix.mul(state_mtx, CivTransformerPolicy.state_embedding_weights)
+    embedded_state = CivTransformerPolicy:AddPositionalEncoding(embedded_state)
+    local encoded_state = CivTransformerPolicy:TransformerEncoder(embedded_state, nil)
+    
+    -- Now process through value network layers with ReLU activations
     local hidden = matrix.relu(matrix.add(
-        matrix.mul(state_mtx, self.value_hidden),
-        matrix.repmat(self.value_hidden_bias, state_mtx:rows(), 1)
+        matrix.mul(encoded_state, self.value_hidden),
+        matrix.repmat(self.value_hidden_bias, encoded_state:rows(), 1)
     ))
     
     local hidden2 = matrix.relu(matrix.add(
@@ -106,13 +111,9 @@ end
 
 -- Get value estimate for a game state
 function ValueNetwork:GetValue(state)
-    -- Use CivTransformerPolicy's state processing
+    -- Use CivTransformerPolicy's state processing 
     local state_encoding = CivTransformerPolicy:ProcessGameState(state)
-    -- Get transformer encoding (without action decoding)
-    local embedded_state = matrix.mul(state_encoding, CivTransformerPolicy.state_embedding_weights)
-    local encoded_state = CivTransformerPolicy:TransformerEncoder(embedded_state, nil)
-    
-    return self:Forward(encoded_state)
+    return self:Forward(state_encoding)
 end
 
 -- Batch processing for multiple states (useful during training)
