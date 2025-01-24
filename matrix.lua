@@ -726,6 +726,67 @@ function matrix.mul_with_grad(a, b)
     return result
 end
 
+-- Efficient element-wise division for matrices
+function matrix.elementwise_div(mtx1, mtx2)
+    local rows1, cols1 = mtx1:size()[1], mtx1:size()[2]
+    local rows2, cols2 = mtx2:size()[1], mtx2:size()[2]
+    
+    -- Check if matrices are broadcastable
+    if rows1 ~= rows2 and rows1 ~= 1 and rows2 ~= 1 then
+        error("Matrices are not broadcastable: rows mismatch")
+    end
+    if cols1 ~= cols2 and cols1 ~= 1 and cols2 ~= 1 then
+        error("Matrices are not broadcastable: columns mismatch")
+    end
+    
+    local result_rows = math.max(rows1, rows2)
+    local result_cols = math.max(cols1, cols2)
+    local result = matrix:new(result_rows, result_cols)
+    
+    for i = 1, result_rows do
+        for j = 1, result_cols do
+            local val1 = mtx1:getelement(rows1 == 1 and 1 or i, cols1 == 1 and 1 or j)
+            local val2 = mtx2:getelement(rows2 == 1 and 1 or i, cols2 == 1 and 1 or j)
+            
+            -- Handle division by zero
+            if val2 == 0 then
+                result:setelement(i, j, 0) -- Or handle it in another appropriate way (e.g., NaN, Inf)
+            else
+                result:setelement(i, j, val1 / val2)
+            end
+        end
+    end
+    
+    return result
+end
+
+-- Efficient element-wise multiplication for matrices
+function matrix.elementwise_mul(mtx1, mtx2)
+    local rows1, cols1 = mtx1:size()[1], mtx1:size()[2]
+    local rows2, cols2 = mtx2:size()[1], mtx2:size()[2]
+    
+    -- Check if matrices are broadcastable
+    if rows1 ~= rows2 and rows1 ~= 1 and rows2 ~= 1 then
+        error("Matrices are not broadcastable: rows mismatch")
+    end
+    if cols1 ~= cols2 and cols1 ~= 1 and cols2 ~= 1 then
+        error("Matrices are not broadcastable: columns mismatch")
+    end
+    
+    local result_rows = math.max(rows1, rows2)
+    local result_cols = math.max(cols1, cols2)
+    local result = matrix:new(result_rows, result_cols)
+    
+    for i = 1, result_rows do
+        for j = 1, result_cols do
+            local val1 = mtx1:getelement(rows1 == 1 and 1 or i, cols1 == 1 and 1 or j)
+            local val2 = mtx2:getelement(rows2 == 1 and 1 or i, cols2 == 1 and 1 or j)
+            result:setelement(i, j, val1 * val2)
+        end
+    end
+    
+    return result
+end
 -- ReLU with gradient
 function matrix.relu_with_grad(x)
     local result = matrix.relu(x)
