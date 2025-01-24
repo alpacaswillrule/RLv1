@@ -3,14 +3,12 @@ include("RL_Policy")
 include("RL_Value")
 
 PPOTraining = {
-    -- PPO hyperparameters
     clip_epsilon = 0.2,
     gamma = 0.99,
-    lambda = 0.95,  -- GAE parameter
-    value_coef = 0.5,  -- Value loss coefficient
-    entropy_coef = 0.01  -- Entropy bonus coefficient
+    lambda = 0.95,
+    value_coef = 0.5,
+    entropy_coef = 0.01
 }
-
 STATE_EMBED_SIZE = 4863
 local TRANSFORMER_DIM = 512
 function clamp(value, min_val, max_val)
@@ -65,31 +63,66 @@ function PPOTraining:ComputeGAE(transitions)
 end
 
 -- Calculate PPO Policy Loss
-function PPOTraining:ComputePolicyLoss(old_action_probs, new_action_probs, advantages)
-    -- Convert inputs to matrices if they aren't already
-    local old_probs_mtx = type(old_action_probs.getelement) == "function" and 
-                         old_action_probs or 
-                         tableToMatrix(old_action_probs)
-    local new_probs_mtx = type(new_action_probs.getelement) == "function" and 
-                         new_action_probs or 
-                         tableToMatrix(new_action_probs)
-    local advantages_mtx = type(advantages.getelement) == "function" and 
-                         advantages or 
-                         tableToMatrix(advantages)
+function PPOTraining:ComputePolicyLoss(old_probs, new_probs, advantages)
+    -- Handle action type selection loss
+    local action_type_loss = self:ComputeActionTypeLoss(
+        old_probs.action_type_probs,
+        new_probs.action_type_probs,
+        advantages
+    )
+    
+    -- Handle option selection loss if applicable
+    local option_loss = 0
+    if old_probs.option_probs then
+        option_loss = self:ComputeOptionLoss(
+            old_probs.option_probs,
+            new_probs.option_probs,
+            advantages
+        )
+    end
+    
+    return action_type_loss + option_loss
+end
 
-    -- Calculate ratio
+function PPOTraining:ComputeOptionLoss(old_probs, new_probs, advantages)
+    local old_probs_mtx = tableToMatrix(old_probs)
+    local new_probs_mtx = tableToMatrix(new_probs)
+    local advantages_mtx = tableToMatrix(advantages)
+    
+    -- Same clipped objective as action type loss
+    local ratio = matrix.elementwise_div(new_probs_mtx, old_probs_mtx)
+    
+    local surr1 = matrix.elementwise_mul(ratio, advantages_mtx)
+    local surr2 = matrix.elementwise_mul(
+        matrix.replace(ratio, function(x) 
+            return clamp(x, 1 - self.clip_epsilon, 1 + self.clip_epsilon) 
+        end),
+        advantages_mtx
+    )
+    
+    return -matrix.mean(matrix.min(surr1, surr2))
+end
+
+
+
+function PPOTraining:ComputeActionTypeLoss(old_probs, new_probs, advantages)
+    local old_probs_mtx = tableToMatrix(old_probs)
+    local new_probs_mtx = tableToMatrix(new_probs)
+    local advantages_mtx = tableToMatrix(advantages)
+    
+    -- Calculate probability ratio
     local ratio = matrix.elementwise_div(new_probs_mtx, old_probs_mtx)
     
     -- Calculate surrogate objectives
     local surr1 = matrix.elementwise_mul(ratio, advantages_mtx)
     local surr2 = matrix.elementwise_mul(
-        matrix.replace(ratio, function(x) return clamp(x, 1 - self.clip_epsilon, 1 + self.clip_epsilon) end),
+        matrix.replace(ratio, function(x) 
+            return clamp(x, 1 - self.clip_epsilon, 1 + self.clip_epsilon) 
+        end),
         advantages_mtx
     )
     
-    -- Take minimum and mean
-    local loss = -matrix.mean(matrix.min(surr1, surr2))
-    return loss
+    return -matrix.mean(matrix.min(surr1, surr2))
 end
 -- Calculate Value Loss
 function PPOTraining:ComputeValueLoss(values, returns)
@@ -100,46 +133,25 @@ function PPOTraining:ComputeValueLoss(values, returns)
     return 0.5 * matrix.mean(matrix.elementwise_mul(diff, diff))
 end
 
--- Calculate Entropy Bonus
-function PPOTraining:ComputeEntropyBonus(action_probs)
-    local probs_mtx = type(action_probs.getelement) == "function" and 
-                      action_probs or 
-                      tableToMatrix(action_probs)
-    
+function PPOTraining:ComputeDistributionEntropy(probs)
+    local probs_mtx = tableToMatrix(probs)
     return -matrix.sum(matrix.elementwise_mul(
         probs_mtx,
         matrix.log(matrix.add_scalar(probs_mtx, 1e-10))
     ))
 end
 
--- Add network update implementation
-function PPOTraining:UpdateNetworks(policy_loss, value_loss, entropy_loss)
-    -- Calculate total loss and propagate gradients
-    local total_loss = policy_loss + 
-                      self.value_coef * value_loss - 
-                      self.entropy_coef * entropy_loss
+-- Calculate Entropy Bonus
+function PPOTraining:ComputeEntropyBonus(probs)
+    local action_type_entropy = self:ComputeDistributionEntropy(probs.action_type_probs)
+    local option_entropy = 0
     
-    -- Zero gradients before backward pass
-    CivTransformerPolicy:zero_grad()
-    ValueNetwork:zero_grad()
+    if probs.option_probs then
+        option_entropy = self:ComputeDistributionEntropy(probs.option_probs)
+    end
     
-    -- Backward pass through both networks
-    -- Start backward from total loss
-    local initial_grad = matrix:new(1, 1, 1.0)  -- Initial gradient is 1.0
-    
-    -- Backward through policy network
-    CivTransformerPolicy:BackwardPass(
-        initial_grad:elementwise_mul(matrix:new(1, 1, 1.0)),  -- Policy gradient
-        initial_grad:elementwise_mul(matrix:new(1, 1, self.value_coef))  -- Value gradient
-    )
-    
-    -- Update network weights using calculated gradients
-    CivTransformerPolicy:UpdateParams(self.learning_rate)
-    ValueNetwork:UpdateParams(self.learning_rate)
+    return action_type_entropy + option_entropy
 end
-
-
-
 
 
 -- Main PPO update function
@@ -151,103 +163,84 @@ function PPOTraining:Update(gameHistory)
         return
     end
     
-    -- Compute advantages and returns
     local advantages, returns = self:ComputeGAE(gameHistory.transitions)
-    
-    -- PPO hyperparameters
     local num_epochs = 4
     local batch_size = 64
     local learning_rate = 0.0003
     
-    print("Processing " .. #gameHistory.transitions .. " transitions")
     for epoch = 1, num_epochs do
         print("\nEpoch " .. epoch .. "/" .. num_epochs)
         
-        -- Process in mini-batches
         for i = 1, #gameHistory.transitions, batch_size do
             local batch_end = math.min(i + batch_size - 1, #gameHistory.transitions)
-            print("\nProcessing batch " .. math.floor(i/batch_size) + 1)
             
             -- Prepare batch data
             local states = {}
-            local actions = {}
-            local old_action_probs = {}
+            local old_probs = {
+                action_type_probs = {},
+                option_probs = {}
+            }
             local batch_advantages = {}
             local batch_returns = {}
             
             -- Collect batch data
             for j = i, batch_end do
-                -- Process state before adding to batch
-                local state = gameHistory.transitions[j].state
-                local processed_state = CivTransformerPolicy:ProcessGameState(state)
-                table.insert(states, processed_state)
-                table.insert(actions, gameHistory.transitions[j].action)
-                table.insert(old_action_probs, gameHistory.transitions[j].action_encoding)
+                local transition = gameHistory.transitions[j]
+                table.insert(states, CivTransformerPolicy:ProcessGameState(transition.state))
+                table.insert(old_probs.action_type_probs, transition.action_probabilities)
+                if transition.selected_probability then  -- For option selection
+                    table.insert(old_probs.option_probs, transition.selected_probability)
+                end
                 table.insert(batch_advantages, advantages[j])
                 table.insert(batch_returns, returns[j])
             end
             
-            -- Convert batch states to proper matrix
-            local batch_states
-            if #states > 0 then
-                -- Create matrix with proper dimensions
-                batch_states = matrix:new(#states, STATE_EMBED_SIZE)
-                for row = 1, #states do
-                    for col = 1, STATE_EMBED_SIZE do
-                        batch_states:setelement(row, col, states[row]:getelement(1, col))
-                    end
-                end
-            else
-                print("Warning: Empty batch of states")
-                batch_states = matrix:new(1, STATE_EMBED_SIZE)
-            end
+            -- Convert batch data to matrices
+            local batch_states = self:PrepareBatchStates(states)
             
-            print("Batch states dimensions:", batch_states:size()[1], "x", batch_states:size()[2])
-            
-            -- Forward passes
+            -- Forward passes through both networks
             local policy_output = CivTransformerPolicy:Forward(batch_states, GetPossibleActions())
             local value_output = ValueNetwork:Forward(batch_states)
             
-            -- Convert advantages and returns to matrices
-            local advantages_mtx = matrix:new(#batch_advantages, 1)
-            local returns_mtx = matrix:new(#batch_returns, 1)
-            for k = 1, #batch_advantages do
-                advantages_mtx:setelement(k, 1, batch_advantages[k])
-                returns_mtx:setelement(k, 1, batch_returns[k])
-            end
-            
-            -- Convert old action probabilities to matrix
-            local old_probs_mtx = matrix:new(#old_action_probs, #old_action_probs[1])
-            for k = 1, #old_action_probs do
-                for l = 1, #old_action_probs[k] do
-                    old_probs_mtx:setelement(k, l, old_action_probs[k][l])
-                end
-            end
-            
             -- Calculate losses
             local policy_loss = self:ComputePolicyLoss(
-                old_probs_mtx,
-                policy_output.action_logits,
-                advantages_mtx
+                old_probs,
+                {
+                    action_type_probs = policy_output.action_probs,
+                    option_probs = policy_output.option_probs
+                },
+                batch_advantages
             )
             
-            local value_loss = self:ComputeValueLoss(value_output, returns_mtx)
-            local entropy_loss = self:ComputeEntropyBonus(policy_output.action_probabilities)
+            local value_loss = self:ComputeValueLoss(value_output, batch_returns)
+            local entropy_loss = self:ComputeEntropyBonus(policy_output)
             
             -- Compute gradients and update networks
+            local total_loss = policy_loss + 
+                             self.value_coef * value_loss - 
+                             self.entropy_coef * entropy_loss
+            
+            -- Zero gradients
             CivTransformerPolicy:zero_grad()
             ValueNetwork:zero_grad()
             
-            -- Backward passes
-            local policy_grad = matrix:new(policy_output.action_logits:size()[1], 
-                                         policy_output.action_logits:size()[2], 1.0)
+            -- Backward passes with appropriate gradients
+            local policy_grad = {
+                action_type_grad = matrix:new(policy_output.action_probs:size()[1], 
+                                            policy_output.action_probs:size()[2], 1.0),
+                option_grad = policy_output.option_probs and 
+                             matrix:new(policy_output.option_probs:size()[1],
+                                      policy_output.option_probs:size()[2], 1.0) or nil
+            }
+            
             local value_grad = matrix:new(value_output:size()[1], 
                                         value_output:size()[2], 1.0)
             
+            -- Backward passes
             CivTransformerPolicy:BackwardPass(policy_grad, value_grad)
             ValueNetwork:BackwardPass(value_grad)
             
-            -- Update network parameters
+            -- Update parameters
             CivTransformerPolicy:UpdateParams(learning_rate)
             ValueNetwork:UpdateParams(learning_rate)
             
@@ -262,8 +255,6 @@ function PPOTraining:Update(gameHistory)
             ))
         end
     end
-    
-    print("PPO Update completed")
 end
 
 

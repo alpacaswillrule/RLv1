@@ -1022,67 +1022,97 @@ function CivTransformerPolicy:InitStateEmbedding()
 end
 
 function CivTransformerPolicy:BackwardPass(action_grad, value_grad)
+    -- action_grad should contain:
+    -- .action_type_grad - gradient for action type selection
+    -- .option_grad - gradient for option selection
+    
     -- Backward through value head
     local transformer_grad_from_value = ValueNetwork:BackwardPass(value_grad)
     
-    -- Backward through action head
-    local transformer_grad_from_action = self:ActionHeadBackward(action_grad)
+    -- Backward through option selection head (if applicable)
+    local option_grad = nil
+    if action_grad.option_grad then
+        option_grad = self:OptionHeadBackward(action_grad.option_grad)
+    end
     
-    -- Combine gradients
-    local total_transformer_grad = matrix.add(
-        transformer_grad_from_value,
-        transformer_grad_from_action
-    )
+    -- Backward through action type head
+    local action_type_grad = self:ActionTypeHeadBackward(action_grad.action_type_grad)
+    
+    -- Combine all gradients
+    local total_transformer_grad = transformer_grad_from_value
+    if option_grad then
+        total_transformer_grad = matrix.add(total_transformer_grad, option_grad)
+    end
+    total_transformer_grad = matrix.add(total_transformer_grad, action_type_grad)
     
     -- Backward through transformer layers
     self:TransformerBackward(total_transformer_grad)
 end
 
+function CivTransformerPolicy:ActionTypeHeadBackward(grad_output)
+    -- Backward through action type projection
+    local grad_input = matrix.mul_with_grad(grad_output, matrix.transpose(self.action_type_projection))
+    self.action_type_projection:backward(matrix.mul_with_grad(
+        matrix.transpose(self.transformer_cache.output), 
+        grad_output
+    ))
+    return grad_input
+end
+
+function CivTransformerPolicy:OptionHeadBackward(grad_output)
+    -- Backward through option attention
+    -- grad_output should be [batch_size x num_options]
+    
+    -- Get cached values
+    local option_embeddings = self.option_cache.embeddings
+    local projected_state = self.option_cache.projected_state
+    
+    -- Backward through attention scores
+    local grad_projected = matrix.mul_with_grad(grad_output, option_embeddings)
+    local grad_embeddings = matrix.mul_with_grad(matrix.transpose(grad_output), projected_state)
+    
+    -- Backward through state projection
+    local grad_state = matrix.mul_with_grad(grad_projected, matrix.transpose(self.option_projection))
+    self.option_projection:backward(matrix.mul_with_grad(
+        matrix.transpose(self.transformer_cache.output),
+        grad_projected
+    ))
+    
+    return grad_state
+end
 
 function CivTransformerPolicy:TransformerLayerBackward(grad_output, layer_index)
+    -- Cache needs to store intermediate values during forward pass
+    local layer_cache = self.layer_caches[layer_index]
+    
     -- Backward through second Add & Norm
-    local ff_grad = self:LayerNormBackward(grad_output)
+    local ff_grad = self:LayerNormBackward(grad_output, layer_cache.norm2_stats)
     
     -- Backward through Feedforward
     local ff_input_grad = self:FeedforwardBackward(ff_grad, layer_index)
     
     -- Backward through first Add & Norm
-    local attention_grad = self:LayerNormBackward(ff_input_grad)
+    local attention_grad = self:LayerNormBackward(ff_input_grad, layer_cache.norm1_stats)
     
     -- Backward through Multi-Head Attention
     return self:MultiHeadAttentionBackward(attention_grad, layer_index)
 end
 
-function CivTransformerPolicy:LayerNormBackward(grad_output)
-    -- Layer normalization backward pass
-    -- grad_output: gradient from the next layer
+function CivTransformerPolicy:LayerNormBackward(grad_output, norm_stats)
     local epsilon = 1e-6
     local rows, cols = grad_output:size()[1], grad_output:size()[2]
-    
-    -- Calculate mean and variance gradients
     local grad_input = matrix:new(rows, cols)
     
     for i = 1, rows do
-        local mean = 0
-        local var = 0
+        local mean = norm_stats.means[i]
+        local var = norm_stats.vars[i]
+        local std = math.sqrt(var + epsilon)
         
-        -- Calculate mean and variance for this row
         for j = 1, cols do
-            mean = mean + grad_output:getelement(i, j)
-            var = var + grad_output:getelement(i, j) * grad_output:getelement(i, j)
-        end
-        mean = mean / cols
-        var = var / cols - mean * mean
-        
-        -- Calculate gradients
-        for j = 1, cols do
-            local grad = grad_output:getelement(i, j)
-            local x_normalized = (grad_output:getelement(i, j) - mean) / math.sqrt(var + epsilon)
-            
-            -- Gradient with respect to input
-            local grad_in = grad * (1 / math.sqrt(var + epsilon))
-            grad_in = grad_in - mean / cols
-            grad_in = grad_in - x_normalized * var / (2 * cols * (var + epsilon))
+            local x_norm = (grad_output:getelement(i, j) - mean) / std
+            local grad_in = grad_output:getelement(i, j) / std
+            grad_in = grad_in - mean / (cols * std)
+            grad_in = grad_in - x_norm * var / (2 * cols * (var + epsilon))
             
             grad_input:setelement(i, j, grad_in)
         end
@@ -1183,22 +1213,38 @@ function CivTransformerPolicy:SingleHeadAttentionBackward(grad_output, layer_ind
     return matrix.add(matrix.add(grad_q, grad_k), grad_v)
 end
 
+-- function CivTransformerPolicy:InitializeCache()
+--     print("Initializing cache...")
+--     self.layer_caches = {}
+--     self.attention_caches = {}
+    
+--     for i = 1, TRANSFORMER_LAYERS do
+--         print("Creating cache for layer " .. i)
+--         self.layer_caches[i] = {}
+--         self.attention_caches[i] = {}
+        
+--         for h = 1, self.num_heads do
+--             print("Creating cache for head " .. h .. " in layer " .. i)
+--             self.attention_caches[i][h] = {}
+--         end
+--     end
+--     print("Cache initialization complete")
+-- end
+
+
 function CivTransformerPolicy:InitializeCache()
-    print("Initializing cache...")
+    self.transformer_cache = {}
+    self.option_cache = {}
     self.layer_caches = {}
-    self.attention_caches = {}
     
     for i = 1, TRANSFORMER_LAYERS do
-        print("Creating cache for layer " .. i)
-        self.layer_caches[i] = {}
-        self.attention_caches[i] = {}
-        
-        for h = 1, self.num_heads do
-            print("Creating cache for head " .. h .. " in layer " .. i)
-            self.attention_caches[i][h] = {}
-        end
+        self.layer_caches[i] = {
+            attention = {},
+            norm1_stats = {means = {}, vars = {}},
+            norm2_stats = {means = {}, vars = {}},
+            feedforward = {}
+        }
     end
-    print("Cache initialization complete")
 end
 
 function CivTransformerPolicy:SaveToCache(layer_index, head_index, key, value)
@@ -1357,18 +1403,18 @@ function CivTransformerPolicy:MultiHeadAttention(query, key, value, mask, layer_
     local k_size = key:size()
     local v_size = value:size()
     
-    print("Query shape:", q_size[1], "x", q_size[2])
-    print("Key shape:", k_size[1], "x", k_size[2])
-    print("Value shape:", v_size[1], "x", v_size[2])
+    -- print("Query shape:", q_size[1], "x", q_size[2])
+    -- print("Key shape:", k_size[1], "x", k_size[2])
+    -- print("Value shape:", v_size[1], "x", v_size[2])
     
     assert(q_size[2] == self.d_model, "Query dimension mismatch")
     assert(k_size[2] == self.d_model, "Key dimension mismatch")
     assert(v_size[2] == self.d_model, "Value dimension mismatch")
 
     local batch_size = q_size[1]
-    print("Batch size:", batch_size)
-    print("Number of heads:", self.num_heads)
-    print("Head dimension:", self.d_k)
+    -- print("Batch size:", batch_size)
+    -- print("Number of heads:", self.num_heads)
+    -- print("Head dimension:", self.d_k)
 
     local attention_outputs = {}
 
@@ -1407,8 +1453,8 @@ function CivTransformerPolicy:MultiHeadAttention(query, key, value, mask, layer_
         -- Debug prints
         local q_proj_size = q_proj:size()
         local head_output_size = head_output:size()
-        print("Head", h, "projected Q shape:", q_proj_size[1], "x", q_proj_size[2])
-        print("Head", h, "output shape:", head_output_size[1], "x", head_output_size[2])
+        -- print("Head", h, "projected Q shape:", q_proj_size[1], "x", q_proj_size[2])
+        -- print("Head", h, "output shape:", head_output_size[1], "x", head_output_size[2])
     end
 
     -- Concatenate all head outputs
@@ -1420,7 +1466,7 @@ function CivTransformerPolicy:MultiHeadAttention(query, key, value, mask, layer_
     -- Final projection
     local output = matrix.mul(concatenated, self.w_o)
     local output_size = output:size()
-    print("Final MultiHeadAttention output shape:", output_size[1], "x", output_size[2])
+    -- print("Final MultiHeadAttention output shape:", output_size[1], "x", output_size[2])
     
     return output
 end
@@ -1699,6 +1745,12 @@ function CivTransformerPolicy:Init()
     end
 
     -- Final projection matrix
+    -- Initialize action type head
+    self.action_type_projection = self:XavierInit(self.d_model, #ACTION_TYPES)
+    
+    -- Initialize option selection head
+    self.option_projection = self:XavierInit(self.d_model, self.d_model)
+
     self.w_o = xavier_init(self.d_model, self.d_model)
     self.initialized = true
     print("Initialized Transformer Policy Network")
@@ -1722,63 +1774,143 @@ function CivTransformerPolicy:ProcessGameState(state)
 end
 
 -- Updated Forward function with action masking
+-- Modify Forward function to use two-stage selection
 function CivTransformerPolicy:Forward(state_mtx, possible_actions)
     print("\nTransformer Forward Pass:")
     
-    -- Convert state_mtx to proper matrix if it isn't already
-    if type(state_mtx) ~= "table" or not state_mtx.getelement then
-        state_mtx = tableToMatrix(state_mtx)
-    end
-    print("State matrix dimensions:", state_mtx:size()[1], "x", state_mtx:size()[2])
-    print("Embedding weights dimensions:", self.state_embedding_weights:size()[1], "x", self.state_embedding_weights:size()[2])
+    -- Process state through transformer as before
+    local embedded_state = matrix.mul(state_mtx, self.state_embedding_weights)
+    embedded_state = self:AddPositionalEncoding(embedded_state)
+    local transformer_output = self:TransformerEncoder(embedded_state, nil)
     
-    -- Create attention mask from possible actions
+    -- Stage 1: Select action type
+    local action_logits = self:ActionTypeHead(transformer_output)
     local action_mask = self:CreateAttentionMask(possible_actions)
     
-    -- Process through transformer and save intermediate states
-    local embedded_state = matrix.mul(state_mtx, self.state_embedding_weights)
-    print("Embedded state size:", embedded_state:size()[1], "x", embedded_state:size()[2])
-    
-    embedded_state = self:AddPositionalEncoding(embedded_state)
-    local transformer_output = self:TransformerEncoder(embedded_state, action_mask)
-    
-    -- Convert transformer output to action encoding
-    print("Transformer output size:", transformer_output:size()[1], "x", transformer_output:size()[2])
-    local action_encoding = matrixToTable(transformer_output)[1]
-    
-    -- Extract action logits
-    local action_logits = {}
-    for i = 1, #ACTION_TYPES do
-        action_logits[i] = action_encoding[i]
-    end
-    
-    -- Apply mask to logits
+    -- Apply mask and convert to probabilities
     local masked_logits = {}
-    for i = 1, #action_logits do
+    for i = 1, #ACTION_TYPES do
         masked_logits[i] = action_mask:getelement(i, 1) == 0 and -1e9 or action_logits[i]
     end
+    local action_probs = self:Softmax(masked_logits)
     
-    -- Convert masked_logits to matrix properly (as a column vector)
-    local masked_logits_matrix = matrix:new(#masked_logits, 1)
-    for i = 1, #masked_logits do
-        masked_logits_matrix:setelement(i, 1, masked_logits[i])
+    -- Sample action type
+    local action_type = self:SampleFromProbs(ACTION_TYPES, action_probs)
+    
+    -- Stage 2: Select from available options for this action type
+    if action_type == "EndTurn" then
+        return {
+            ActionType = "EndTurn",
+            Parameters = {},
+            action_probs = action_probs
+        }
     end
     
-    local decoded_action = DecodeAction(action_encoding, possible_actions, masked_logits)
-    
-    -- Return both the action and the tensors needed for backprop
+    local available_options = possible_actions[action_type]
+    if not available_options or #available_options == 0 then
+        return {
+            ActionType = "EndTurn",
+            Parameters = {},
+            action_probs = action_probs
+        }
+    end
+
+    -- Get option selection logits
+    local option_logits = self:OptionSelectionHead(transformer_output, action_type, available_options)
+    local option_probs = self:Softmax(option_logits)
+    local selected_option = self:SampleFromProbs(available_options, option_probs)
+
     return {
-        action = decoded_action,
-        action_encoding = action_encoding,
-        action_probabilities = decoded_action.Probabilities,
-        selected_probability = decoded_action.SelectedProbability,
-        -- Add intermediate tensors for backprop
-        embedded_state = embedded_state,
-        transformer_output = transformer_output,
-        action_logits = masked_logits_matrix,  -- Now using the properly formatted matrix
-        attention_mask = action_mask
+        ActionType = action_type,
+        Parameters = selected_option,
+        action_probs = action_probs,
+        option_probs = option_probs
     }
 end
+
+-- New action type head
+function CivTransformerPolicy:ActionTypeHead(transformer_output)
+    -- Project transformer output to action type logits
+    if not self.action_type_projection then
+        self.action_type_projection = self:XavierInit(self.d_model, #ACTION_TYPES)
+    end
+    
+    return matrix.mul(transformer_output, self.action_type_projection)
+end
+
+-- New option selection head
+function CivTransformerPolicy:OptionSelectionHead(transformer_output, action_type, available_options)
+    -- Create option embeddings based on action type
+    local option_embeddings = self:EmbedOptions(action_type, available_options)
+    
+    -- Project transformer output to option space
+    if not self.option_projection then
+        self.option_projection = self:XavierInit(self.d_model, self.d_model)
+    end
+    local projected_state = matrix.mul(transformer_output, self.option_projection)
+    
+    -- Compute attention scores between state and options
+    local attention_scores = matrix.mul(projected_state, matrix.transpose(option_embeddings))
+    return attention_scores
+end
+
+-- Helper function to embed options based on their parameters
+function CivTransformerPolicy:EmbedOptions(action_type, options)
+    local embeddings = matrix:new(#options, self.d_model)
+    
+    for i, option in ipairs(options) do
+        local embedding = self:CreateOptionEmbedding(action_type, option)
+        -- Copy embedding to row i of embeddings matrix
+        for j = 1, self.d_model do
+            embeddings:setelement(i, j, embedding[j])
+        end
+    end
+    
+    return embeddings
+end
+
+-- Create embeddings for different types of options
+function CivTransformerPolicy:CreateOptionEmbedding(action_type, option)
+    local embedding = {}
+    
+    -- Different embedding logic for different action types
+    if action_type == "CityProduction" then
+        -- Embed production type, cost, turns
+        table.insert(embedding, self:EncodeProductionType(option.ProductionType))
+        table.insert(embedding, self:NormalizeValue(option.Cost, 1000))
+        table.insert(embedding, self:NormalizeValue(option.Turns, 50))
+        
+    elseif action_type == "MoveUnit" then
+        -- Embed unit position and target position
+        table.insert(embedding, self:NormalizeValue(option.X, MAP_DIMENSION))
+        table.insert(embedding, self:NormalizeValue(option.Y, MAP_DIMENSION))
+        
+    -- Add cases for other action types...
+    end
+    
+    -- Pad to fixed dimension
+    while #embedding < self.d_model do
+        table.insert(embedding, 0)
+    end
+    
+    return embedding
+end
+
+-- Helper function for sampling
+function CivTransformerPolicy:SampleFromProbs(options, probs)
+    local rand = math.random()
+    local cumsum = 0
+    
+    for i, prob in ipairs(probs) do
+        cumsum = cumsum + prob
+        if rand <= cumsum then
+            return options[i]
+        end
+    end
+    
+    return options[#options]  -- Fallback to last option
+end
+
 
 function CivTransformerPolicy:SaveWeights(identifier)
     -- Convert network weights to serializable tables
