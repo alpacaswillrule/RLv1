@@ -67,7 +67,7 @@ local VICTORY_TYPES = {
 };
 
 -- Configuration variables
-local TURN_LIMIT = 10;
+local TURN_LIMIT = 100;
 local AUTO_RESTART_ENABLED = true;
 
 
@@ -272,9 +272,9 @@ function RLv1.OnTurnBegin()
             state = state,
             next_state = nextState,
             value_estimate = value_estimate,
-            action_encoding = forward_result.action_encoding,
-            action_probabilities = forward_result.action_probabilities,  -- New field
-            selected_probability = forward_result.selected_probability,  -- New field
+            action_encoding = action.action_encoding,
+            action_probabilities = action.action_probabilities,  -- New field
+            selected_probability = action.selected_probability,  -- New field
             next_value_estimate = value
         })
 
@@ -283,14 +283,6 @@ function RLv1.OnTurnBegin()
             break
         end
 
-        -- Debug printing
-        if forward_result.action_probabilities then
-            print("\nAction Probabilities:")
-            for i, prob in ipairs(forward_result.action_probabilities) do
-                print(string.format("%s: %.4f", ACTION_TYPES[i], prob))
-            end
-            print(string.format("Selected action probability: %.4f", forward_result.selected_probability))
-        end
     end
 end
 

@@ -1629,26 +1629,26 @@ function CivTransformerPolicy:TransformerLayer(input, mask, layer_index)
     -- Convert input to matrix if needed
     local input_mtx = type(input.size) == "function" and input or tableToMatrix(input)
     local input_size = input_mtx:size()
-    print("Input matrix shape:", input_size[1], "x", input_size[2])
+    -- print("Input matrix shape:", input_size[1], "x", input_size[2])
 
     -- Multi-Head Attention with layer index
     print("Calling MultiHeadAttention...")
     local attention_output = self:MultiHeadAttention(input_mtx, input_mtx, input_mtx, mask, layer_index)
     local attention_size = attention_output:size()
-    print("Attention output shape:", attention_size[1], "x", attention_size[2])
+    -- print("Attention output shape:", attention_size[1], "x", attention_size[2])
     assert(attention_size[1] == input_size[1] and attention_size[2] == input_size[2],
            "Attention output shape mismatch")
 
     -- First Add & Norm
     local add_norm_output_1 = self:LayerNorm(matrix.add(input_mtx, attention_output))
     local norm1_size = add_norm_output_1:size()
-    print("First LayerNorm output shape:", norm1_size[1], "x", norm1_size[2])
+    --print("First LayerNorm output shape:", norm1_size[1], "x", norm1_size[2])
     
     -- Feedforward with layer index
     print("Calling Feedforward...")
     local ff_output = self:Feedforward(add_norm_output_1, layer_index)
     local ff_size = ff_output:size()
-    print("Feedforward output shape:", ff_size[1], "x", ff_size[2])
+    -- print("Feedforward output shape:", ff_size[1], "x", ff_size[2])
     
     -- Second Add & Norm
     local final_output = self:LayerNorm(matrix.add(add_norm_output_1, ff_output))
@@ -1933,113 +1933,113 @@ function CivTransformerPolicy:CreateOptionEmbedding(action_type, option)
     -- Different embedding logic based on action type
     if action_type == "CityProduction" then
         -- Embed production info
-        table.insert(embedding, self:NormalizeValue(option.Cost or 0, 2000))  -- Production cost
-        table.insert(embedding, self:NormalizeValue(option.Turns or 0, 100))  -- Turns to complete
+        table.insert(embedding, Normalize(option.Cost or 0, 2000))  -- Production cost
+        table.insert(embedding, Normalize(option.Turns or 0, 100))  -- Turns to complete
         local prodType = {
             Units = 1,
             Buildings = 2,
             Districts = 3,
             Projects = 4
         }
-        table.insert(embedding, self:NormalizeValue(prodType[option.ProductionType] or 0, 4))
+        table.insert(embedding, Normalize(prodType[option.ProductionType] or 0, 4))
 
     elseif action_type == "MoveUnit" or action_type == "PlaceDistrict" then
         -- Embed position info
-        table.insert(embedding, self:NormalizeValue(option.X or 0, MAP_DIMENSION))
-        table.insert(embedding, self:NormalizeValue(option.Y or 0, MAP_DIMENSION))
+        table.insert(embedding, Normalize(option.X or 0, MAP_DIMENSION))
+        table.insert(embedding, Normalize(option.Y or 0, MAP_DIMENSION))
 
     elseif action_type == "PurchaseWithGold" or action_type == "PurchaseWithFaith" then
         -- Embed purchase info
-        table.insert(embedding, self:NormalizeValue(option.Cost or 0, 5000))
+        table.insert(embedding, Normalize(option.Cost or 0, 5000))
         local purchaseType = {
             UNIT = 1,
             BUILDING = 2,
             DISTRICT = 3
         }
-        table.insert(embedding, self:NormalizeValue(purchaseType[option.PurchaseType] or 0, 3))
-        table.insert(embedding, self:NormalizeValue(option.CityID or 0, 100))
+        table.insert(embedding, Normalize(purchaseType[option.PurchaseType] or 0, 3))
+        table.insert(embedding, Normalize(option.CityID or 0, 100))
 
     elseif action_type == "FoundReligion" then
         -- Embed religion info
-        table.insert(embedding, self:NormalizeValue(option.UnitID or 0, 1000))
+        table.insert(embedding, Normalize(option.UnitID or 0, 1000))
         for _, beliefHash in ipairs(option.BeliefHashes or {}) do
-            table.insert(embedding, self:NormalizeValue(beliefHash or 0, 1000000))
+            table.insert(embedding, Normalize(beliefHash or 0, 1000000))
         end
 
     elseif action_type == "SpreadReligion" then
         -- Embed religious spread info
-        table.insert(embedding, self:NormalizeValue(option.UnitID or 0, 1000))
-        table.insert(embedding, self:NormalizeValue(option.CityID or 0, 100))
+        table.insert(embedding, Normalize(option.UnitID or 0, 1000))
+        table.insert(embedding, Normalize(option.CityID or 0, 100))
 
     elseif action_type == "BuildImprovement" then
         -- Embed builder info
-        table.insert(embedding, self:NormalizeValue(option.UnitID or 0, 1000))
+        table.insert(embedding, Normalize(option.UnitID or 0, 1000))
         for _, improvement in ipairs(option.ValidImprovements or {}) do
-            table.insert(embedding, self:NormalizeValue(improvement or 0, 1000000))
+            table.insert(embedding, Normalize(improvement or 0, 1000000))
         end
 
     elseif action_type == "EstablishTradeRoute" then
         -- Embed trade route info
-        table.insert(embedding, self:NormalizeValue(option.TraderUnitID or 0, 1000))
-        table.insert(embedding, self:NormalizeValue(option.OriginCityID or 0, 100))
-        table.insert(embedding, self:NormalizeValue(option.DestinationCityID or 0, 100))
-        table.insert(embedding, self:NormalizeValue(option.Distance or 0, 50))
+        table.insert(embedding, Normalize(option.TraderUnitID or 0, 1000))
+        table.insert(embedding, Normalize(option.OriginCityID or 0, 100))
+        table.insert(embedding, Normalize(option.DestinationCityID or 0, 100))
+        table.insert(embedding, Normalize(option.Distance or 0, 50))
         -- Embed yields
         if option.Yields then
-            table.insert(embedding, self:NormalizeValue(option.Yields.Food or 0, 20))
-            table.insert(embedding, self:NormalizeValue(option.Yields.Production or 0, 20))
-            table.insert(embedding, self:NormalizeValue(option.Yields.Gold or 0, 50))
-            table.insert(embedding, self:NormalizeValue(option.Yields.Science or 0, 20))
-            table.insert(embedding, self:NormalizeValue(option.Yields.Culture or 0, 20))
-            table.insert(embedding, self:NormalizeValue(option.Yields.Faith or 0, 20))
+            table.insert(embedding, Normalize(option.Yields.Food or 0, 20))
+            table.insert(embedding, Normalize(option.Yields.Production or 0, 20))
+            table.insert(embedding, Normalize(option.Yields.Gold or 0, 50))
+            table.insert(embedding, Normalize(option.Yields.Science or 0, 20))
+            table.insert(embedding, Normalize(option.Yields.Culture or 0, 20))
+            table.insert(embedding, Normalize(option.Yields.Faith or 0, 20))
         end
 
     elseif action_type == "ChooseTech" then
         -- Embed tech choice
-        table.insert(embedding, self:NormalizeValue(option.Hash or 0, 1000000))
+        table.insert(embedding, Normalize(option.Hash or 0, 1000000))
 
     elseif action_type == "ChooseCivic" then
         -- Embed civic choice
-        table.insert(embedding, self:NormalizeValue(option.Hash or 0, 1000000))
+        table.insert(embedding, Normalize(option.Hash or 0, 1000000))
 
     elseif action_type == "AssignGovernorTitle" then
         -- Embed governor title info
-        table.insert(embedding, self:NormalizeValue(option.GovernorType or 0, 100))
+        table.insert(embedding, Normalize(option.GovernorType or 0, 100))
         table.insert(embedding, option.IsInitialAppointment and 1 or 0)
         if option.PromotionHash then
-            table.insert(embedding, self:NormalizeValue(option.PromotionHash or 0, 1000000))
+            table.insert(embedding, Normalize(option.PromotionHash or 0, 1000000))
         end
 
     elseif action_type == "AssignGovernorToCity" then
         -- Embed governor assignment info
-        table.insert(embedding, self:NormalizeValue(option.GovernorType or 0, 100))
-        table.insert(embedding, self:NormalizeValue(option.CityID or 0, 100))
-        table.insert(embedding, self:NormalizeValue(option.X or 0, MAP_DIMENSION))
-        table.insert(embedding, self:NormalizeValue(option.Y or 0, MAP_DIMENSION))
+        table.insert(embedding, Normalize(option.GovernorType or 0, 100))
+        table.insert(embedding, Normalize(option.CityID or 0, 100))
+        table.insert(embedding, Normalize(option.X or 0, MAP_DIMENSION))
+        table.insert(embedding, Normalize(option.Y or 0, MAP_DIMENSION))
         table.insert(embedding, option.CurrentlyAssigned and 1 or 0)
 
     elseif action_type == "ActivateGreatPerson" then
         -- Embed great person info
-        table.insert(embedding, self:NormalizeValue(option.UnitID or 0, 1000))
-        table.insert(embedding, self:NormalizeValue(option.IndividualID or 0, 1000))
+        table.insert(embedding, Normalize(option.UnitID or 0, 1000))
+        table.insert(embedding, Normalize(option.IndividualID or 0, 1000))
         if option.ValidPlots then
             for _, plot in ipairs(option.ValidPlots) do
-                table.insert(embedding, self:NormalizeValue(plot or 0, 10000))
+                table.insert(embedding, Normalize(plot or 0, 10000))
             end
         end
 
     elseif action_type == "SendEnvoy" or action_type == "MakePeace" or action_type == "LevyMilitary" then
         -- Embed player target info
-        table.insert(embedding, self:NormalizeValue(option or 0, 100)) -- PlayerID is passed directly
+        table.insert(embedding, Normalize(option or 0, 100)) -- PlayerID is passed directly
 
     elseif action_type == "CityRangedAttack" or action_type == "EncampmentRangedAttack" then
         -- Embed target info
-        table.insert(embedding, self:NormalizeValue(option or 0, 1000)) -- ID is passed directly
+        table.insert(embedding, Normalize(option or 0, 1000)) -- ID is passed directly
 
     elseif action_type == "ChangePolicies" then
         -- Embed policy info
-        table.insert(embedding, self:NormalizeValue(option.SlotIndex or 0, 20))
-        table.insert(embedding, self:NormalizeValue(option.PolicyHash or 0, 1000000))
+        table.insert(embedding, Normalize(option.SlotIndex or 0, 20))
+        table.insert(embedding, Normalize(option.PolicyHash or 0, 1000000))
     end
 
     -- Pad embedding to fixed dimension
