@@ -67,7 +67,7 @@ local VICTORY_TYPES = {
 };
 
 -- Configuration variables
-local TURN_LIMIT = 100;
+local TURN_LIMIT = 10;
 local AUTO_RESTART_ENABLED = true;
 
 
@@ -248,6 +248,12 @@ function RLv1.OnTurnBegin()
         if action and action.ActionType then
             if action.ActionType == "EndTurn" then
                 RLv1.ExecuteAction(action.ActionType, action.Parameters or {})
+                --with .05 probability, we will select random action so it's not all end turns local max
+                if math.random() < 0.05 then
+                    local possibleactions = GetPossibleActions();
+                    local act, param = SelectRandomAction(possibleactions)
+                    RLv1.ExecuteAction(act, param)
+                end
                 break
             else
                 RLv1.ExecuteAction(action.ActionType, action.Parameters or {})
