@@ -208,6 +208,9 @@ function InitializeNetworks(identifier)
     return policy_loaded, value_loaded
 end
 
+
+
+
 -- Save current weights
 function SaveNetworks(identifier)
     CivTransformerPolicy:SaveWeights(identifier)
