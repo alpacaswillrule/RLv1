@@ -237,16 +237,13 @@ function RLv1.OnTurnBegin()
         index = index + 1
         -- Perform inference
         state = GetPlayerData(Game.GetLocalPlayer())
-        local forward_result = CivTransformerPolicy:Forward(
+        local action = CivTransformerPolicy:Forward(
             CivTransformerPolicy:ProcessGameState(state),
             GetPossibleActions()
         )
         
         -- Get value estimate separately
         local value_estimate = ValueNetwork:GetValue(state)
-        
-        -- Extract action from forward result's action field
-        local action = forward_result.action
         
         if action and action.ActionType then
             if action.ActionType == "EndTurn" then

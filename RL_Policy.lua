@@ -1233,24 +1233,51 @@ end
 
 
 function CivTransformerPolicy:InitializeCache()
-    self.transformer_cache = {}
-    self.option_cache = {}
+    print("Initializing cache...")
     self.layer_caches = {}
+    self.attention_caches = {}
     
     for i = 1, TRANSFORMER_LAYERS do
+        print("Creating cache for layer " .. i)
+        -- Initialize layer cache
         self.layer_caches[i] = {
-            attention = {},
             norm1_stats = {means = {}, vars = {}},
             norm2_stats = {means = {}, vars = {}},
-            feedforward = {}
+            feedforward = {
+                ff1_input = nil,
+                ff1_output = nil
+            }
         }
+        
+        -- Initialize attention cache with sub-tables for each head
+        self.attention_caches[i] = {}
+        for h = 1, self.num_heads do
+            print("Creating cache for head " .. h .. " in layer " .. i)
+            self.attention_caches[i][h] = {
+                Q = nil,
+                K = nil,
+                V = nil,
+                attention_weights = nil
+            }
+        end
     end
+    print("Cache initialization complete")
 end
 
 function CivTransformerPolicy:SaveToCache(layer_index, head_index, key, value)
     if head_index then
+        -- Verify the structure exists
+        if not self.attention_caches[layer_index] then
+            self.attention_caches[layer_index] = {}
+        end
+        if not self.attention_caches[layer_index][head_index] then
+            self.attention_caches[layer_index][head_index] = {}
+        end
         self.attention_caches[layer_index][head_index][key] = value
     else
+        if not self.layer_caches[layer_index] then
+            self.layer_caches[layer_index] = {}
+        end
         self.layer_caches[layer_index][key] = value
     end
 end
@@ -1746,10 +1773,10 @@ function CivTransformerPolicy:Init()
 
     -- Final projection matrix
     -- Initialize action type head
-    self.action_type_projection = self:XavierInit(self.d_model, #ACTION_TYPES)
+    self.action_type_projection = xavier_init(self.d_model, #ACTION_TYPES)
     
     -- Initialize option selection head
-    self.option_projection = self:XavierInit(self.d_model, self.d_model)
+    self.option_projection = xavier_init(self.d_model, self.d_model)
 
     self.w_o = xavier_init(self.d_model, self.d_model)
     self.initialized = true
@@ -1773,6 +1800,34 @@ function CivTransformerPolicy:ProcessGameState(state)
     return state_mtx
 end
 
+function CivTransformerPolicy:Softmax(logits)
+    -- Extract the actual logits from logits[1]
+    local values = logits[1]
+    
+    -- Get max for numerical stability
+    local max_val = -math.huge
+    for i = 1, #values do
+        max_val = math.max(max_val, values[i])
+    end
+    
+    -- Calculate exp(x - max) and sum
+    local exp_values = {}
+    local sum_exp = 0
+    
+    for i = 1, #values do
+        local exp_val = math.exp(values[i] - max_val)
+        exp_values[i] = exp_val
+        sum_exp = sum_exp + exp_val
+    end
+    
+    -- Normalize to get probabilities
+    local probs = {}
+    for i = 1, #exp_values do
+        probs[i] = exp_values[i] / sum_exp
+    end
+    
+    return probs
+end
 -- Updated Forward function with action masking
 -- Modify Forward function to use two-stage selection
 function CivTransformerPolicy:Forward(state_mtx, possible_actions)
@@ -1869,30 +1924,129 @@ function CivTransformerPolicy:EmbedOptions(action_type, options)
     return embeddings
 end
 
+
+
 -- Create embeddings for different types of options
 function CivTransformerPolicy:CreateOptionEmbedding(action_type, option)
     local embedding = {}
     
-    -- Different embedding logic for different action types
+    -- Different embedding logic based on action type
     if action_type == "CityProduction" then
-        -- Embed production type, cost, turns
-        table.insert(embedding, self:EncodeProductionType(option.ProductionType))
-        table.insert(embedding, self:NormalizeValue(option.Cost, 1000))
-        table.insert(embedding, self:NormalizeValue(option.Turns, 50))
-        
-    elseif action_type == "MoveUnit" then
-        -- Embed unit position and target position
-        table.insert(embedding, self:NormalizeValue(option.X, MAP_DIMENSION))
-        table.insert(embedding, self:NormalizeValue(option.Y, MAP_DIMENSION))
-        
-    -- Add cases for other action types...
+        -- Embed production info
+        table.insert(embedding, self:NormalizeValue(option.Cost or 0, 2000))  -- Production cost
+        table.insert(embedding, self:NormalizeValue(option.Turns or 0, 100))  -- Turns to complete
+        local prodType = {
+            Units = 1,
+            Buildings = 2,
+            Districts = 3,
+            Projects = 4
+        }
+        table.insert(embedding, self:NormalizeValue(prodType[option.ProductionType] or 0, 4))
+
+    elseif action_type == "MoveUnit" or action_type == "PlaceDistrict" then
+        -- Embed position info
+        table.insert(embedding, self:NormalizeValue(option.X or 0, MAP_DIMENSION))
+        table.insert(embedding, self:NormalizeValue(option.Y or 0, MAP_DIMENSION))
+
+    elseif action_type == "PurchaseWithGold" or action_type == "PurchaseWithFaith" then
+        -- Embed purchase info
+        table.insert(embedding, self:NormalizeValue(option.Cost or 0, 5000))
+        local purchaseType = {
+            UNIT = 1,
+            BUILDING = 2,
+            DISTRICT = 3
+        }
+        table.insert(embedding, self:NormalizeValue(purchaseType[option.PurchaseType] or 0, 3))
+        table.insert(embedding, self:NormalizeValue(option.CityID or 0, 100))
+
+    elseif action_type == "FoundReligion" then
+        -- Embed religion info
+        table.insert(embedding, self:NormalizeValue(option.UnitID or 0, 1000))
+        for _, beliefHash in ipairs(option.BeliefHashes or {}) do
+            table.insert(embedding, self:NormalizeValue(beliefHash or 0, 1000000))
+        end
+
+    elseif action_type == "SpreadReligion" then
+        -- Embed religious spread info
+        table.insert(embedding, self:NormalizeValue(option.UnitID or 0, 1000))
+        table.insert(embedding, self:NormalizeValue(option.CityID or 0, 100))
+
+    elseif action_type == "BuildImprovement" then
+        -- Embed builder info
+        table.insert(embedding, self:NormalizeValue(option.UnitID or 0, 1000))
+        for _, improvement in ipairs(option.ValidImprovements or {}) do
+            table.insert(embedding, self:NormalizeValue(improvement or 0, 1000000))
+        end
+
+    elseif action_type == "EstablishTradeRoute" then
+        -- Embed trade route info
+        table.insert(embedding, self:NormalizeValue(option.TraderUnitID or 0, 1000))
+        table.insert(embedding, self:NormalizeValue(option.OriginCityID or 0, 100))
+        table.insert(embedding, self:NormalizeValue(option.DestinationCityID or 0, 100))
+        table.insert(embedding, self:NormalizeValue(option.Distance or 0, 50))
+        -- Embed yields
+        if option.Yields then
+            table.insert(embedding, self:NormalizeValue(option.Yields.Food or 0, 20))
+            table.insert(embedding, self:NormalizeValue(option.Yields.Production or 0, 20))
+            table.insert(embedding, self:NormalizeValue(option.Yields.Gold or 0, 50))
+            table.insert(embedding, self:NormalizeValue(option.Yields.Science or 0, 20))
+            table.insert(embedding, self:NormalizeValue(option.Yields.Culture or 0, 20))
+            table.insert(embedding, self:NormalizeValue(option.Yields.Faith or 0, 20))
+        end
+
+    elseif action_type == "ChooseTech" then
+        -- Embed tech choice
+        table.insert(embedding, self:NormalizeValue(option.Hash or 0, 1000000))
+
+    elseif action_type == "ChooseCivic" then
+        -- Embed civic choice
+        table.insert(embedding, self:NormalizeValue(option.Hash or 0, 1000000))
+
+    elseif action_type == "AssignGovernorTitle" then
+        -- Embed governor title info
+        table.insert(embedding, self:NormalizeValue(option.GovernorType or 0, 100))
+        table.insert(embedding, option.IsInitialAppointment and 1 or 0)
+        if option.PromotionHash then
+            table.insert(embedding, self:NormalizeValue(option.PromotionHash or 0, 1000000))
+        end
+
+    elseif action_type == "AssignGovernorToCity" then
+        -- Embed governor assignment info
+        table.insert(embedding, self:NormalizeValue(option.GovernorType or 0, 100))
+        table.insert(embedding, self:NormalizeValue(option.CityID or 0, 100))
+        table.insert(embedding, self:NormalizeValue(option.X or 0, MAP_DIMENSION))
+        table.insert(embedding, self:NormalizeValue(option.Y or 0, MAP_DIMENSION))
+        table.insert(embedding, option.CurrentlyAssigned and 1 or 0)
+
+    elseif action_type == "ActivateGreatPerson" then
+        -- Embed great person info
+        table.insert(embedding, self:NormalizeValue(option.UnitID or 0, 1000))
+        table.insert(embedding, self:NormalizeValue(option.IndividualID or 0, 1000))
+        if option.ValidPlots then
+            for _, plot in ipairs(option.ValidPlots) do
+                table.insert(embedding, self:NormalizeValue(plot or 0, 10000))
+            end
+        end
+
+    elseif action_type == "SendEnvoy" or action_type == "MakePeace" or action_type == "LevyMilitary" then
+        -- Embed player target info
+        table.insert(embedding, self:NormalizeValue(option or 0, 100)) -- PlayerID is passed directly
+
+    elseif action_type == "CityRangedAttack" or action_type == "EncampmentRangedAttack" then
+        -- Embed target info
+        table.insert(embedding, self:NormalizeValue(option or 0, 1000)) -- ID is passed directly
+
+    elseif action_type == "ChangePolicies" then
+        -- Embed policy info
+        table.insert(embedding, self:NormalizeValue(option.SlotIndex or 0, 20))
+        table.insert(embedding, self:NormalizeValue(option.PolicyHash or 0, 1000000))
     end
-    
-    -- Pad to fixed dimension
+
+    -- Pad embedding to fixed dimension
     while #embedding < self.d_model do
         table.insert(embedding, 0)
     end
-    
+
     return embedding
 end
 
