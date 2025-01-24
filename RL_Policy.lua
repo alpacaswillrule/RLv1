@@ -169,7 +169,18 @@ function matrixToTable(mtx)
 end
 -- Helper function to normalize values to [0,1] range
 function Normalize(value, maxValue)
-    if maxValue == 0 then return 0 end
+    -- Add error checking
+    if value == nil then
+        print("WARNING: Normalize received nil value")
+        return 0
+    end
+    if maxValue == nil then
+        print("WARNING: Normalize received nil maxValue")
+        return 0
+    end
+    if maxValue == 0 then 
+        return 0 
+    end
     return value / maxValue
 end
 
@@ -320,6 +331,13 @@ end
 function EncodeGameState(state)
     local stateEmbed = {}
     
+    print("Encoding state values:")
+    print("Gold:", state.Gold)
+    print("Faith:", state.Faith)
+    print("GoldPerTurn:", state.GoldPerTurn)
+    print("FaithPerTurn:", state.FaithPerTurn)
+    print("SciencePerTurn:", state.SciencePerTurn)
+    print("CulturePerTurn:", state.CulturePerTurn)
     -- Global stats (from previous implementation)
     table.insert(stateEmbed, Normalize(state.Gold, 1000))
     table.insert(stateEmbed, Normalize(state.Faith, 1000))
@@ -331,12 +349,18 @@ function EncodeGameState(state)
     
     -- Encode cities
     local cityEmbeds = {}
+    if state.Cities == nil then
+        print("WARNING: No cities found in state")
+        state.Cities = {}
+    end
+
     for i = 1, math.min(#state.Cities, MAX_CITIES) do
         local cityEmbed = EncodeCityState(state.Cities[i])
         for _, value in ipairs(cityEmbed) do
             table.insert(stateEmbed, value)
         end
     end
+
     
     -- Pad remaining city slots
     local remainingCities = MAX_CITIES - #state.Cities
@@ -346,6 +370,10 @@ function EncodeGameState(state)
         end
     end
     
+    if state.Units == nil then
+        print("WARNING: No units found in state")
+        state.Units = {}
+    end
     -- Encode units
     for i = 1, math.min(#state.Units, MAX_UNITS) do
         local unitEmbed = EncodeUnitState(state.Units[i])
@@ -380,6 +408,10 @@ function EncodeGameState(state)
         end
     end
     
+    if allTiles == nil then
+        print("WARNING: No tiles found in state")
+        allTiles = {}
+    end
     -- Take first MAX_TILES tiles
     for i = 1, math.min(#allTiles, MAX_TILES) do
         local tileEmbed = EncodeTileState(allTiles[i])
