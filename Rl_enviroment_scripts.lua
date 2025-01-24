@@ -261,7 +261,13 @@ function RLv1.OnTurnBegin()
         end
         
         -- Get state after action
+        
         local nextState = GetPlayerData(Game.GetLocalPlayer())
+        local reward = CalculateReward(nextState)
+        if reward == nil then
+            print("Reward is nil ERROR")
+            return
+        end
         local value = ValueNetwork:GetValue(nextState)
         if value == nil then
             print("Value is nil ERROR")
@@ -274,7 +280,7 @@ function RLv1.OnTurnBegin()
                 type = action.ActionType,
                 params = action.Parameters or {}
             },
-            reward = CalculateReward(nextState),
+            reward = reward,
             state = state,
             next_state = nextState,
             value_estimate = value_estimate,
