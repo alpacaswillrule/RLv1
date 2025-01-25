@@ -348,10 +348,10 @@ function EncodeGameState(state)
     print("Encoding state values:")
     print("Gold:", state.Gold)
     print("Faith:", state.Faith)
-    print("GoldPerTurn:", state.GoldPerTurn)
-    print("FaithPerTurn:", state.FaithPerTurn)
-    print("SciencePerTurn:", state.SciencePerTurn)
-    print("CulturePerTurn:", state.CulturePerTurn)
+    -- print("GoldPerTurn:", state.GoldPerTurn)
+    -- print("FaithPerTurn:", state.FaithPerTurn)
+    -- print("SciencePerTurn:", state.SciencePerTurn)
+    -- print("CulturePerTurn:", state.CulturePerTurn)
     -- Global stats (from previous implementation)
     table.insert(stateEmbed, Normalize(state.Gold, 1000))
     table.insert(stateEmbed, Normalize(state.Faith, 1000))
@@ -1532,8 +1532,8 @@ end
 
 function CivTransformerPolicy:Feedforward(input, layer_index)
     -- Debug prints and error checking
-    print("Feedforward layer:", layer_index)
-    print("Input dimensions:", input:size()[1], "x", input:size()[2])
+    --print("Feedforward layer:", layer_index)
+    --print("Input dimensions:", input:size()[1], "x", input:size()[2])
     
     -- Check if weights/biases exist for this layer
     if not self.ff1_weights[layer_index] then
@@ -1554,15 +1554,15 @@ function CivTransformerPolicy:Feedforward(input, layer_index)
     end
 
     -- Print weight dimensions
-    print("FF1 weights dimensions:", self.ff1_weights[layer_index]:size()[1], "x", self.ff1_weights[layer_index]:size()[2])
-    print("FF1 bias dimensions:", self.ff1_bias[layer_index]:size()[1], "x", self.ff1_bias[layer_index]:size()[2])
+    -- print("FF1 weights dimensions:", self.ff1_weights[layer_index]:size()[1], "x", self.ff1_weights[layer_index]:size()[2])
+    -- print("FF1 bias dimensions:", self.ff1_bias[layer_index]:size()[1], "x", self.ff1_bias[layer_index]:size()[2])
     
     -- Save input to cache
     self:SaveToCache(layer_index, nil, "ff1_input", input)
     
     -- First linear layer
     local ff1_mul = matrix.mul(input, self.ff1_weights[layer_index])
-    print("FF1 multiplication result dimensions:", ff1_mul:size()[1], "x", ff1_mul:size()[2])
+    --print("FF1 multiplication result dimensions:", ff1_mul:size()[1], "x", ff1_mul:size()[2])
     
     -- Reshape bias if needed
     local batch_size = input:size()[1]
@@ -1633,7 +1633,7 @@ function CivTransformerPolicy:TransformerLayer(input, mask, layer_index)
     -- print("Input matrix shape:", input_size[1], "x", input_size[2])
 
     -- Multi-Head Attention with layer index
-    print("Calling MultiHeadAttention...")
+    --print("Calling MultiHeadAttention...")
     local attention_output = self:MultiHeadAttention(input_mtx, input_mtx, input_mtx, mask, layer_index)
     local attention_size = attention_output:size()
     -- print("Attention output shape:", attention_size[1], "x", attention_size[2])
@@ -1646,7 +1646,7 @@ function CivTransformerPolicy:TransformerLayer(input, mask, layer_index)
     --print("First LayerNorm output shape:", norm1_size[1], "x", norm1_size[2])
     
     -- Feedforward with layer index
-    print("Calling Feedforward...")
+    --print("Calling Feedforward...")
     local ff_output = self:Feedforward(add_norm_output_1, layer_index)
     local ff_size = ff_output:size()
     -- print("Feedforward output shape:", ff_size[1], "x", ff_size[2])
@@ -1654,14 +1654,14 @@ function CivTransformerPolicy:TransformerLayer(input, mask, layer_index)
     -- Second Add & Norm
     local final_output = self:LayerNorm(matrix.add(add_norm_output_1, ff_output))
     local final_size = final_output:size()
-    print("Final output shape:", final_size[1], "x", final_size[2])
+    --print("Final output shape:", final_size[1], "x", final_size[2])
     
     return final_output
 end
 -- 6. Transformer Encoder 
 function CivTransformerPolicy:TransformerEncoder(input, mask)
     -- Verify input shape
-    print("\nTransformerEncoder:")
+    --print("\nTransformerEncoder:")
     local input_size = type(input.size) == "function" and input:size() or {#input, #input[1]}
     --print("TransformerEncoder Input Shape:", input_size[1], "x", input_size[2])
     assert(input_size[2] == TRANSFORMER_DIM, 
@@ -1786,7 +1786,7 @@ end
 
 function CivTransformerPolicy:PadStateEmbed(state_embed)
 
-    print("State Embedding Size:", #state_embed)
+    --print("State Embedding Size:", #state_embed)
     return state_embed
 end
 
