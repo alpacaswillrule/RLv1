@@ -17,6 +17,9 @@ end
 
 -- Calculate GAE (Generalized Advantage Estimation)
 function PPOTraining:ComputeGAE(transitions)
+    print("\nComputing GAE:")
+    print("Number of transitions:", #transitions)
+    
     local advantages = {}
     local returns = {}
     local lastGAE = 0
@@ -24,10 +27,15 @@ function PPOTraining:ComputeGAE(transitions)
     -- Process transitions in reverse order
     for i = #transitions, 1, -1 do
         local transition = transitions[i]
+        print(string.format("\nTransition %d:", i))
+        print("  Reward:", transition.reward)
+        print("  Value estimate:", transition.value_estimate)
+        print("  Next value estimate:", transition.next_value_estimate)
+        
         local reward = transition.reward
         local value = transition.value_estimate
         local next_value = transition.next_value_estimate
-        local done = (i == #transitions)  -- True if last transition in episode
+        local done = (i == #transitions)
         
         -- Calculate TD error and GAE
         local delta = reward + (done and 0 or self.gamma * next_value) - value
@@ -35,29 +43,12 @@ function PPOTraining:ComputeGAE(transitions)
         
         -- Store advantage and return
         advantages[i] = lastGAE
-        returns[i] = lastGAE + value  -- Value plus advantage gives us the return
+        returns[i] = lastGAE + value
     end
     
-    -- Normalize advantages
-    local mean = 0
-    local std = 0
-    
-    -- Calculate mean
-    for _, adv in ipairs(advantages) do
-        mean = mean + adv
-    end
-    mean = mean / #advantages
-    
-    -- Calculate standard deviation
-    for _, adv in ipairs(advantages) do
-        std = std + (adv - mean) * (adv - mean)
-    end
-    std = math.sqrt(std / #advantages)
-    
-    -- Normalize
-    for i, adv in ipairs(advantages) do
-        advantages[i] = (adv - mean) / (std + 1e-8)
-    end
+    -- Print final results
+    print("\nComputed advantages:", #advantages)
+    print("Computed returns:", #returns)
     
     return advantages, returns
 end
@@ -237,6 +228,11 @@ function PPOTraining:Update(gameHistory)
     
     
     local advantages, returns = self:ComputeGAE(gameHistory.transitions)
+    print("Computed advantages:", #advantages)
+    print("First few advantage values:")
+    for i = 1, math.min(5, #advantages) do
+        print(string.format("  Advantage %d: %f", i, advantages[i]))
+    end
     local num_epochs = 4
     local batch_size = 64
     local learning_rate = 0.0003
@@ -259,15 +255,35 @@ function PPOTraining:Update(gameHistory)
             local batch_returns = {}
             
             -- Collect batch data
+            print("\nStarting batch collection...")
+            print("Total transitions:", #gameHistory.transitions)
+
+            -- In the batch collection loop:
+            -- Inside the batch collection loop where we process transitions:
             for j = i, batch_end do
                 local transition = gameHistory.transitions[j]
-                table.insert(states, CivTransformerPolicy:ProcessGameState(transition.state))
-                table.insert(old_probs.action_type_probs, transition.action_probabilities)
-                if transition.selected_probability then  -- For option selection
-                    table.insert(old_probs.option_probs, transition.selected_probability)
+                print("Processing transition", j)
+                print("State present:", transition.state ~= nil)
+                
+                if transition.state then
+                    local processed_state = CivTransformerPolicy:ProcessGameState(transition.state)
+                    print("Processed state size:", processed_state:size()[1], "x", processed_state:size()[2])
+                    table.insert(states, processed_state)
+                    
+                    -- Add these lines to actually collect advantages and returns
+                    table.insert(batch_advantages, advantages[j])
+                    table.insert(batch_returns, returns[j])
+                    
+                    -- Also collect probabilities correctly
+                    if transition.action_probabilities then
+                        table.insert(old_probs.action_type_probs, transition.action_probabilities)
+                    end
+                    if transition.selected_probability then
+                        table.insert(old_probs.option_probs, transition.selected_probability)
+                    end
+                else
+                    print("WARNING: Missing state data for transition", j)
                 end
-                table.insert(batch_advantages, advantages[j])
-                table.insert(batch_returns, returns[j])
             end
 
             print("\nCollected batch data:")

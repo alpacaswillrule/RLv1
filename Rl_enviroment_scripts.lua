@@ -285,8 +285,8 @@ function RLv1.OnTurnBegin()
             next_state = nextState,
             value_estimate = value_estimate,
             action_encoding = action.action_encoding,
-            action_probabilities = action.action_probabilities,  -- New field
-            selected_probability = action.selected_probability,  -- New field
+            action_probabilities = action.action_probs,  -- New field
+            selected_probability = action.option_probs,  -- New field
             next_value_estimate = value
         })
 

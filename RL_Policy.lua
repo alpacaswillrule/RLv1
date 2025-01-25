@@ -1852,17 +1852,20 @@ function CivTransformerPolicy:Forward(state_mtx, possible_actions)
     
     -- Sample action type
     local action_type = self:SampleFromProbs(ACTION_TYPES, action_probs)
-    
+    --print "Action Type:", action_type
+    print("selected Action Type:", action_type)
     -- Stage 2: Select from available options for this action type
     if action_type == "EndTurn" then
-        return {
-            ActionType = "EndTurn",
-            Parameters = {},
-            action_probs = action_probs
-        }
+        print("Selected EndTurn action, skipping for now")
+        -- return {
+        --     ActionType = "EndTurn",
+        --     Parameters = {},
+        --     action_probs = action_probs
+        -- }
     end
     
     local available_options = possible_actions[action_type]
+    print("Available options for", action_type, ":", available_options and #available_options or "nil")
     if not available_options or #available_options == 0 then
         return {
             ActionType = "EndTurn",
@@ -1875,7 +1878,9 @@ function CivTransformerPolicy:Forward(state_mtx, possible_actions)
     local option_logits = self:OptionSelectionHead(transformer_output, action_type, available_options)
     local option_probs = self:Softmax(option_logits)
     local selected_option = self:SampleFromProbs(available_options, option_probs)
-
+    print("Option logits dimensions:", option_logits:size()[1], "x", option_logits:size()[2])
+    print("Number of option probabilities:", #option_probs)
+    print("Selected option:", type(selected_option))
     return {
         ActionType = action_type,
         Parameters = selected_option,
