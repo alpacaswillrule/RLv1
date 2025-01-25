@@ -104,20 +104,6 @@ function OnInputHandler(pInputStruct)
     return false;
 end
 
-function Inference(playerID, state)
-    -- Only process for local player
-    if playerID ~= Game.GetLocalPlayer() then 
-        return
-    end
-    -- 1. Get and Encode Game State
-    state_mtx = CivTransformerPolicy:ProcessGameState(state)
-
-    local possibleActions = GetPossibleActions()
-    -- local action_type_probs, action_params_probs, value = 
-    action = CivTransformerPolicy:Forward(state_mtx, possibleActions)
-    
-    return action
-end
 
 local load_weights_from_past_session = false
 function InitializeRL()
@@ -285,8 +271,8 @@ function RLv1.OnTurnBegin()
             next_state = nextState,
             value_estimate = value_estimate,
             action_encoding = action.action_encoding,
-            action_probabilities = action.action_probs,  -- New field
-            selected_probability = action.option_probs,  -- New field
+            action_probs = action.action_probs,  -- New field
+            option_probs = action.option_probs,  -- New fieldselected_probability
             next_value_estimate = value
         })
 

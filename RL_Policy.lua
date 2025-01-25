@@ -1842,13 +1842,27 @@ function CivTransformerPolicy:Forward(state_mtx, possible_actions)
     -- Stage 1: Select action type
     local action_logits = self:ActionTypeHead(transformer_output)
     local action_mask = self:CreateAttentionMask(possible_actions)
-    
+    print("\nRaw action logits before masking:")
+    for i = 1, #ACTION_TYPES do
+        print(string.format("%s: %.4f", ACTION_TYPES[i], action_logits[1][i]))
+    end
     -- Apply mask and convert to probabilities
     local masked_logits = {}
     for i = 1, #ACTION_TYPES do
-        masked_logits[i] = action_mask:getelement(i, 1) == 0 and -1e9 or action_logits[i]
+        -- Set to large negative number for masked actions
+        if action_mask:getelement(i, 1) == 0 then
+            masked_logits[i] = -1e9
+        else
+            masked_logits[i] = action_logits[1][i]
+        end
     end
-    local action_probs = self:Softmax(masked_logits)
+    local action_probs = self:Softmax({masked_logits})
+    
+    print("\nLogits after masking:")
+    for i = 1, #ACTION_TYPES do
+        print(string.format("%s: %.4f", ACTION_TYPES[i], masked_logits[i]))
+    end
+
     
     -- Sample action type
     local action_type = self:SampleFromProbs(ACTION_TYPES, action_probs)
@@ -1865,19 +1879,21 @@ function CivTransformerPolicy:Forward(state_mtx, possible_actions)
     end
     
     local available_options = possible_actions[action_type]
+    -- Get option selection logits
+    local option_logits = self:OptionSelectionHead(transformer_output, action_type, available_options)
+    local option_probs = self:Softmax(option_logits)
+    local selected_option = self:SampleFromProbs(available_options, option_probs)
+
     print("Available options for", action_type, ":", available_options and #available_options or "nil")
     if not available_options or #available_options == 0 then
         return {
             ActionType = "EndTurn",
             Parameters = {},
-            action_probs = action_probs
+            action_probs = action_probs,
+            option_probs = option_probs
         }
     end
 
-    -- Get option selection logits
-    local option_logits = self:OptionSelectionHead(transformer_output, action_type, available_options)
-    local option_probs = self:Softmax(option_logits)
-    local selected_option = self:SampleFromProbs(available_options, option_probs)
     print("Option logits dimensions:", option_logits:size()[1], "x", option_logits:size()[2])
     print("Number of option probabilities:", #option_probs)
     print("Selected option:", type(selected_option))
@@ -1885,7 +1901,8 @@ function CivTransformerPolicy:Forward(state_mtx, possible_actions)
         ActionType = action_type,
         Parameters = selected_option,
         action_probs = action_probs,
-        option_probs = option_probs
+        option_probs = option_probs,
+        --action_encoding = self:EncodeAction(action_type, selected_option)
     }
 end
 

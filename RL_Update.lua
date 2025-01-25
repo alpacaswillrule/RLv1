@@ -55,9 +55,17 @@ end
 function PPOTraining:ComputePolicyLoss(old_probs, new_probs, advantages)
     print("\nComputing Policy Loss:")
     print("Input validation:")
-    print("old_probs:", type(old_probs), old_probs and #old_probs or "nil")
-    print("new_probs:", type(new_probs), new_probs and #new_probs or "nil")
+    print("old_probs:", type(old_probs), old_probs and #old_probs.action_type_probs or "nil")
+    print("new_probs:", type(new_probs), new_probs and #new_probs.action_type_probs or "nil")
     print("advantages:", type(advantages), advantages and #advantages or "nil")
+
+    -- Check if probabilities are empty
+    if not old_probs or #old_probs.action_type_probs == 0 or
+       not new_probs or #new_probs.action_type_probs == 0 then
+        print("WARNING: Empty probabilities detected. Returning zero policy loss.")
+        return 0
+    end
+
     
     -- Convert to matrices
     print("\nConverting to matrices...")
@@ -101,18 +109,16 @@ end
 
 -- Helper function to convert probability array to matrix format
 function PPOTraining:ProbsToMatrix(probs)
-    -- Check if input is nil
-    if not probs then
-        print("WARNING: Received nil probabilities")
-        return matrix:new(1, 1, 0)
+    if not probs or #probs == 0 then
+        print("WARNING: Empty probabilities in ProbsToMatrix")
+        return matrix:new(0, 0)  -- Return empty matrix
     end
-    
-    -- Convert single array of probabilities to 2D table
+
+    -- Existing conversion logic...
     local mtx_data = {{}}
     for i = 1, #probs do
         table.insert(mtx_data[1], probs[i])
     end
-    
     return tableToMatrix(mtx_data)
 end
 
@@ -184,38 +190,58 @@ function PPOTraining:ComputeEntropyBonus(probs)
 end
 
 function PPOTraining:PrepareBatchStates(states)
-    -- Check if states is empty
+    print("\nPreparing Batch States:")
+    print("Number of states:", #states)
+    
     if #states == 0 then
         print("WARNING: Empty states batch")
         return nil
     end
 
+    -- Debug first state
+    local first_state = states[1]
+    print("First state type:", type(first_state))
+    if type(first_state.size) == "function" then
+        print("First state dimensions:", first_state:size()[1], "x", first_state:size()[2])
+    end
+
     -- Get dimensions from first state
-    local state_rows = states[1]:rows()
-    local state_cols = states[1]:columns()
+    local state_rows = first_state:rows()
+    local state_cols = first_state:columns()
+    print("Expected dimensions:", state_rows, "x", state_cols)
     
-    -- Create batch matrix with dimensions [batch_size x state_dimension]
+    -- Validate dimensions match STATE_EMBED_SIZE
+    if state_cols ~= STATE_EMBED_SIZE then
+        print(string.format("WARNING: State dimension mismatch. Expected %d columns, got %d", 
+            STATE_EMBED_SIZE, state_cols))
+        return nil
+    end
+
+    -- Create batch matrix
     local batch_matrix = matrix:new(#states, state_cols)
-    
-    -- Fill batch matrix with states
+    print("Created batch matrix:", batch_matrix:rows(), "x", batch_matrix:columns())
+
+    -- Fill batch matrix
     for i = 1, #states do
         local state = states[i]
-        -- Verify state dimensions match
         if state:rows() ~= state_rows or state:columns() ~= state_cols then
-            print(string.format("WARNING: State %d dimensions mismatch. Expected %dx%d, got %dx%d", 
-                i, state_rows, state_cols, state:rows(), state:columns()))
+            print(string.format("WARNING: State %d dimensions mismatch", i))
             return nil
         end
         
-        -- Copy state into batch matrix
         for j = 1, state_cols do
-            batch_matrix:setelement(i, j, state:getelement(1, j))
+            local val = state:getelement(1, j)
+            -- Check for NaN
+            if val ~= val then
+                print(string.format("WARNING: NaN found in state %d, column %d", i, j))
+                return nil
+            end
+            batch_matrix:setelement(i, j, val)
         end
     end
     
     return batch_matrix
 end
-
 
 -- Main PPO update function
 function PPOTraining:Update(gameHistory)
@@ -226,13 +252,17 @@ function PPOTraining:Update(gameHistory)
         return
     end
     
+    -- Check if networks are initialized
+    if not CivTransformerPolicy.initialized then
+        print("WARNING: CivTransformerPolicy not initialized, initializing now...")
+        CivTransformerPolicy:Init()
+    end
+    if not ValueNetwork.initialized then
+        print("WARNING: ValueNetwork not initialized, initializing now...")
+        ValueNetwork:Init()
+    end
     
     local advantages, returns = self:ComputeGAE(gameHistory.transitions)
-    print("Computed advantages:", #advantages)
-    print("First few advantage values:")
-    for i = 1, math.min(5, #advantages) do
-        print(string.format("  Advantage %d: %f", i, advantages[i]))
-    end
     local num_epochs = 4
     local batch_size = 64
     local learning_rate = 0.0003
@@ -243,7 +273,6 @@ function PPOTraining:Update(gameHistory)
         for i = 1, #gameHistory.transitions, batch_size do
             local batch_end = math.min(i + batch_size - 1, #gameHistory.transitions)
             print("\nProcessing batch from index", i, "to", batch_end)
-            print("Total transitions:", #gameHistory.transitions)
             
             -- Prepare batch data
             local states = {}
@@ -255,75 +284,79 @@ function PPOTraining:Update(gameHistory)
             local batch_returns = {}
             
             -- Collect batch data
-            print("\nStarting batch collection...")
-            print("Total transitions:", #gameHistory.transitions)
-
-            -- In the batch collection loop:
-            -- Inside the batch collection loop where we process transitions:
             for j = i, batch_end do
                 local transition = gameHistory.transitions[j]
-                print("Processing transition", j)
-                print("State present:", transition.state ~= nil)
-                
                 if transition.state then
                     local processed_state = CivTransformerPolicy:ProcessGameState(transition.state)
-                    print("Processed state size:", processed_state:size()[1], "x", processed_state:size()[2])
                     table.insert(states, processed_state)
-                    
-                    -- Add these lines to actually collect advantages and returns
                     table.insert(batch_advantages, advantages[j])
                     table.insert(batch_returns, returns[j])
                     
-                    -- Also collect probabilities correctly
-                    if transition.action_probabilities then
-                        table.insert(old_probs.action_type_probs, transition.action_probabilities)
+                    if transition.action_probs then
+                        table.insert(old_probs.action_type_probs, transition.action_probs)
                     end
-                    if transition.selected_probability then
-                        table.insert(old_probs.option_probs, transition.selected_probability)
+                    if transition.option_probs then
+                        table.insert(old_probs.option_probs, transition.option_probs)
                     end
                 else
                     print("WARNING: Missing state data for transition", j)
                 end
             end
 
-            print("\nCollected batch data:")
-            print("Number of states:", #states)
-            print("Number of action_type_probs:", #old_probs.action_type_probs)
-            print("Number of option_probs:", #old_probs.option_probs)
-            print("Number of advantages:", #batch_advantages)
+            -- Process each state individually
+            local all_policy_outputs = {}
+            local all_value_outputs = {}
             
-            -- Convert batch data to matrices
-            local batch_states = self:PrepareBatchStates(states)
-            
-            -- Forward passes through both networks
-            local policy_output = CivTransformerPolicy:Forward(batch_states, GetPossibleActions())
-            local value_output = ValueNetwork:Forward(batch_states)
-            print("\nForward pass output:")
-            print("policy_output.action_probs:", policy_output.action_probs and #policy_output.action_probs or "nil")
-            print("policy_output.option_probs:", policy_output.option_probs and #policy_output.option_probs or "nil")
-            print("value_output:", value_output)
-            print("\nInputs to ComputePolicyLoss:")
-            print("old_probs structure:", type(old_probs))
-            if type(old_probs) == "table" then
-                print("  action_type_probs:", #old_probs.action_type_probs)
-                print("  option_probs:", #old_probs.option_probs)
+            for _, state in ipairs(states) do
+                -- Forward pass through policy network
+                local policy_output = CivTransformerPolicy:Forward(state, GetPossibleActions())
+                table.insert(all_policy_outputs, policy_output)
+                
+                -- Forward pass through value network
+                local value_output = ValueNetwork:Forward(state)
+                table.insert(all_value_outputs, value_output)
             end
-                        -- Calculate losses
+            
+            -- Combine policy outputs
+            local combined_action_probs = {}
+            local combined_option_probs = {}
+            for _, output in ipairs(all_policy_outputs) do
+                if output.action_probs then
+                    table.insert(combined_action_probs, output.action_probs)
+                end
+                if output.option_probs then
+                    table.insert(combined_option_probs, output.option_probs)
+                end
+            end
+            
+            -- Calculate losses
             local policy_loss = self:ComputePolicyLoss(
                 old_probs,
                 {
-                    action_type_probs = policy_output.action_probs,
-                    option_probs = policy_output.option_probs
+                    action_type_probs = combined_action_probs,
+                    option_probs = combined_option_probs
                 },
                 batch_advantages
             )
-
             
+            -- Convert value outputs to matrix
+            local value_matrix = matrix:new(#all_value_outputs, 1)
+            for k, v in ipairs(all_value_outputs) do
+                value_matrix:setelement(k, 1, v)
+            end
             
-            local value_loss = self:ComputeValueLoss(value_output, batch_returns)
-            local entropy_loss = self:ComputeEntropyBonus(policy_output)
+            local returns_matrix = matrix:new(#batch_returns, 1)
+            for k, v in ipairs(batch_returns) do
+                returns_matrix:setelement(k, 1, v)
+            end
             
-            -- Compute gradients and update networks
+            local value_loss = self:ComputeValueLoss(value_matrix, returns_matrix)
+            local entropy_loss = self:ComputeEntropyBonus({
+                action_type_probs = combined_action_probs,
+                option_probs = combined_option_probs
+            })
+            
+            -- Compute total loss
             local total_loss = policy_loss + 
                              self.value_coef * value_loss - 
                              self.entropy_coef * entropy_loss
@@ -332,17 +365,14 @@ function PPOTraining:Update(gameHistory)
             CivTransformerPolicy:zero_grad()
             ValueNetwork:zero_grad()
             
-            -- Backward passes with appropriate gradients
+            -- Create gradient matrices
             local policy_grad = {
-                action_type_grad = matrix:new(policy_output.action_probs:size()[1], 
-                                            policy_output.action_probs:size()[2], 1.0),
-                option_grad = policy_output.option_probs and 
-                             matrix:new(policy_output.option_probs:size()[1],
-                                      policy_output.option_probs:size()[2], 1.0) or nil
+                action_type_grad = matrix:new(#combined_action_probs, #ACTION_TYPES, 1.0),
+                option_grad = #combined_option_probs > 0 and 
+                             matrix:new(#combined_option_probs, combined_option_probs[1]:columns(), 1.0) or nil
             }
             
-            local value_grad = matrix:new(value_output:size()[1], 
-                                        value_output:size()[2], 1.0)
+            local value_grad = matrix:new(value_matrix:size()[1], 1, 1.0)
             
             -- Backward passes
             CivTransformerPolicy:BackwardPass(policy_grad, value_grad)
@@ -363,6 +393,8 @@ function PPOTraining:Update(gameHistory)
             ))
         end
     end
+    
+    print("PPO Update completed")
 end
 
 
