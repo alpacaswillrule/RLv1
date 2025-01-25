@@ -285,7 +285,7 @@ function PPOTraining:Update(gameHistory)
             print("\nForward pass output:")
             print("policy_output.action_probs:", policy_output.action_probs and #policy_output.action_probs or "nil")
             print("policy_output.option_probs:", policy_output.option_probs and #policy_output.option_probs or "nil")
-            print("value_output:", value_output and #value_output or "nil")
+            print("value_output:", value_output)
             print("\nInputs to ComputePolicyLoss:")
             print("old_probs structure:", type(old_probs))
             if type(old_probs) == "table" then
