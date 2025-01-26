@@ -312,7 +312,7 @@ function PPOTraining:Update(gameHistory)
     local learning_rate = 0.0003
     
     for epoch = 1, num_epochs do
-        --print("\nEpoch " .. epoch .. "/" .. num_epochs)
+        print("\nEpoch " .. epoch .. "/" .. num_epochs)
         
         for i = 1, #gameHistory.transitions, batch_size do
             local batch_end = math.min(i + batch_size - 1, #gameHistory.transitions)
