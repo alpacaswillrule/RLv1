@@ -728,6 +728,17 @@ end
 
 -- Efficient element-wise division for matrices
 function matrix.elementwise_div(mtx1, mtx2)
+    -- Type checking and conversion
+    if type(mtx1) ~= "table" or type(mtx2) ~= "table" then
+        error("Both inputs must be matrices")
+    end
+    
+    -- Debug prints
+    print("Matrix 1 type:", type(mtx1))
+    print("Matrix 2 type:", type(mtx2))
+    print("Matrix 1 first element type:", type(mtx1[1] and mtx1[1][1]))
+    print("Matrix 2 first element type:", type(mtx2[1] and mtx2[1][1]))
+    
     local rows1, cols1 = mtx1:size()[1], mtx1:size()[2]
     local rows2, cols2 = mtx2:size()[1], mtx2:size()[2]
     
@@ -745,12 +756,18 @@ function matrix.elementwise_div(mtx1, mtx2)
     
     for i = 1, result_rows do
         for j = 1, result_cols do
-            local val1 = mtx1:getelement(rows1 == 1 and 1 or i, cols1 == 1 and 1 or j)
-            local val2 = mtx2:getelement(rows2 == 1 and 1 or i, cols2 == 1 and 1 or j)
+            local val1 = tonumber(mtx1:getelement(rows1 == 1 and 1 or i, cols1 == 1 and 1 or j))
+            local val2 = tonumber(mtx2:getelement(rows2 == 1 and 1 or i, cols2 == 1 and 1 or j))
+            
+            -- Extra validation
+            if type(val1) ~= "number" or type(val2) ~= "number" then
+                error(string.format("Non-numeric values found at position (%d,%d): %s / %s", 
+                    i, j, tostring(val1), tostring(val2)))
+            end
             
             -- Handle division by zero
             if val2 == 0 then
-                result:setelement(i, j, 0) -- Or handle it in another appropriate way (e.g., NaN, Inf)
+                result:setelement(i, j, 0)
             else
                 result:setelement(i, j, val1 / val2)
             end
@@ -882,6 +899,82 @@ function matrix.repmat(mtx, rows, cols)
     
     return result
 end
+
+
+function matrix.min(mtx1, mtx2)
+    -- Type checking and validation
+    if type(mtx1) ~= "table" or type(mtx2) ~= "table" then
+        error("Both inputs must be matrices")
+    end
+    
+    local rows1, cols1 = mtx1:size()[1], mtx1:size()[2]
+    local rows2, cols2 = mtx2:size()[1], mtx2:size()[2]
+    
+    -- Check dimensions match
+    if rows1 ~= rows2 or cols1 ~= cols2 then
+        error(string.format(
+            "Matrix dimensions must match: got %dx%d and %dx%d", 
+            rows1, cols1, rows2, cols2))
+    end
+    
+    -- Create result matrix
+    local result = matrix:new(rows1, cols1)
+    
+    -- Compute element-wise minimum
+    for i = 1, rows1 do
+        for j = 1, cols1 do
+            local val1 = mtx1:getelement(i, j)
+            local val2 = mtx2:getelement(i, j)
+            result:setelement(i, j, math.min(val1, val2))
+        end
+    end
+    
+    return result
+end
+
+-- Calculate mean of all matrix elements
+function matrix.mean(mtx)
+    if type(mtx) ~= "table" then
+        error("Input must be a matrix")
+    end
+    
+    local rows, cols = mtx:size()[1], mtx:size()[2]
+    local total_elements = rows * cols
+    
+    -- Use running sum to avoid multiple passes
+    local sum = 0
+    for i = 1, rows do
+        for j = 1, cols do
+            sum = sum + mtx:getelement(i, j)
+        end
+    end
+    
+    return sum / total_elements
+end
+
+-- Helper method to get sum of all elements
+-- Not required but might be useful for other calculations
+function matrix.sum(mtx)
+    if type(mtx) ~= "table" then
+        error("Input must be a matrix")
+    end
+    
+    local rows, cols = mtx:size()[1], mtx:size()[2]
+    local sum = 0
+    
+    for i = 1, rows do
+        for j = 1, cols do
+            sum = sum + mtx:getelement(i, j)
+        end
+    end
+    
+    return sum
+end
+
+-- Add these to the matrix metatable
+matrix_meta.__index.min = matrix.min
+matrix_meta.__index.mean = matrix.mean
+matrix_meta.__index.sum = matrix.sum
 
 --// matrix.root ( m1, root [,iters] )
 -- calculate any root of a matrix

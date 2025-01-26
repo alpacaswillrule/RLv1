@@ -109,17 +109,53 @@ end
 
 -- Helper function to convert probability array to matrix format
 function PPOTraining:ProbsToMatrix(probs)
-    if not probs or #probs == 0 then
-        print("WARNING: Empty probabilities in ProbsToMatrix")
-        return matrix:new(0, 0)  -- Return empty matrix
+    -- Check if probs is nil or empty
+    if not probs then
+        print("WARNING: Nil probabilities in ProbsToMatrix")
+        return matrix:new(1, 1, 0)
     end
 
-    -- Existing conversion logic...
+    -- Convert single array of probabilities to 2D table
     local mtx_data = {{}}
-    for i = 1, #probs do
-        table.insert(mtx_data[1], probs[i])
+    
+    -- Handle case where probs is a table with action_type_probs
+    if type(probs) == "table" and probs.action_type_probs then
+        if #probs.action_type_probs > 0 then
+            for i = 1, #probs.action_type_probs do
+                local val = tonumber(probs.action_type_probs[i])
+                if not val then
+                    print("WARNING: Non-numeric value found in action_type_probs at index " .. i)
+                    val = 0
+                end
+                table.insert(mtx_data[1], val)
+            end
+        else
+            return matrix:new(1, 1, 0)
+        end
+    -- Handle case where probs is a simple array
+    elseif type(probs) == "table" and #probs > 0 then
+        for i = 1, #probs do
+            local val = tonumber(probs[i])
+            if not val then
+                print("WARNING: Non-numeric value found in probs at index " .. i)
+                val = 0
+            end
+            table.insert(mtx_data[1], val)
+        end
+    else
+        return matrix:new(1, 1, 0)
     end
-    return tableToMatrix(mtx_data)
+    
+    print("Matrix data created:", #mtx_data, "x", #mtx_data[1])
+    for i, row in ipairs(mtx_data) do
+        for j, val in ipairs(row) do
+            print(string.format("Element (%d,%d): %s (type: %s)", i, j, tostring(val), type(val)))
+        end
+    end
+    
+    local result = tableToMatrix(mtx_data)
+    print("Matrix created with dimensions:", result:size()[1], "x", result:size()[2])
+    return result
 end
 
 -- Update ComputeActionTypeLoss and ComputeOptionLoss similarly
