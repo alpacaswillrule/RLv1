@@ -1906,6 +1906,58 @@ function CivTransformerPolicy:Forward(state_mtx, possible_actions)
     }
 end
 
+function CivTransformerPolicy:zero_grad()
+    -- Zero state embedding gradients
+    if self.state_embedding_weights then
+        self.state_embedding_weights:zero_grad()
+    end
+    
+    -- Zero projection matrices for each attention head
+    if self.head_projections then
+        for i = 1, self.num_heads do
+            if self.head_projections.w_q[i] then
+                self.head_projections.w_q[i]:zero_grad()
+            end
+            if self.head_projections.w_k[i] then
+                self.head_projections.w_k[i]:zero_grad()
+            end
+            if self.head_projections.w_v[i] then
+                self.head_projections.w_v[i]:zero_grad()
+            end
+        end
+    end
+    
+    -- Zero final output projection
+    if self.w_o then
+        self.w_o:zero_grad()
+    end
+    
+    -- Zero feedforward network weights for each transformer layer
+    for i = 1, TRANSFORMER_LAYERS do
+        if self.ff1_weights[i] then
+            self.ff1_weights[i]:zero_grad()
+        end
+        if self.ff2_weights[i] then
+            self.ff2_weights[i]:zero_grad()
+        end
+        if self.ff1_bias[i] then
+            self.ff1_bias[i]:zero_grad()
+        end
+        if self.ff2_bias[i] then
+            self.ff2_bias[i]:zero_grad()
+        end
+    end
+    
+    -- Zero action type projection
+    if self.action_type_projection then
+        self.action_type_projection:zero_grad()
+    end
+    
+    -- Zero option projection
+    if self.option_projection then
+        self.option_projection:zero_grad()
+    end
+end
 -- New action type head
 function CivTransformerPolicy:ActionTypeHead(transformer_output)
     -- Project transformer output to action type logits

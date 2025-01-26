@@ -596,6 +596,19 @@ function matrix.dogauss( mtx )
 	return true
 end
 
+function matrix:accumulate_grad(grad)
+    if not self:requires_gradient() then
+        return
+    end
+    
+    if not self.grad then
+        self:initGrad()
+    end
+    
+    -- Add incoming gradient to existing gradient
+    self.grad = matrix.add(self.grad, grad)
+end
+
 --// matrix.invert ( m1 )
 -- Get the inverted matrix or m1
 -- matrix must be square and not singular
@@ -971,10 +984,49 @@ function matrix.sum(mtx)
     return sum
 end
 
--- Add these to the matrix metatable
-matrix_meta.__index.min = matrix.min
-matrix_meta.__index.mean = matrix.mean
-matrix_meta.__index.sum = matrix.sum
+function matrix.log(mtx)
+    if type(mtx) ~= "table" then
+        error("Input must be a matrix")
+    end
+    
+    local rows, cols = mtx:size()[1], mtx:size()[2]
+    local result = matrix:new(rows, cols)
+    
+    for i = 1, rows do
+        for j = 1, cols do
+            local val = mtx:getelement(i, j)
+            -- Add small epsilon to prevent log(0)
+            if val <= 0 then
+                val = 1e-10
+            end
+            result:setelement(i, j, math.log(val))
+        end
+    end
+    
+    return result
+end
+
+-- Add scalar value to all elements of matrix
+function matrix.add_scalar(mtx, scalar)
+    if type(mtx) ~= "table" then
+        error("Input must be a matrix")
+    end
+    
+    if type(scalar) ~= "number" then
+        error("Scalar must be a number")
+    end
+    
+    local rows, cols = mtx:size()[1], mtx:size()[2]
+    local result = matrix:new(rows, cols)
+    
+    for i = 1, rows do
+        for j = 1, cols do
+            result:setelement(i, j, mtx:getelement(i, j) + scalar)
+        end
+    end
+    
+    return result
+end
 
 --// matrix.root ( m1, root [,iters] )
 -- calculate any root of a matrix

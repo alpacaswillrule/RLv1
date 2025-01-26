@@ -17,8 +17,8 @@ end
 
 -- Calculate GAE (Generalized Advantage Estimation)
 function PPOTraining:ComputeGAE(transitions)
-    print("\nComputing GAE:")
-    print("Number of transitions:", #transitions)
+    --print("\nComputing GAE:")
+    --print("Number of transitions:", #transitions)
     
     local advantages = {}
     local returns = {}
@@ -27,10 +27,10 @@ function PPOTraining:ComputeGAE(transitions)
     -- Process transitions in reverse order
     for i = #transitions, 1, -1 do
         local transition = transitions[i]
-        print(string.format("\nTransition %d:", i))
-        print("  Reward:", transition.reward)
-        print("  Value estimate:", transition.value_estimate)
-        print("  Next value estimate:", transition.next_value_estimate)
+        --print(string.format("\nTransition %d:", i))
+        --print("  Reward:", transition.reward)
+        --print("  Value estimate:", transition.value_estimate)
+        --print("  Next value estimate:", transition.next_value_estimate)
         
         local reward = transition.reward
         local value = transition.value_estimate
@@ -46,60 +46,60 @@ function PPOTraining:ComputeGAE(transitions)
         returns[i] = lastGAE + value
     end
     
-    -- Print final results
-    print("\nComputed advantages:", #advantages)
-    print("Computed returns:", #returns)
+    -- --print final results
+    --print("\nComputed advantages:", #advantages)
+    --print("Computed returns:", #returns)
     
     return advantages, returns
 end
 function PPOTraining:ComputePolicyLoss(old_probs, new_probs, advantages)
-    print("\nComputing Policy Loss:")
-    print("Input validation:")
-    print("old_probs:", type(old_probs), old_probs and #old_probs.action_type_probs or "nil")
-    print("new_probs:", type(new_probs), new_probs and #new_probs.action_type_probs or "nil")
-    print("advantages:", type(advantages), advantages and #advantages or "nil")
+    --print("\nComputing Policy Loss:")
+    --print("Input validation:")
+    --print("old_probs:", type(old_probs), old_probs and #old_probs.action_type_probs or "nil")
+    --print("new_probs:", type(new_probs), new_probs and #new_probs.action_type_probs or "nil")
+    --print("advantages:", type(advantages), advantages and #advantages or "nil")
 
     -- Check if probabilities are empty
     if not old_probs or #old_probs.action_type_probs == 0 or
        not new_probs or #new_probs.action_type_probs == 0 then
-        print("WARNING: Empty probabilities detected. Returning zero policy loss.")
+        --print("WARNING: Empty probabilities detected. Returning zero policy loss.")
         return 0
     end
 
     
     -- Convert to matrices
-    print("\nConverting to matrices...")
+    --print("\nConverting to matrices...")
     local old_probs_mtx = self:ProbsToMatrix(old_probs)
-    print("old_probs_mtx dimensions:", old_probs_mtx:size()[1], "x", old_probs_mtx:size()[2])
+    --print("old_probs_mtx dimensions:", old_probs_mtx:size()[1], "x", old_probs_mtx:size()[2])
     
     local new_probs_mtx = self:ProbsToMatrix(new_probs)
-    print("new_probs_mtx dimensions:", new_probs_mtx:size()[1], "x", new_probs_mtx:size()[2])
+    --print("new_probs_mtx dimensions:", new_probs_mtx:size()[1], "x", new_probs_mtx:size()[2])
     
     local advantages_mtx = self:ProbsToMatrix(advantages)
-    print("advantages_mtx dimensions:", advantages_mtx:size()[1], "x", advantages_mtx:size()[2])
+    --print("advantages_mtx dimensions:", advantages_mtx:size()[1], "x", advantages_mtx:size()[2])
     
     -- Calculate ratio
-    print("\nCalculating probability ratio...")
+    --print("\nCalculating probability ratio...")
     local ratio = matrix.elementwise_div(new_probs_mtx, old_probs_mtx)
-    print("ratio dimensions:", ratio:size()[1], "x", ratio:size()[2])
+    --print("ratio dimensions:", ratio:size()[1], "x", ratio:size()[2])
     
     -- Calculate surrogate objectives
-    print("\nCalculating surrogate objectives...")
+    --print("\nCalculating surrogate objectives...")
     local surr1 = matrix.elementwise_mul(ratio, advantages_mtx)
-    print("surr1 dimensions:", surr1:size()[1], "x", surr1:size()[2])
+    --print("surr1 dimensions:", surr1:size()[1], "x", surr1:size()[2])
     
-    print("Applying clipping...")
+    --print("Applying clipping...")
     local surr2 = matrix.elementwise_mul(
         matrix.replace(ratio, function(x) 
             return clamp(x, 1 - self.clip_epsilon, 1 + self.clip_epsilon) 
         end),
         advantages_mtx
     )
-    print("surr2 dimensions:", surr2:size()[1], "x", surr2:size()[2])
+    --print("surr2 dimensions:", surr2:size()[1], "x", surr2:size()[2])
     
-    print("\nCalculating final loss...")
+    --print("\nCalculating final loss...")
     local min_surr = matrix.min(surr1, surr2)
-    print("min_surr dimensions:", min_surr:size()[1], "x", min_surr:size()[2])
+    --print("min_surr dimensions:", min_surr:size()[1], "x", min_surr:size()[2])
     
     local loss = -matrix.mean(min_surr)
     print("Final loss value:", loss)
@@ -109,9 +109,16 @@ end
 
 -- Helper function to convert probability array to matrix format
 function PPOTraining:ProbsToMatrix(probs)
+    --print("ProbsToMatrix input type:", type(probs))
+    if type(probs) == "table" then
+        for k,v in pairs(probs) do
+            --print(string.format("Key: %s, Value type: %s, Value: %s", 
+                --tostring(k), type(v), tostring(v)))
+        end
+    end
     -- Check if probs is nil or empty
     if not probs then
-        print("WARNING: Nil probabilities in ProbsToMatrix")
+        --print("WARNING: Nil probabilities in ProbsToMatrix")
         return matrix:new(1, 1, 0)
     end
 
@@ -124,7 +131,7 @@ function PPOTraining:ProbsToMatrix(probs)
             for i = 1, #probs.action_type_probs do
                 local val = tonumber(probs.action_type_probs[i])
                 if not val then
-                    print("WARNING: Non-numeric value found in action_type_probs at index " .. i)
+                    --print("WARNING: Non-numeric value found in action_type_probs at index " .. i)
                     val = 0
                 end
                 table.insert(mtx_data[1], val)
@@ -137,7 +144,7 @@ function PPOTraining:ProbsToMatrix(probs)
         for i = 1, #probs do
             local val = tonumber(probs[i])
             if not val then
-                print("WARNING: Non-numeric value found in probs at index " .. i)
+                --print("WARNING: Non-numeric value found in probs at index " .. i)
                 val = 0
             end
             table.insert(mtx_data[1], val)
@@ -146,15 +153,16 @@ function PPOTraining:ProbsToMatrix(probs)
         return matrix:new(1, 1, 0)
     end
     
-    print("Matrix data created:", #mtx_data, "x", #mtx_data[1])
+    --print("Matrix data created:", #mtx_data, "x", #mtx_data[1])
     for i, row in ipairs(mtx_data) do
         for j, val in ipairs(row) do
-            print(string.format("Element (%d,%d): %s (type: %s)", i, j, tostring(val), type(val)))
+            --print(string.format("Element (%d,%d): %s (type: %s)", i, j, tostring(val), type(val)))
         end
     end
     
     local result = tableToMatrix(mtx_data)
-    print("Matrix created with dimensions:", result:size()[1], "x", result:size()[2])
+    --print("Matrix created with dimensions:", result:size()[1], "x", result:size()[2])
+    
     return result
 end
 
@@ -226,42 +234,42 @@ function PPOTraining:ComputeEntropyBonus(probs)
 end
 
 function PPOTraining:PrepareBatchStates(states)
-    print("\nPreparing Batch States:")
-    print("Number of states:", #states)
+    --print("\nPreparing Batch States:")
+    --print("Number of states:", #states)
     
     if #states == 0 then
-        print("WARNING: Empty states batch")
+        --print("WARNING: Empty states batch")
         return nil
     end
 
     -- Debug first state
     local first_state = states[1]
-    print("First state type:", type(first_state))
+    --print("First state type:", type(first_state))
     if type(first_state.size) == "function" then
-        print("First state dimensions:", first_state:size()[1], "x", first_state:size()[2])
+        --print("First state dimensions:", first_state:size()[1], "x", first_state:size()[2])
     end
 
     -- Get dimensions from first state
     local state_rows = first_state:rows()
     local state_cols = first_state:columns()
-    print("Expected dimensions:", state_rows, "x", state_cols)
+    --print("Expected dimensions:", state_rows, "x", state_cols)
     
     -- Validate dimensions match STATE_EMBED_SIZE
     if state_cols ~= STATE_EMBED_SIZE then
-        print(string.format("WARNING: State dimension mismatch. Expected %d columns, got %d", 
-            STATE_EMBED_SIZE, state_cols))
+        --print(string.format("WARNING: State dimension mismatch. Expected %d columns, got %d", 
+            --STATE_EMBED_SIZE, state_cols))
         return nil
     end
 
     -- Create batch matrix
     local batch_matrix = matrix:new(#states, state_cols)
-    print("Created batch matrix:", batch_matrix:rows(), "x", batch_matrix:columns())
+    --print("Created batch matrix:", batch_matrix:rows(), "x", batch_matrix:columns())
 
     -- Fill batch matrix
     for i = 1, #states do
         local state = states[i]
         if state:rows() ~= state_rows or state:columns() ~= state_cols then
-            print(string.format("WARNING: State %d dimensions mismatch", i))
+            --print(string.format("WARNING: State %d dimensions mismatch", i))
             return nil
         end
         
@@ -269,7 +277,7 @@ function PPOTraining:PrepareBatchStates(states)
             local val = state:getelement(1, j)
             -- Check for NaN
             if val ~= val then
-                print(string.format("WARNING: NaN found in state %d, column %d", i, j))
+                --print(string.format("WARNING: NaN found in state %d, column %d", i, j))
                 return nil
             end
             batch_matrix:setelement(i, j, val)
@@ -281,20 +289,20 @@ end
 
 -- Main PPO update function
 function PPOTraining:Update(gameHistory)
-    print("Starting PPO Update")
+    --print("Starting PPO Update")
     
     if #gameHistory.transitions == 0 then
-        print("No transitions to train on")
+        --print("No transitions to train on")
         return
     end
     
     -- Check if networks are initialized
     if not CivTransformerPolicy.initialized then
-        print("WARNING: CivTransformerPolicy not initialized, initializing now...")
+        --print("WARNING: CivTransformerPolicy not initialized, initializing now...")
         CivTransformerPolicy:Init()
     end
     if not ValueNetwork.initialized then
-        print("WARNING: ValueNetwork not initialized, initializing now...")
+        --print("WARNING: ValueNetwork not initialized, initializing now...")
         ValueNetwork:Init()
     end
     
@@ -304,11 +312,11 @@ function PPOTraining:Update(gameHistory)
     local learning_rate = 0.0003
     
     for epoch = 1, num_epochs do
-        print("\nEpoch " .. epoch .. "/" .. num_epochs)
+        --print("\nEpoch " .. epoch .. "/" .. num_epochs)
         
         for i = 1, #gameHistory.transitions, batch_size do
             local batch_end = math.min(i + batch_size - 1, #gameHistory.transitions)
-            print("\nProcessing batch from index", i, "to", batch_end)
+            --print("\nProcessing batch from index", i, "to", batch_end)
             
             -- Prepare batch data
             local states = {}
@@ -319,8 +327,7 @@ function PPOTraining:Update(gameHistory)
             local batch_advantages = {}
             local batch_returns = {}
             
-            -- Collect batch data
-            for j = i, batch_end do
+                for j = i, batch_end do
                 local transition = gameHistory.transitions[j]
                 if transition.state then
                     local processed_state = CivTransformerPolicy:ProcessGameState(transition.state)
@@ -328,16 +335,41 @@ function PPOTraining:Update(gameHistory)
                     table.insert(batch_advantages, advantages[j])
                     table.insert(batch_returns, returns[j])
                     
+                    -- Add validation and conversion of probabilities
                     if transition.action_probs then
-                        table.insert(old_probs.action_type_probs, transition.action_probs)
+                        local probs = {}
+                        for _, p in ipairs(transition.action_probs) do
+                            -- Convert to number and validate
+                            local prob = tonumber(p)
+                            if not prob then
+                                --print("WARNING: Invalid probability value:", p)
+                                prob = 1e-8  -- Small non-zero value
+                            end
+                            table.insert(probs, prob)
+                        end
+                        table.insert(old_probs.action_type_probs, probs)
                     end
-                    if transition.option_probs then
-                        table.insert(old_probs.option_probs, transition.option_probs)
-                    end
-                else
-                    print("WARNING: Missing state data for transition", j)
-                end
+            -- After processing batch data
+            --print("Probability validation:")
+            --print("Number of action probability sets:", #old_probs.action_type_probs)
+            if #old_probs.action_type_probs > 0 then
+                --print("Sample action probabilities:", table.concat(old_probs.action_type_probs[1], ", "))
             end
+                                
+        -- Same validation for option probs
+        if transition.option_probs then
+            local probs = {}
+            for _, p in ipairs(transition.option_probs) do
+                local prob = tonumber(p)
+                if not prob then prob = 1e-8 end
+                table.insert(probs, prob)
+            end
+            table.insert(old_probs.option_probs, probs)
+        end
+    else
+        --print("WARNING: Missing state data for transition", j)
+    end
+end
 
             -- Process each state individually
             local all_policy_outputs = {}
@@ -418,7 +450,7 @@ function PPOTraining:Update(gameHistory)
             CivTransformerPolicy:UpdateParams(learning_rate)
             ValueNetwork:UpdateParams(learning_rate)
             
-            -- Print progress
+            -- --print progress
             print(string.format(
                 "Batch %d/%d - Policy Loss: %.4f, Value Loss: %.4f, Entropy: %.4f",
                 math.floor(i/batch_size) + 1,
@@ -430,7 +462,7 @@ function PPOTraining:Update(gameHistory)
         end
     end
     
-    print("PPO Update completed")
+    --print("PPO Update completed")
 end
 
 

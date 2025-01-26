@@ -72,6 +72,41 @@ function ValueNetwork:BackwardPass(grad)
     return hidden_grad
 end
 
+function ValueNetwork:zero_grad()
+    -- Check if network is initialized
+    if not self.initialized then
+        print("WARNING: Attempting to zero gradients on uninitialized network")
+        return
+    end
+    
+    -- Zero gradients for main network weights with null checks
+    if self.value_hidden then
+        self.value_hidden:zero_grad()
+    end
+    if self.value_hidden2 then
+        self.value_hidden2:zero_grad()
+    end
+    if self.value_out then
+        self.value_out:zero_grad()
+    end
+    
+    -- Zero gradients for biases with null checks
+    if self.value_hidden_bias then
+        self.value_hidden_bias:zero_grad()
+    end
+    if self.value_hidden2_bias then
+        self.value_hidden2_bias:zero_grad()
+    end
+    if self.value_out_bias then
+        self.value_out_bias:zero_grad()
+    end
+end
+
+-- Helper method to check if matrix requires gradient
+function matrix:requires_gradient()
+    return self.requires_grad == true
+end
+
 function ValueNetwork:UpdateParams(learning_rate)
     self.value_out:update_weights(learning_rate)
     self.value_hidden2:update_weights(learning_rate)

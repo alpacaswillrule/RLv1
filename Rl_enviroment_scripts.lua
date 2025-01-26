@@ -67,7 +67,7 @@ local VICTORY_TYPES = {
 };
 
 -- Configuration variables
-local TURN_LIMIT = 20;
+local TURN_LIMIT = 10;
 local AUTO_RESTART_ENABLED = true;
 
 
@@ -259,6 +259,12 @@ function RLv1.OnTurnBegin()
             print("Value is nil ERROR")
             return
         end
+        print("action.action_probs type:", type(action.action_probs))
+        if type(action.action_probs) == "table" then
+            for i,v in ipairs(action.action_probs) do
+                print(string.format("Index %d: %s (%s)", i, tostring(v), type(v)))
+            end
+        end
         -- Record transition with value estimate and new probability information
         table.insert(m_gameHistory.transitions, {
             turn = m_currentGameTurn,
@@ -271,8 +277,9 @@ function RLv1.OnTurnBegin()
             next_state = nextState,
             value_estimate = value_estimate,
             action_encoding = action.action_encoding,
-            action_probs = action.action_probs,  -- New field
-            option_probs = action.option_probs,  -- New fieldselected_probability
+            -- Make sure these are actual numeric probabilities
+            action_probs = type(action.action_probs) == "table" and action.action_probs or {action.action_probs},
+            option_probs = type(action.option_probs) == "table" and action.option_probs or {action.option_probs},
             next_value_estimate = value
         })
 
