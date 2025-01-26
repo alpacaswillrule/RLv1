@@ -72,6 +72,216 @@ function ValueNetwork:BackwardPass(grad)
     return hidden_grad
 end
 
+
+-- Add these methods to ValueNetwork
+
+function ValueNetwork:BatchForward(state_batch)
+    print("\nValue Network Batch Forward:")
+    print("Batch size:", state_batch:rows())
+    
+    -- First pass through transformer's state processing pipeline in batch
+    local embedded_states = matrix.mul(state_batch, CivTransformerPolicy.state_embedding_weights)
+    embedded_states = CivTransformerPolicy:AddPositionalEncoding(embedded_states)
+    local encoded_states = CivTransformerPolicy:TransformerEncoder(embedded_states, nil)
+    
+    -- Process through first hidden layer
+    local hidden1 = matrix.mul(encoded_states, self.value_hidden)
+    -- Add bias to each sample in batch
+    hidden1 = matrix.add(hidden1, matrix.repmat(self.value_hidden_bias, encoded_states:rows(), 1))
+    -- Apply ReLU
+    hidden1 = matrix.relu(hidden1)
+    
+    -- Process through second hidden layer
+    local hidden2 = matrix.mul(hidden1, self.value_hidden2)
+    hidden2 = matrix.add(hidden2, matrix.repmat(self.value_hidden2_bias, hidden1:rows(), 1))
+    hidden2 = matrix.relu(hidden2)
+    
+    -- Final output layer
+    local values = matrix.mul(hidden2, self.value_out)
+    values = matrix.add(values, matrix.repmat(self.value_out_bias, hidden2:rows(), 1))
+    
+    -- Cache intermediate values for backward pass
+    self.batch_cache = {
+        embedded_states = embedded_states,
+        encoded_states = encoded_states,
+        hidden1 = hidden1,
+        hidden2 = hidden2,
+        values = values
+    }
+    
+    -- Return matrix of values (one per state in batch)
+    return values
+end
+
+function ValueNetwork:BatchBackward(value_grads)
+    print("\nValue Network Batch Backward:")
+    
+    if not self.batch_cache then
+        print("ERROR: No batch cache found. Run BatchForward first.")
+        return
+    end
+    
+    local batch_size = value_grads:rows()
+    print("Batch size:", batch_size)
+    
+    -- 1. Backward through output layer
+    local d_hidden2 = matrix.mul_with_grad(value_grads, matrix.transpose(self.value_out))
+    -- Compute output layer gradients
+    local out_weight_grad = matrix.mul_with_grad(
+        matrix.transpose(self.batch_cache.hidden2),
+        value_grads
+    )
+    local out_bias_grad = matrix.sum(value_grads, 1)
+    
+    -- Update output layer weights and bias
+    for i = 1, self.value_out:rows() do
+        for j = 1, self.value_out:columns() do
+            local current_weight = self.value_out:getelement(i, j)
+            local grad = out_weight_grad:getelement(i, j)
+            self.value_out:setelement(i, j, 
+                current_weight - self.learning_rate * grad)
+        end
+    end
+    
+    -- Update output bias
+    for j = 1, self.value_out_bias:columns() do
+        local current_bias = self.value_out_bias:getelement(1, j)
+        local grad = out_bias_grad:getelement(1, j)
+        self.value_out_bias:setelement(1, j, 
+            current_bias - self.learning_rate * grad)
+    end
+    
+    -- 2. Backward through second hidden layer
+    -- Apply ReLU gradient
+    d_hidden2 = matrix.replace(d_hidden2, function(x, i, j)
+        return self.batch_cache.hidden2:getelement(i, j) > 0 and x or 0
+    end)
+    -- Compute gradients for first hidden layer
+    local d_hidden1 = matrix.mul_with_grad(d_hidden2, matrix.transpose(self.value_hidden2))
+    -- Compute second hidden layer weight gradients
+    local hidden2_weight_grad = matrix.mul_with_grad(
+        matrix.transpose(self.batch_cache.hidden1),
+        d_hidden2
+    )
+    local hidden2_bias_grad = matrix.sum(d_hidden2, 1)
+    
+    -- Update second hidden layer weights
+    for i = 1, self.value_hidden2:rows() do
+        for j = 1, self.value_hidden2:columns() do
+            local current_weight = self.value_hidden2:getelement(i, j)
+            local grad = hidden2_weight_grad:getelement(i, j)
+            self.value_hidden2:setelement(i, j, 
+                current_weight - self.learning_rate * grad)
+        end
+    end
+    
+    -- Update second hidden layer bias
+    for j = 1, self.value_hidden2_bias:columns() do
+        local current_bias = self.value_hidden2_bias:getelement(1, j)
+        local grad = hidden2_bias_grad:getelement(1, j)
+        self.value_hidden2_bias:setelement(1, j, 
+            current_bias - self.learning_rate * grad)
+    end
+    
+    -- 3. Backward through first hidden layer
+    -- Apply ReLU gradient
+    d_hidden1 = matrix.replace(d_hidden1, function(x, i, j)
+        return self.batch_cache.hidden1:getelement(i, j) > 0 and x or 0
+    end)
+    -- Compute gradient for encoded states
+    local d_encoded = matrix.mul_with_grad(d_hidden1, matrix.transpose(self.value_hidden))
+    -- Compute first hidden layer weight gradients
+    local hidden1_weight_grad = matrix.mul_with_grad(
+        matrix.transpose(self.batch_cache.encoded_states),
+        d_hidden1
+    )
+    local hidden1_bias_grad = matrix.sum(d_hidden1, 1)
+    
+    -- Update first hidden layer weights
+    for i = 1, self.value_hidden:rows() do
+        for j = 1, self.value_hidden:columns() do
+            local current_weight = self.value_hidden:getelement(i, j)
+            local grad = hidden1_weight_grad:getelement(i, j)
+            self.value_hidden:setelement(i, j, 
+                current_weight - self.learning_rate * grad)
+        end
+    end
+    
+    -- Update first hidden layer bias
+    for j = 1, self.value_hidden_bias:columns() do
+        local current_bias = self.value_hidden_bias:getelement(1, j)
+        local grad = hidden1_bias_grad:getelement(1, j)
+        self.value_hidden_bias:setelement(1, j, 
+            current_bias - self.learning_rate * grad)
+    end
+    
+    -- Clear cache
+    self.batch_cache = nil
+    
+    -- Return gradient for encoded states (needed for transformer backward pass)
+    return d_encoded
+end
+
+-- Add batch processing for value estimation
+function ValueNetwork:GetValueBatch(states)
+    -- Process all states into a single batch matrix
+    local batch_mtx = matrix:new(#states, CivTransformerPolicy.d_model)
+    for i, state in ipairs(states) do
+        local state_encoding = CivTransformerPolicy:ProcessGameState(state)
+        for j = 1, CivTransformerPolicy.d_model do
+            batch_mtx:setelement(i, j, state_encoding:getelement(1, j))
+        end
+    end
+    
+    -- Forward pass through batch
+    local value_batch = self:BatchForward(batch_mtx)
+    
+    -- Extract individual values
+    local values = {}
+    for i = 1, value_batch:rows() do
+        table.insert(values, value_batch:getelement(i, 1))
+    end
+    
+    return values
+end
+
+-- Helper function to check states in batch
+function ValueNetwork:ValidateStateBatch(states)
+    if #states == 0 then
+        print("ERROR: Empty state batch")
+        return false
+    end
+    
+    -- Check first state dimensions
+    local first_state = states[1]
+    if not first_state or not first_state.size then
+        print("ERROR: Invalid state format")
+        return false
+    end
+    
+    local expected_dims = {1, CivTransformerPolicy.d_model}
+    local state_dims = first_state:size()
+    
+    if state_dims[1] ~= expected_dims[1] or state_dims[2] ~= expected_dims[2] then
+        print(string.format("ERROR: State dimension mismatch. Expected %dx%d, got %dx%d",
+            expected_dims[1], expected_dims[2], state_dims[1], state_dims[2]))
+        return false
+    end
+    
+    -- Check remaining states
+    for i = 2, #states do
+        local dims = states[i]:size()
+        if dims[1] ~= expected_dims[1] or dims[2] ~= expected_dims[2] then
+            print(string.format("ERROR: State %d dimension mismatch", i))
+            return false
+        end
+    end
+    
+    return true
+end
+
+
+
 function ValueNetwork:zero_grad()
     -- Check if network is initialized
     if not self.initialized then
@@ -151,14 +361,14 @@ function ValueNetwork:GetValue(state)
     return self:Forward(state_encoding)
 end
 
--- Batch processing for multiple states (useful during training)
-function ValueNetwork:GetValueBatch(states)
-    local values = {}
-    for _, state in ipairs(states) do
-        table.insert(values, self:GetValue(state))
-    end
-    return values
-end
+-- -- Batch processing for multiple states (useful during training)
+-- function ValueNetwork:GetValueBatch(states)
+--     local values = {}
+--     for _, state in ipairs(states) do
+--         table.insert(values, self:GetValue(state))
+--     end
+--     return values
+-- end
 
 
 function ValueNetwork:LoadWeights(identifier)

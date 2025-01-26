@@ -1022,33 +1022,249 @@ function CivTransformerPolicy:InitStateEmbedding()
     end
 end
 
-function CivTransformerPolicy:BackwardPass(action_grad, value_grad)
-    -- action_grad should contain:
-    -- .action_type_grad - gradient for action type selection
-    -- .option_grad - gradient for option selection
+function CivTransformerPolicy:BatchForward(state_batch, possible_actions)
+    print("\nBatch Forward Pass:")
+    print("Batch size:", state_batch:rows())
     
-    -- Backward through value head
-    local transformer_grad_from_value = ValueNetwork:BackwardPass(value_grad)
+    -- Process states through transformer
+    -- Step 1: Embed all states in batch
+    local embedded_states = matrix.mul(state_batch, self.state_embedding_weights)
     
-    -- Backward through option selection head (if applicable)
-    local option_grad = nil
-    if action_grad.option_grad then
-        option_grad = self:OptionHeadBackward(action_grad.option_grad)
+    -- Step 2: Add positional encoding to all states
+    embedded_states = self:AddPositionalEncoding(embedded_states)
+    
+    -- Step 3: Process through transformer encoder
+    local transformer_outputs = self:TransformerEncoder(embedded_states, nil)
+    
+    -- Step 4: Process action logits for all states
+    local action_logits_batch = matrix.mul(transformer_outputs, self.action_type_projection)
+    
+    -- Step 5: Apply action masking and get probabilities for each state
+    local all_action_probs = {}
+    local all_option_probs = {}
+    local selected_actions = {}
+    
+    -- Process each state in batch
+    for i = 1, state_batch:rows() do
+        -- Get logits for this state
+        local state_logits = {}
+        for j = 1, #ACTION_TYPES do
+            state_logits[j] = action_logits_batch:getelement(i, j)
+        end
+        
+        -- Create and apply action mask
+        local action_mask = self:CreateAttentionMask(possible_actions)
+        local masked_logits = {}
+        for j = 1, #ACTION_TYPES do
+            masked_logits[j] = action_mask:getelement(j, 1) == 0 and -1e9 or state_logits[j]
+        end
+        
+        -- Convert to probabilities
+        local action_probs = self:Softmax({masked_logits})
+        table.insert(all_action_probs, action_probs)
+        
+        -- Sample action for this state
+        local action_type = self:SampleFromProbs(ACTION_TYPES, action_probs)
+        
+        -- Process options for selected action
+        local available_options = possible_actions[action_type]
+        if action_type ~= "EndTurn" and available_options and #available_options > 0 then
+            -- Get transformer output for this state
+            local state_output = matrix:new(1, transformer_outputs:columns())
+            for j = 1, transformer_outputs:columns() do
+                state_output:setelement(1, j, transformer_outputs:getelement(i, j))
+            end
+            
+            -- Get option logits
+            local option_logits = self:OptionSelectionHead(state_output, action_type, available_options)
+            local option_probs = self:Softmax(option_logits)
+            table.insert(all_option_probs, option_probs)
+            
+            -- Sample option
+            local selected_option = self:SampleFromProbs(available_options, option_probs)
+            table.insert(selected_actions, {
+                ActionType = action_type,
+                Parameters = selected_option,
+                action_probs = action_probs,
+                option_probs = option_probs
+            })
+        else
+            -- Add EndTurn action
+            table.insert(selected_actions, {
+                ActionType = "EndTurn",
+                Parameters = {},
+                action_probs = action_probs,
+                option_probs = {}
+            })
+        end
     end
     
-    -- Backward through action type head
-    local action_type_grad = self:ActionTypeHeadBackward(action_grad.action_type_grad)
+    -- Save intermediate values for backward pass
+    self.batch_cache = {
+        embedded_states = embedded_states,
+        transformer_outputs = transformer_outputs,
+        action_logits = action_logits_batch,
+        all_action_probs = all_action_probs,
+        all_option_probs = all_option_probs
+    }
     
-    -- Combine all gradients
-    local total_transformer_grad = transformer_grad_from_value
-    if option_grad then
-        total_transformer_grad = matrix.add(total_transformer_grad, option_grad)
+    return {
+        actions = selected_actions,
+        action_probs = all_action_probs,
+        option_probs = all_option_probs,
+        transformer_outputs = transformer_outputs
+    }
+end
+
+function CivTransformerPolicy:BatchBackward(grads)
+    print("\nBatch Backward Pass:")
+    
+    if not self.batch_cache then
+        print("ERROR: No batch cache found. Run BatchForward first.")
+        return
     end
+    
+    -- Unpack gradients
+    local action_grads = grads.action_type_grad
+    local option_grads = grads.option_grad
+    
+    -- Initialize gradient accumulators
+    local total_transformer_grad = matrix:new(
+        self.batch_cache.transformer_outputs:rows(),
+        self.batch_cache.transformer_outputs:columns(),
+        0
+    )
+    
+    -- 1. Backward through action type head and UPDATE weights
+    local action_type_grad = matrix.mul_with_grad(
+        action_grads, 
+        matrix.transpose(self.action_type_projection)
+    )
     total_transformer_grad = matrix.add(total_transformer_grad, action_type_grad)
     
-    -- Backward through transformer layers
-    self:TransformerBackward(total_transformer_grad)
+    -- Compute gradients and update action type projection weights
+    local action_proj_grad = matrix.mul_with_grad(
+        matrix.transpose(self.batch_cache.transformer_outputs),
+        action_grads
+    )
+    -- Update action type projection weights
+    for i = 1, self.action_type_projection:rows() do
+        for j = 1, self.action_type_projection:columns() do
+            local current_weight = self.action_type_projection:getelement(i, j)
+            local grad = action_proj_grad:getelement(i, j)
+            -- Update using gradient descent
+            self.action_type_projection:setelement(i, j, 
+                current_weight - self.learning_rate * grad)
+        end
+    end
+    
+    -- 2. Backward through option head and UPDATE weights (if applicable)
+    if option_grads then
+        local option_grad = self:BatchOptionHeadBackward(option_grads)
+        total_transformer_grad = matrix.add(total_transformer_grad, option_grad)
+        
+        -- Update option projection weights
+        local option_proj_grad = matrix.mul_with_grad(
+            matrix.transpose(self.batch_cache.transformer_outputs),
+            option_grad
+        )
+        -- Update option projection weights
+        for i = 1, self.option_projection:rows() do
+            for j = 1, self.option_projection:columns() do
+                local current_weight = self.option_projection:getelement(i, j)
+                local grad = option_proj_grad:getelement(i, j)
+                self.option_projection:setelement(i, j, 
+                    current_weight - self.learning_rate * grad)
+            end
+        end
+    end
+    
+    -- 3. Backward through transformer encoder and update weights
+    local encoder_grad = self:TransformerEncoderBackward(total_transformer_grad)
+    
+    -- 4. Update embedding layer weights
+    local embed_grad = matrix.mul_with_grad(
+        matrix.transpose(self.batch_cache.embedded_states),
+        encoder_grad
+    )
+    -- Update embedding weights
+    for i = 1, self.state_embedding_weights:rows() do
+        for j = 1, self.state_embedding_weights:columns() do
+            local current_weight = self.state_embedding_weights:getelement(i, j)
+            local grad = embed_grad:getelement(i, j)
+            self.state_embedding_weights:setelement(i, j, 
+                current_weight - self.learning_rate * grad)
+        end
+    end
+    
+    -- Clear cache after backward pass
+    self.batch_cache = nil
 end
+
+function CivTransformerPolicy:BatchOptionHeadBackward(option_grads)
+    -- Backward through option attention for each state in batch
+    local total_option_grad = matrix:new(
+        self.batch_cache.transformer_outputs:rows(),
+        self.batch_cache.transformer_outputs:columns(),
+        0
+    )
+    
+    for i = 1, option_grads:rows() do
+        -- Get gradient for this state
+        local state_grad = matrix:new(1, option_grads:columns())
+        for j = 1, option_grads:columns() do
+            state_grad:setelement(1, j, option_grads:getelement(i, j))
+        end
+        
+        -- Backward through option projection
+        local grad_projected = matrix.mul_with_grad(state_grad, self.option_projection)
+        
+        -- Add to total gradient
+        for r = 1, total_option_grad:rows() do
+            for c = 1, total_option_grad:columns() do
+                local current = total_option_grad:getelement(r, c)
+                local new = current + grad_projected:getelement(1, c)
+                total_option_grad:setelement(r, c, new)
+            end
+        end
+    end
+    
+    -- Update option projection weights
+    self.option_projection:backward(matrix.mul_with_grad(
+        matrix.transpose(self.batch_cache.transformer_outputs),
+        total_option_grad
+    ))
+    
+    return total_option_grad
+end
+
+-- function CivTransformerPolicy:BackwardPass(action_grad, value_grad)
+--     -- action_grad should contain:
+--     -- .action_type_grad - gradient for action type selection
+--     -- .option_grad - gradient for option selection
+    
+--     -- Backward through value head
+--     local transformer_grad_from_value = ValueNetwork:BackwardPass(value_grad)
+    
+--     -- Backward through option selection head (if applicable)
+--     local option_grad = nil
+--     if action_grad.option_grad then
+--         option_grad = self:OptionHeadBackward(action_grad.option_grad)
+--     end
+    
+--     -- Backward through action type head
+--     local action_type_grad = self:ActionTypeHeadBackward(action_grad.action_type_grad)
+    
+--     -- Combine all gradients
+--     local total_transformer_grad = transformer_grad_from_value
+--     if option_grad then
+--         total_transformer_grad = matrix.add(total_transformer_grad, option_grad)
+--     end
+--     total_transformer_grad = matrix.add(total_transformer_grad, action_type_grad)
+    
+--     -- Backward through transformer layers
+--     self:TransformerBackward(total_transformer_grad)
+-- end
 
 function CivTransformerPolicy:ActionTypeHeadBackward(grad_output)
     -- Backward through action type projection
@@ -1905,6 +2121,9 @@ function CivTransformerPolicy:Forward(state_mtx, possible_actions)
         --action_encoding = self:EncodeAction(action_type, selected_option)
     }
 end
+
+
+
 
 function CivTransformerPolicy:zero_grad()
     -- Zero state embedding gradients
