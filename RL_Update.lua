@@ -52,6 +52,8 @@ function PPOTraining:ComputeGAE(transitions)
     
     return advantages, returns
 end
+
+
 function PPOTraining:ComputePolicyLoss(old_probs, new_probs, advantages)
     --print("\nComputing Policy Loss:")
     --print("Input validation:")
@@ -214,23 +216,46 @@ function PPOTraining:ComputeValueLoss(values, returns)
 end
 
 function PPOTraining:ComputeDistributionEntropy(probs)
-    local probs_mtx = tableToMatrix(probs)
-    return -matrix.sum(matrix.elementwise_mul(
-        probs_mtx,
-        matrix.log(matrix.add_scalar(probs_mtx, 1e-10))
-    ))
+    if type(probs) ~= "table" then
+        print("WARNING: Expected table of probabilities, got", type(probs))
+        return 0
+    end
+    
+    local entropy = 0
+    for _, prob in ipairs(probs) do
+        -- Add small epsilon to avoid log(0)
+        if prob > 0 then
+            entropy = entropy - prob * math.log(prob + 1e-10)
+        end
+    end
+    return entropy
 end
 
 -- Calculate Entropy Bonus
 function PPOTraining:ComputeEntropyBonus(probs)
-    local action_type_entropy = self:ComputeDistributionEntropy(probs.action_type_probs)
-    local option_entropy = 0
-    
-    if probs.option_probs then
-        option_entropy = self:ComputeDistributionEntropy(probs.option_probs)
+    -- Check if we have action probabilities
+    if not probs.action_probs then
+        print("WARNING: No action probabilities found")
+        return 0
     end
     
-    return action_type_entropy + option_entropy
+    local total_entropy = 0
+    
+    -- Process each set of probabilities in the batch
+    for _, batch_probs in ipairs(probs.action_probs) do
+        -- Add action type entropy
+        total_entropy = total_entropy + self:ComputeDistributionEntropy(batch_probs)
+        
+        -- If there are option probabilities for this batch item, add those too
+        if probs.option_probs and #probs.option_probs > 0 then
+            for _, option_probs in ipairs(probs.option_probs) do
+                total_entropy = total_entropy + self:ComputeDistributionEntropy(option_probs)
+            end
+        end
+    end
+    
+    -- Return average entropy across batch
+    return total_entropy / #probs.action_probs
 end
 
 function PPOTraining:PrepareBatchStates(states)
@@ -287,182 +312,297 @@ function PPOTraining:PrepareBatchStates(states)
     return batch_matrix
 end
 
--- Main PPO update function
-function PPOTraining:Update(gameHistory)
-    --print("Starting PPO Update")
+-- PPO Update with proper batch handling
+function PPOTraining:PrepareBatch(transitions, start_idx, batch_size)
+    -- Calculate valid batch size based on remaining transitions
+    local valid_size = math.min(batch_size, #transitions - start_idx + 1)
     
+    -- Initialize batch containers
+    local batch = {
+        -- Create state matrix for batch forward pass
+        states = matrix:new(valid_size, STATE_EMBED_SIZE),
+        next_states = matrix:new(valid_size, STATE_EMBED_SIZE),
+        
+        -- Store metadata needed for loss computation
+        advantages = matrix:new(valid_size, 1),
+        returns = matrix:new(valid_size, 1),
+        
+        -- Store original probabilities for importance sampling
+        old_action_probs = matrix:new(valid_size, #ACTION_TYPES),
+        old_option_probs = {},  -- Will store if available
+        
+        -- Store original actions for loss computation
+        actions = {},
+        value_estimates = matrix:new(valid_size, 1)
+    }
+    
+    -- Fill batch with transition data
+    for i = 1, valid_size do
+        local trans_idx = start_idx + i - 1
+        local transition = transitions[trans_idx]
+        
+        -- Process state into matrix row
+        local state_encoding = CivTransformerPolicy:ProcessGameState(transition.state)
+        local next_state_encoding = CivTransformerPolicy:ProcessGameState(transition.next_state)
+        
+        -- Set state and next_state rows
+        for j = 1, STATE_EMBED_SIZE do
+            batch.states:setelement(i, j, state_encoding:getelement(1, j))
+            batch.next_states:setelement(i, j, next_state_encoding:getelement(1, j))
+        end
+        
+        -- Store action probabilities
+        for j = 1, #ACTION_TYPES do
+            batch.old_action_probs:setelement(i, j, transition.action_probs[j] or 1e-8)
+        end
+        
+        -- Store option probabilities if available
+        if transition.option_probs then
+            if not batch.old_option_probs[i] then
+                batch.old_option_probs[i] = {}
+            end
+            for j = 1, #transition.option_probs do
+                table.insert(batch.old_option_probs[i], transition.option_probs[j])
+            end
+        end
+        
+        -- Store other data
+        batch.advantages:setelement(i, 1, transition.advantage or 0)
+        batch.returns:setelement(i, 1, transition.returns or 0)
+        batch.value_estimates:setelement(i, 1, transition.value_estimate or 0)
+        
+        -- Store action
+        table.insert(batch.actions, {
+            type = transition.action.type,
+            params = transition.action.params
+        })
+    end
+    
+    return batch
+end
+
+function PPOTraining:Update(gameHistory)
     if #gameHistory.transitions == 0 then
-        --print("No transitions to train on")
+        print("No transitions to train on")
         return
     end
     
-    -- Check if networks are initialized
-    if not CivTransformerPolicy.initialized then
-        --print("WARNING: CivTransformerPolicy not initialized, initializing now...")
-        CivTransformerPolicy:Init()
-    end
-    if not ValueNetwork.initialized then
-        --print("WARNING: ValueNetwork not initialized, initializing now...")
-        ValueNetwork:Init()
+    -- Compute advantages and returns for all transitions
+    local advantages, returns = self:ComputeGAE(gameHistory.transitions)
+    
+    -- Add advantages and returns to transitions
+    for i, transition in ipairs(gameHistory.transitions) do
+        transition.advantage = advantages[i]  -- Fixed typo
+        transition.returns = returns[i]
     end
     
-    local advantages, returns = self:ComputeGAE(gameHistory.transitions)
+    -- Training hyperparameters
     local num_epochs = 4
     local batch_size = 64
-    local learning_rate = 0.0003
+    local base_learning_rate = 0.0003
+    
+    -- Tracking metrics across all epochs
+    local training_stats = {
+        policy_losses = {},
+        value_losses = {},
+        entropies = {},
+        ratios = {}
+    }
     
     for epoch = 1, num_epochs do
-        print("\nEpoch " .. epoch .. "/" .. num_epochs)
+        -- Update learning rate with schedule
+        local current_lr = base_learning_rate * (1 - epoch/num_epochs)
+        print(string.format("\nEpoch %d/%d (lr: %.6f)", epoch, num_epochs, current_lr))
         
-        for i = 1, #gameHistory.transitions, batch_size do
-            local batch_end = math.min(i + batch_size - 1, #gameHistory.transitions)
-            --print("\nProcessing batch from index", i, "to", batch_end)
-            
-            -- Prepare batch data
-            local states = {}
-            local old_probs = {
-                action_type_probs = {},
-                option_probs = {}
-            }
-            local batch_advantages = {}
-            local batch_returns = {}
-            
-                for j = i, batch_end do
-                local transition = gameHistory.transitions[j]
-                if transition.state then
-                    local processed_state = CivTransformerPolicy:ProcessGameState(transition.state)
-                    table.insert(states, processed_state)
-                    table.insert(batch_advantages, advantages[j])
-                    table.insert(batch_returns, returns[j])
-                    
-                    -- Add validation and conversion of probabilities
-                    if transition.action_probs then
-                        local probs = {}
-                        for _, p in ipairs(transition.action_probs) do
-                            -- Convert to number and validate
-                            local prob = tonumber(p)
-                            if not prob then
-                                --print("WARNING: Invalid probability value:", p)
-                                prob = 1e-8  -- Small non-zero value
-                            end
-                            table.insert(probs, prob)
-                        end
-                        table.insert(old_probs.action_type_probs, probs)
-                    end
-            -- After processing batch data
-            --print("Probability validation:")
-            --print("Number of action probability sets:", #old_probs.action_type_probs)
-            if #old_probs.action_type_probs > 0 then
-                --print("Sample action probabilities:", table.concat(old_probs.action_type_probs[1], ", "))
-            end
-                                
-        -- Same validation for option probs
-        if transition.option_probs then
-            local probs = {}
-            for _, p in ipairs(transition.option_probs) do
-                local prob = tonumber(p)
-                if not prob then prob = 1e-8 end
-                table.insert(probs, prob)
-            end
-            table.insert(old_probs.option_probs, probs)
+        -- Shuffle transitions
+        local shuffled_indices = {}
+        for i = 1, #gameHistory.transitions do
+            shuffled_indices[i] = i
         end
-    else
-        --print("WARNING: Missing state data for transition", j)
-    end
-end
-
-            -- Process each state individually
-            local all_policy_outputs = {}
-            local all_value_outputs = {}
+        for i = #shuffled_indices, 2, -1 do
+            local j = math.random(i)
+            shuffled_indices[i], shuffled_indices[j] = shuffled_indices[j], shuffled_indices[i]
+        end
+        
+        -- Track epoch metrics
+        local epoch_metrics = {
+            policy_loss = 0,
+            value_loss = 0,
+            entropy = 0,
+            avg_ratio = 0,
+            batch_count = 0
+        }
+        
+        -- Process in batches
+        for i = 1, #gameHistory.transitions, batch_size do
+            -- Prepare batch
+            local batch = self:PrepareBatch(gameHistory.transitions, i, batch_size)
             
-            for _, state in ipairs(states) do
-                -- Forward pass through policy network
-                local policy_output = CivTransformerPolicy:Forward(state, GetPossibleActions())
-                table.insert(all_policy_outputs, policy_output)
-                
-                -- Forward pass through value network
-                local value_output = ValueNetwork:Forward(state)
-                table.insert(all_value_outputs, value_output)
-            end
+            -- Forward passes
+            local policy_outputs = CivTransformerPolicy:BatchForward(batch.states, batch.actions)
+            local value_outputs = ValueNetwork:BatchForward(batch.states)
             
-            -- Combine policy outputs
-            local combined_action_probs = {}
-            local combined_option_probs = {}
-            for _, output in ipairs(all_policy_outputs) do
-                if output.action_probs then
-                    table.insert(combined_action_probs, output.action_probs)
-                end
-                if output.option_probs then
-                    table.insert(combined_option_probs, output.option_probs)
-                end
-            end
+            -- Compute entropy bonus
+            local entropy = self:ComputeEntropyBonus(policy_outputs)
             
-            -- Calculate losses
-            local policy_loss = self:ComputePolicyLoss(
-                old_probs,
-                {
-                    action_type_probs = combined_action_probs,
-                    option_probs = combined_option_probs
-                },
-                batch_advantages
-            )
-            
-            -- Convert value outputs to matrix
-            local value_matrix = matrix:new(#all_value_outputs, 1)
-            for k, v in ipairs(all_value_outputs) do
-                value_matrix:setelement(k, 1, v)
-            end
-            
-            local returns_matrix = matrix:new(#batch_returns, 1)
-            for k, v in ipairs(batch_returns) do
-                returns_matrix:setelement(k, 1, v)
-            end
-            
-            local value_loss = self:ComputeValueLoss(value_matrix, returns_matrix)
-            local entropy_loss = self:ComputeEntropyBonus({
-                action_type_probs = combined_action_probs,
-                option_probs = combined_option_probs
-            })
-            
-            -- Compute total loss
-            local total_loss = policy_loss + 
-                             self.value_coef * value_loss - 
-                             self.entropy_coef * entropy_loss
-            
-            -- Zero gradients
-            CivTransformerPolicy:zero_grad()
-            ValueNetwork:zero_grad()
-            
-            -- Create gradient matrices
-            local policy_grad = {
-                action_type_grad = matrix:new(#combined_action_probs, #ACTION_TYPES, 1.0),
-                option_grad = #combined_option_probs > 0 and 
-                             matrix:new(#combined_option_probs, combined_option_probs[1]:columns(), 1.0) or nil
+            -- Initialize policy gradients
+            local policy_grads = {
+                action_type_grad = matrix:new(batch_size, #ACTION_TYPES),
+                option_grad = matrix:new(batch_size, TRANSFORMER_DIM)
             }
             
-            local value_grad = matrix:new(value_matrix:size()[1], 1, 1.0)
+            -- Track ratios for this batch
+            local all_ratios = matrix:new(batch_size, #ACTION_TYPES)
+            
+            -- Compute advantage-weighted probability ratios for actions
+            local valid_size = math.min(batch_size, #gameHistory.transitions - i + 1)
+            for j = 1, valid_size do
+                
+                print("\nProcessing batch item:", j)
+                print("policy_outputs.action_probs[j] type:", type(policy_outputs.action_probs[j]))
+                if type(policy_outputs.action_probs[j]) == "table" then
+                    print("action_probs length:", #policy_outputs.action_probs[j])
+                    print("First few values:", table.concat({unpack(policy_outputs.action_probs[j], 1, math.min(5, #policy_outputs.action_probs[j]))}, ", "))
+                end
+                print("\nbatch.old_action_probs row type:", type(batch.old_action_probs:row(j)))
+                print("old_action_probs dimensions:", batch.old_action_probs:rows(), "x", batch.old_action_probs:columns())   
+                    -- Print first few values of the row
+                local row_values = {}
+                for k = 1, math.min(5, batch.old_action_probs:columns()) do
+                    table.insert(row_values, batch.old_action_probs:getelement(j, k))
+                end
+                print("First few old probs:", table.concat(row_values, ", "))
+
+                -- convert to matrix
+                local policyv1 = tableToMatrix(policy_outputs.action_probs[j])
+                local policyv2 = tableToMatrix(batch.old_action_probs:row(j))
+
+                local ratio = matrix.elementwise_div(
+                    policyv1,
+                    policyv2
+                )
+
+                -- local ratio = matrix.elementwise_div(
+                --     policy_outputs.action_probs[j],
+                --     batch.old_action_probs:row(j)
+                -- )
+                
+                -- Store ratios for metrics
+                for k = 1, #ACTION_TYPES do
+                    all_ratios:setelement(j, k, ratio:getelement(1, k))
+                end
+                
+                -- Clip ratio
+                local clipped_ratio = matrix.replace(ratio, function(x)
+                    return math.min(math.max(x, 1 - self.clip_epsilon), 1 + self.clip_epsilon)
+                end)
+                
+                -- Get advantage for this sample
+                local advantage = batch.advantages:getelement(j, 1)
+                
+                -- Compute policy gradient
+                for k = 1, #ACTION_TYPES do
+                    -- Compute surrogate objectives
+                    local surrogate1 = ratio:getelement(1, k) * advantage
+                    local surrogate2 = clipped_ratio:getelement(1, k) * advantage
+                    
+                    -- Take minimum of surrogates
+                    local policy_grad = -math.min(surrogate1, surrogate2)
+                    
+                    -- Add entropy gradient
+                    local entropy_grad = -self.entropy_coef * 
+                        (1.0 + math.log(policy_outputs.action_probs[j][k] + 1e-8))
+                    
+                    -- Combine gradients
+                    policy_grads.action_type_grad:setelement(j, k, policy_grad + entropy_grad)
+                end
+            end
+            
+            -- Handle option probabilities if present
+            if policy_outputs.option_probs and batch.old_option_probs then
+                local option_ratio = matrix.elementwise_div(
+                    policy_outputs.option_probs,
+                    batch.old_option_probs
+                )
+                
+                -- Clip option ratios and compute gradients similarly to action gradients
+                local clipped_option_ratio = matrix.replace(option_ratio, function(x)
+                    return math.min(math.max(x, 1 - self.clip_epsilon), 1 + self.clip_epsilon)
+                end)
+                
+                -- Compute and store option gradients
+                for j = 1, batch_size do
+                    local advantage = batch.advantages:getelement(j, 1)
+                    for k = 1, TRANSFORMER_DIM do
+                        local surrogate1 = option_ratio:getelement(j, k) * advantage
+                        local surrogate2 = clipped_option_ratio:getelement(j, k) * advantage
+                        policy_grads.option_grad:setelement(j, k, -math.min(surrogate1, surrogate2))
+                    end
+                end
+            end
+            
+            -- Compute value loss gradient
+            local value_loss = matrix.sub(value_outputs, batch.returns)
+            local value_grad = matrix.mulnum(value_loss, 2.0) -- Derivative of MSE
+            
+            -- Scale gradients by learning rate
+            policy_grads.action_type_grad = matrix.mulnum(policy_grads.action_type_grad, current_lr)
+            policy_grads.option_grad = matrix.mulnum(policy_grads.option_grad, current_lr)
+            value_grad = matrix.mulnum(value_grad, current_lr)
             
             -- Backward passes
-            CivTransformerPolicy:BackwardPass(policy_grad, value_grad)
-            ValueNetwork:BackwardPass(value_grad)
+            CivTransformerPolicy:BatchBackward(policy_grads)
+            ValueNetwork:BatchBackward(value_grad)
             
-            -- Update parameters
-            CivTransformerPolicy:UpdateParams(learning_rate)
-            ValueNetwork:UpdateParams(learning_rate)
+            -- Update epoch metrics
+            epoch_metrics.policy_loss = epoch_metrics.policy_loss + matrix.mean(policy_grads.action_type_grad)
+            epoch_metrics.value_loss = epoch_metrics.value_loss + matrix.mean(value_loss)
+            epoch_metrics.entropy = epoch_metrics.entropy + entropy
+            epoch_metrics.avg_ratio = epoch_metrics.avg_ratio + matrix.mean(all_ratios)
+            epoch_metrics.batch_count = epoch_metrics.batch_count + 1
             
-            -- --print progress
+            -- Print batch progress
             print(string.format(
                 "Batch %d/%d - Policy Loss: %.4f, Value Loss: %.4f, Entropy: %.4f",
                 math.floor(i/batch_size) + 1,
                 math.ceil(#gameHistory.transitions/batch_size),
-                policy_loss,
-                value_loss,
-                entropy_loss
+                matrix.mean(policy_grads.action_type_grad),
+                matrix.mean(value_loss),
+                entropy
             ))
+            
+            -- Check for early stopping
+            if math.abs(matrix.mean(policy_grads.action_type_grad)) < 1e-5 and 
+               math.abs(matrix.mean(value_loss)) < 1e-5 then
+                print("Converged - stopping early")
+                return training_stats
+            end
         end
+        
+        -- Average epoch metrics
+        local num_batches = epoch_metrics.batch_count
+        epoch_metrics.policy_loss = epoch_metrics.policy_loss / num_batches
+        epoch_metrics.value_loss = epoch_metrics.value_loss / num_batches
+        epoch_metrics.entropy = epoch_metrics.entropy / num_batches
+        epoch_metrics.avg_ratio = epoch_metrics.avg_ratio / num_batches
+        
+        -- Store epoch metrics
+        table.insert(training_stats.policy_losses, epoch_metrics.policy_loss)
+        table.insert(training_stats.value_losses, epoch_metrics.value_loss)
+        table.insert(training_stats.entropies, epoch_metrics.entropy)
+        table.insert(training_stats.ratios, epoch_metrics.avg_ratio)
+        
+        -- Print epoch summary
+        print(string.format(
+            "\nEpoch Summary - Policy Loss: %.4f, Value Loss: %.4f, Entropy: %.4f, Avg Ratio: %.4f",
+            epoch_metrics.policy_loss,
+            epoch_metrics.value_loss,
+            epoch_metrics.entropy,
+            epoch_metrics.avg_ratio
+        ))
     end
     
-    --print("PPO Update completed")
+    return training_stats
 end
 
 

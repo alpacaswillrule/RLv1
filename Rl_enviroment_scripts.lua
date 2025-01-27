@@ -345,6 +345,7 @@ function AutoRestartGame()
     num_games_run = num_games_run + 1
     if num_games_run >= threshold_games_run then
         retrain(m_gameHistory)
+        Network.LeaveGame(); --TODO REMOVE THIS BUT TEMPORARY FOR EASE
         num_games_run = 0
         m_gameHistory = { --RESETING THE GAME HISTORY
             transitions = {},

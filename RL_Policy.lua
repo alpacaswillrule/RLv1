@@ -157,15 +157,29 @@ function slice_table(tbl, first, last)
 end
 
 function tableToMatrix(tbl)
-    local rows = #tbl
-    local cols = #tbl[1]  -- Assumes all rows have the same number of columns
-    local mtx = matrix:new(rows, cols)
-    for i = 1, rows do
+    -- Check if we have a 1D or 2D table
+    local is_1d = type(tbl[1]) ~= "table"
+    
+    if is_1d then
+        -- For 1D table, create a 1 x n matrix
+        local cols = #tbl
+        local mtx = matrix:new(1, cols)
         for j = 1, cols do
-            mtx:setelement(i, j, tbl[i][j])
+            mtx:setelement(1, j, tbl[j])
         end
+        return mtx
+    else
+        -- Original code for 2D table
+        local rows = #tbl
+        local cols = #tbl[1]
+        local mtx = matrix:new(rows, cols)
+        for i = 1, rows do
+            for j = 1, cols do
+                mtx:setelement(i, j, tbl[i][j])
+            end
+        end
+        return mtx
     end
-    return mtx
 end
 
 function matrixToTable(mtx)
@@ -1430,23 +1444,6 @@ function CivTransformerPolicy:SingleHeadAttentionBackward(grad_output, layer_ind
     return matrix.add(matrix.add(grad_q, grad_k), grad_v)
 end
 
--- function CivTransformerPolicy:InitializeCache()
---     print("Initializing cache...")
---     self.layer_caches = {}
---     self.attention_caches = {}
-    
---     for i = 1, TRANSFORMER_LAYERS do
---         print("Creating cache for layer " .. i)
---         self.layer_caches[i] = {}
---         self.attention_caches[i] = {}
-        
---         for h = 1, self.num_heads do
---             print("Creating cache for head " .. h .. " in layer " .. i)
---             self.attention_caches[i][h] = {}
---         end
---     end
---     print("Cache initialization complete")
--- end
 
 
 function CivTransformerPolicy:InitializeCache()
@@ -1554,40 +1551,6 @@ function CivTransformerPolicy:AddPositionalEncoding(state_embedding)
     return pos_encoding
 end
 
--- function CivTransformerPolicy:CreateAttentionMask(possible_actions)
---     local action_types = {"CityProduction", "MoveUnit", "CityManagement",  -- Changed UnitMove to MoveUnit
---                          "Diplomacy", "Research", "Civic", "EndTurn"}
---     local mask = matrix:new(#action_types, #ACTION_PARAM_ORDER, 1)
-
---     for action_idx, action_type in ipairs(action_types) do
---         -- Special handling for EndTurn
---         if action_type == "EndTurn" then
---             for param_idx = 1, #ACTION_PARAM_ORDER do
---                 mask:setelement(action_idx, param_idx, 0) -- Mask all params
---             end
---         else
---             -- Existing logic for other actions
---             if not possible_actions[action_type] or #possible_actions[action_type] == 0 then
---                 for param_idx = 1, #ACTION_PARAM_ORDER do
---                     mask:setelement(action_idx, param_idx, 0)
---                 end
---             else
---             -- Check valid parameters for this action type
---             for param_idx, param_name in ipairs(ACTION_PARAM_ORDER) do
---                 local valid = false
---                 for _, action in ipairs(possible_actions[action_type]) do
---                     if action[param_name] ~= nil then
---                         valid = true
---                         break
---                     end
---                 end
---                 mask:setelement(action_idx, param_idx, valid and 1 or 0)
---             end
---         end
---     end
---     return mask
--- end
--- end
 
 function CivTransformerPolicy:CreateAttentionMask(possible_actions)
     -- Create mask for all possible action types 
@@ -1727,24 +1690,6 @@ function CivTransformerPolicy:ConcatenateAndProject(attention_outputs)
     return matrix.mul(concatenated, self.w_o)
 end
 
--- function CivTransformerPolicy:Feedforward(input_mtx)
---     -- Define dimensions
---     local d_model = input_mtx:columns()
---     local d_ff = 2048
-
---     -- Initialize weights and biases as matrices
---     local w1 = matrix.random(matrix:new(d_model, d_ff))
---     local b1 = matrix.random(matrix:new(1, d_ff))
---     local w2 = matrix.random(matrix:new(d_ff, d_model))
---     local b2 = matrix.random(matrix:new(1, d_model))
-
---     -- First linear layer + ReLU activation
---     local layer1_output = matrix.add(matrix.mul(input_mtx, w1), matrix.repmat(b1, input_mtx:rows(), 1))
---     layer1_output = matrix.relu(layer1_output)
-
---     -- Second linear layer
---     return matrix.add(matrix.mul(layer1_output, w2), matrix.repmat(b2, input_mtx:rows(), 1))
--- end
 
 function CivTransformerPolicy:Feedforward(input, layer_index)
     -- Debug prints and error checking

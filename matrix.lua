@@ -835,6 +835,43 @@ function matrix.relu_with_grad(x)
     return result
 end
 
+
+function matrix:row(j)
+    -- Input validation
+    if j < 1 or j > #self then
+        error(string.format("Row index %d out of bounds [1, %d]", j, #self))
+    end
+    
+    -- Create a new 1xN matrix for the row
+    local rowMatrix = matrix:new(1, #self[1])
+    
+    -- Copy the row values
+    for i = 1, #self[1] do
+        rowMatrix:setelement(1, i, self:getelement(j, i))
+    end
+    
+    return rowMatrix
+end
+
+
+-- Add column access method to get a specific column as a matrix
+function matrix:col(j)
+    -- Input validation
+    if j < 1 or j > #self[1] then
+        error(string.format("Column index %d out of bounds [1, %d]", j, #self[1]))
+    end
+    
+    -- Create a new Mx1 matrix for the column
+    local colMatrix = matrix:new(#self, 1)
+    
+    -- Copy the column values
+    for i = 1, #self do
+        colMatrix:setelement(i, 1, self:getelement(i, j))
+    end
+    
+    return colMatrix
+end
+
 -- Softmax with gradient
 function matrix.softmax_with_grad(x)
     local result = matrix.softmax(x)
@@ -1775,6 +1812,8 @@ end
  matrix_meta.__index.size = matrix.size
  -- Add to matrix_meta.__index
 matrix_meta.__index.setrow = matrix.setrow
+matrix_meta.__index.row = matrix.row
+matrix_meta.__index.col = matrix.col
 
 
 matrix.symbol = symbol
