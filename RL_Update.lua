@@ -381,6 +381,186 @@ function PPOTraining:PrepareBatch(transitions, start_idx, batch_size)
     return batch
 end
 
+function ValidateBatchAndOutputs(batch, policy_outputs, batch_size, valid_size)
+    print("\n=== BATCH VALIDATION ===")
+
+    -- Validate batch structure
+    print("\nBatch Structure:")
+    if not batch then
+        print("ERROR: Batch is nil")
+        return false
+    end
+
+    -- Check states matrix
+    print("\nStates Matrix:")
+    if not batch.states or not batch.states.size then
+        print("ERROR: Invalid states matrix")
+        return false
+    end
+    local state_rows, state_cols = batch.states:size()[1], batch.states:size()[2]
+    print(string.format("- Dimensions: %d x %d", state_rows, state_cols))
+    print(string.format("- Expected size: %d x %d", valid_size, STATE_EMBED_SIZE))
+    if state_cols ~= STATE_EMBED_SIZE then
+        print("ERROR: State embedding size mismatch")
+        return false
+    end
+
+    -- Check advantages matrix
+    print("\nAdvantages Matrix:")
+    if not batch.advantages or not batch.advantages.size then
+        print("ERROR: Invalid advantages matrix")
+        return false
+    end
+    local adv_rows, adv_cols = batch.advantages:size()[1], batch.advantages:size()[2]
+    print(string.format("- Dimensions: %d x %d", adv_rows, adv_cols))
+    print(string.format("- Expected size: %d x 1", valid_size))
+
+    -- Check returns matrix
+    print("\nReturns Matrix:")
+    if not batch.returns or not batch.returns.size then
+        print("ERROR: Invalid returns matrix")
+        return false
+    end
+    local ret_rows, ret_cols = batch.returns:size()[1], batch.returns:size()[2]
+    print(string.format("- Dimensions: %d x %d", ret_rows, ret_cols))
+    print(string.format("- Expected size: %d x 1", valid_size))
+
+    -- Check old action probabilities matrix
+    print("\nOld Action Probabilities Matrix:")
+    if not batch.old_action_probs or not batch.old_action_probs.size then
+        print("ERROR: Invalid old action probabilities matrix")
+        return false
+    end
+    local old_probs_rows, old_probs_cols = batch.old_action_probs:size()[1], batch.old_action_probs:size()[2]
+    print(string.format("- Dimensions: %d x %d", old_probs_rows, old_probs_cols))
+    print(string.format("- Expected size: %d x %d", valid_size, #ACTION_TYPES))
+
+    -- Sample values from old action probabilities
+    print("\nSample Old Action Probabilities (first row):")
+    for i = 1, math.min(5, old_probs_cols) do
+        print(string.format("- Action %d: %.4f", i, batch.old_action_probs:getelement(1, i)))
+    end
+
+    -- Validate policy outputs structure
+    print("\nPolicy Outputs Validation:")
+    if not policy_outputs then
+        print("ERROR: Policy outputs is nil")
+        return false
+    end
+
+    -- Check action probabilities
+    print("\nNew Action Probabilities:")
+    if not policy_outputs.action_probs then
+        print("ERROR: Missing action probabilities in policy outputs")
+        return false
+    end
+    print(string.format("- Number of samples: %d", #policy_outputs.action_probs))
+    if #policy_outputs.action_probs ~= valid_size then
+        print(string.format("ERROR: Expected %d samples, got %d", valid_size, #policy_outputs.action_probs))
+        return false
+    end
+
+    -- Check first sample of action probabilities
+    if #policy_outputs.action_probs > 0 then
+        local first_probs = policy_outputs.action_probs[1]
+        print("\nFirst Sample Action Probabilities:")
+        print(string.format("- Number of probabilities: %d", #first_probs))
+        print(string.format("- Expected: %d", #ACTION_TYPES))
+        
+        -- Print first few probabilities
+        print("Sample values:")
+        for i = 1, math.min(5, #first_probs) do
+            print(string.format("- Action %d: %.4f", i, first_probs[i]))
+        end
+
+        -- Validate probability sum
+        local sum = 0
+        for _, prob in ipairs(first_probs) do
+            sum = sum + prob
+        end
+        print(string.format("- Probability sum: %.4f (should be close to 1.0)", sum))
+        if math.abs(sum - 1.0) > 0.01 then
+            print("WARNING: Probabilities do not sum to 1.0")
+        end
+    end
+
+    -- Check option probabilities if present
+    if policy_outputs.option_probs then
+        print("\nOption Probabilities:")
+        print(string.format("- Number of samples: %d", #policy_outputs.option_probs))
+        if #policy_outputs.option_probs > 0 then
+            local first_option_probs = policy_outputs.option_probs[1]
+            print(string.format("- First sample size: %d", #first_option_probs))
+        end
+    else
+        print("\nNo option probabilities present")
+    end
+
+    -- Validate transformer outputs if present
+    if policy_outputs.transformer_outputs then
+        print("\nTransformer Outputs:")
+        if type(policy_outputs.transformer_outputs.size) == "function" then
+            local t_rows, t_cols = policy_outputs.transformer_outputs:size()[1], policy_outputs.transformer_outputs:size()[2]
+            print(string.format("- Dimensions: %d x %d", t_rows, t_cols))
+            print(string.format("- Expected size: %d x %d", valid_size, TRANSFORMER_DIM))
+        else
+            print("WARNING: Transformer outputs not in matrix format")
+        end
+    end
+
+    print("\nValidation Complete!")
+    return true
+end
+
+-- Function to validate probability distributions
+function ValidateProbabilityDistribution(probs, name)
+    print(string.format("\nValidating %s distribution:", name))
+    
+    if type(probs) ~= "table" then
+        print("ERROR: Probabilities must be a table")
+        return false
+    end
+    
+    local sum = 0
+    local min_prob = 1
+    local max_prob = 0
+    local num_zero = 0
+    
+    for i, prob in ipairs(probs) do
+        -- Check for valid probability values
+        if prob < 0 or prob > 1 then
+            print(string.format("ERROR: Invalid probability at index %d: %.4f", i, prob))
+            return false
+        end
+        
+        -- Update statistics
+        sum = sum + prob
+        min_prob = math.min(min_prob, prob)
+        max_prob = math.max(max_prob, prob)
+        if prob == 0 then
+            num_zero = num_zero + 1
+        end
+    end
+    
+    -- Print distribution statistics
+    print(string.format("- Size: %d", #probs))
+    print(string.format("- Sum: %.4f", sum))
+    print(string.format("- Min: %.4f", min_prob))
+    print(string.format("- Max: %.4f", max_prob))
+    print(string.format("- Zero probabilities: %d", num_zero))
+    
+    -- Check if distribution sums to approximately 1
+    if math.abs(sum - 1.0) > 0.01 then
+        print("WARNING: Distribution does not sum to 1.0")
+        return false
+    end
+    
+    return true
+end
+
+
+
+
 function PPOTraining:Update(gameHistory)
     if #gameHistory.transitions == 0 then
         print("No transitions to train on")
@@ -517,89 +697,101 @@ function PPOTraining:Update(gameHistory)
                     policy_grads.action_type_grad:setelement(j, k, policy_grad + entropy_grad)
                 end
             end
-            
-            -- Handle option probabilities if present
-            if policy_outputs.option_probs and batch.old_option_probs then
-                local option_ratio = matrix.elementwise_div(
-                    policy_outputs.option_probs,
-                    batch.old_option_probs
-                )
-                
-                -- Clip option ratios and compute gradients similarly to action gradients
-                local clipped_option_ratio = matrix.replace(option_ratio, function(x)
-                    return math.min(math.max(x, 1 - self.clip_epsilon), 1 + self.clip_epsilon)
-                end)
-                
-                -- Compute and store option gradients
-                for j = 1, batch_size do
-                    local advantage = batch.advantages:getelement(j, 1)
-                    for k = 1, TRANSFORMER_DIM do
-                        local surrogate1 = option_ratio:getelement(j, k) * advantage
-                        local surrogate2 = clipped_option_ratio:getelement(j, k) * advantage
-                        policy_grads.option_grad:setelement(j, k, -math.min(surrogate1, surrogate2))
-                    end
+
+            local is_valid = ValidateBatchAndOutputs(batch, policy_outputs, batch_size, valid_size)
+            if not is_valid then
+                print("ERROR: Invalid batch or policy outputs, skipping batch")
+            end
+
+            -- Optional: Validate specific probability distributions
+            for j = 1, valid_size do
+                if not ValidateProbabilityDistribution(policy_outputs.action_probs[j], "Action probabilities batch " .. j) then
+                    print("WARNING: Invalid action probability distribution in batch " .. j)
                 end
             end
+                        
+            -- -- Handle option probabilities if present
+            -- if policy_outputs.option_probs and batch.old_option_probs then
+            --     local option_ratio = matrix.elementwise_div(
+            --         policy_outputs.option_probs,
+            --         batch.old_option_probs
+            --     )
+                
+            --     -- Clip option ratios and compute gradients similarly to action gradients
+            --     local clipped_option_ratio = matrix.replace(option_ratio, function(x)
+            --         return math.min(math.max(x, 1 - self.clip_epsilon), 1 + self.clip_epsilon)
+            --     end)
+                
+            --     -- Compute and store option gradients
+            --     for j = 1, batch_size do
+            --         local advantage = batch.advantages:getelement(j, 1)
+            --         for k = 1, TRANSFORMER_DIM do
+            --             local surrogate1 = option_ratio:getelement(j, k) * advantage
+            --             local surrogate2 = clipped_option_ratio:getelement(j, k) * advantage
+            --             policy_grads.option_grad:setelement(j, k, -math.min(surrogate1, surrogate2))
+            --         end
+            --     end
+            -- end
             
-            -- Compute value loss gradient
-            local value_loss = matrix.sub(value_outputs, batch.returns)
-            local value_grad = matrix.mulnum(value_loss, 2.0) -- Derivative of MSE
+            -- -- Compute value loss gradient
+            -- local value_loss = matrix.sub(value_outputs, batch.returns)
+            -- local value_grad = matrix.mulnum(value_loss, 2.0) -- Derivative of MSE
             
-            -- Scale gradients by learning rate
-            policy_grads.action_type_grad = matrix.mulnum(policy_grads.action_type_grad, current_lr)
-            policy_grads.option_grad = matrix.mulnum(policy_grads.option_grad, current_lr)
-            value_grad = matrix.mulnum(value_grad, current_lr)
+            -- -- Scale gradients by learning rate
+            -- policy_grads.action_type_grad = matrix.mulnum(policy_grads.action_type_grad, current_lr)
+            -- policy_grads.option_grad = matrix.mulnum(policy_grads.option_grad, current_lr)
+            -- value_grad = matrix.mulnum(value_grad, current_lr)
             
-            -- Backward passes
-            CivTransformerPolicy:BatchBackward(policy_grads)
-            ValueNetwork:BatchBackward(value_grad)
+            -- -- Backward passes
+            -- CivTransformerPolicy:BatchBackward(policy_grads)
+            -- ValueNetwork:BatchBackward(value_grad)
             
-            -- Update epoch metrics
-            epoch_metrics.policy_loss = epoch_metrics.policy_loss + matrix.mean(policy_grads.action_type_grad)
-            epoch_metrics.value_loss = epoch_metrics.value_loss + matrix.mean(value_loss)
-            epoch_metrics.entropy = epoch_metrics.entropy + entropy
-            epoch_metrics.avg_ratio = epoch_metrics.avg_ratio + matrix.mean(all_ratios)
-            epoch_metrics.batch_count = epoch_metrics.batch_count + 1
+            -- -- Update epoch metrics
+            -- epoch_metrics.policy_loss = epoch_metrics.policy_loss + matrix.mean(policy_grads.action_type_grad)
+            -- epoch_metrics.value_loss = epoch_metrics.value_loss + matrix.mean(value_loss)
+            -- epoch_metrics.entropy = epoch_metrics.entropy + entropy
+            -- epoch_metrics.avg_ratio = epoch_metrics.avg_ratio + matrix.mean(all_ratios)
+            -- epoch_metrics.batch_count = epoch_metrics.batch_count + 1
             
-            -- Print batch progress
-            print(string.format(
-                "Batch %d/%d - Policy Loss: %.4f, Value Loss: %.4f, Entropy: %.4f",
-                math.floor(i/batch_size) + 1,
-                math.ceil(#gameHistory.transitions/batch_size),
-                matrix.mean(policy_grads.action_type_grad),
-                matrix.mean(value_loss),
-                entropy
-            ))
+            -- -- Print batch progress
+            -- print(string.format(
+            --     "Batch %d/%d - Policy Loss: %.4f, Value Loss: %.4f, Entropy: %.4f",
+            --     math.floor(i/batch_size) + 1,
+            --     math.ceil(#gameHistory.transitions/batch_size),
+            --     matrix.mean(policy_grads.action_type_grad),
+            --     matrix.mean(value_loss),
+            --     entropy
+            -- ))
             
-            -- Check for early stopping
-            if math.abs(matrix.mean(policy_grads.action_type_grad)) < 1e-5 and 
-               math.abs(matrix.mean(value_loss)) < 1e-5 then
-                print("Converged - stopping early")
-                return training_stats
-            end
+            -- -- Check for early stopping
+            -- if math.abs(matrix.mean(policy_grads.action_type_grad)) < 1e-5 and 
+            --    math.abs(matrix.mean(value_loss)) < 1e-5 then
+            --     print("Converged - stopping early")
+            --     return training_stats
+            -- end
         end
         
-        -- Average epoch metrics
-        local num_batches = epoch_metrics.batch_count
-        epoch_metrics.policy_loss = epoch_metrics.policy_loss / num_batches
-        epoch_metrics.value_loss = epoch_metrics.value_loss / num_batches
-        epoch_metrics.entropy = epoch_metrics.entropy / num_batches
-        epoch_metrics.avg_ratio = epoch_metrics.avg_ratio / num_batches
+        -- -- Average epoch metrics
+        -- local num_batches = epoch_metrics.batch_count
+        -- epoch_metrics.policy_loss = epoch_metrics.policy_loss / num_batches
+        -- epoch_metrics.value_loss = epoch_metrics.value_loss / num_batches
+        -- epoch_metrics.entropy = epoch_metrics.entropy / num_batches
+        -- epoch_metrics.avg_ratio = epoch_metrics.avg_ratio / num_batches
         
-        -- Store epoch metrics
-        table.insert(training_stats.policy_losses, epoch_metrics.policy_loss)
-        table.insert(training_stats.value_losses, epoch_metrics.value_loss)
-        table.insert(training_stats.entropies, epoch_metrics.entropy)
-        table.insert(training_stats.ratios, epoch_metrics.avg_ratio)
+        -- -- Store epoch metrics
+        -- table.insert(training_stats.policy_losses, epoch_metrics.policy_loss)
+        -- table.insert(training_stats.value_losses, epoch_metrics.value_loss)
+        -- table.insert(training_stats.entropies, epoch_metrics.entropy)
+        -- table.insert(training_stats.ratios, epoch_metrics.avg_ratio)
         
-        -- Print epoch summary
-        print(string.format(
-            "\nEpoch Summary - Policy Loss: %.4f, Value Loss: %.4f, Entropy: %.4f, Avg Ratio: %.4f",
-            epoch_metrics.policy_loss,
-            epoch_metrics.value_loss,
-            epoch_metrics.entropy,
-            epoch_metrics.avg_ratio
-        ))
+        -- -- Print epoch summary
+        -- print(string.format(
+        --     "\nEpoch Summary - Policy Loss: %.4f, Value Loss: %.4f, Entropy: %.4f, Avg Ratio: %.4f",
+        --     epoch_metrics.policy_loss,
+        --     epoch_metrics.value_loss,
+        --     epoch_metrics.entropy,
+        --     epoch_metrics.avg_ratio
+        -- ))
     end
     
     return training_stats

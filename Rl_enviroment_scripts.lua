@@ -29,8 +29,22 @@ local num_games_run = 0 --ONCE THIS NUMBER HITS threshold_games_run, WE RETRAIN
 local threshold_games_run = 1
 
 function retrain(m_gameHistory)
-PPOTraining:Update(m_gameHistory);
-SaveNetworks("johanweights");
+    -- Attempt training with error handling
+    local success, error_message = pcall(function()
+        PPOTraining:Update(m_gameHistory)
+    end)
+    
+    if success then
+        -- Only save networks if update was successful
+        SaveNetworks("johanweights")
+        print("Successfully completed training and saved weights")
+    else
+        -- If training failed, disable the agent and log the error
+        m_isAgentEnabled = false
+        print("Training failed, disabling agent. Error:", error_message)
+        -- Notify user that agent has been disabled
+        SendRLNotification("Training failed - agent disabled")
+    end
 end
 
 function RLv1.ToggleAgent()
@@ -67,7 +81,7 @@ local VICTORY_TYPES = {
 };
 
 -- Configuration variables
-local TURN_LIMIT = 10;
+local TURN_LIMIT = 5;
 local AUTO_RESTART_ENABLED = true;
 
 
@@ -345,18 +359,17 @@ function AutoRestartGame()
     num_games_run = num_games_run + 1
     if num_games_run >= threshold_games_run then
         retrain(m_gameHistory)
-        Network.LeaveGame(); --TODO REMOVE THIS BUT TEMPORARY FOR EASE
-        num_games_run = 0
-        m_gameHistory = { --RESETING THE GAME HISTORY
-            transitions = {},
-            episode_number = 0,
-            victory_type = nil,
-            total_turns = 0,
-            game_id = gameId  -- Store the ID with the history
-        }
-    end
-    Events.GameCoreEventPublishComplete.Add(CheckRestartTimer)
-    coroutine.resume(RestartOperation)
+        --num_games_run = 0
+    --     m_gameHistory = { --RESETING THE GAME HISTORY
+    --         transitions = {},
+    --         episode_number = 0,
+    --         victory_type = nil,
+    --         total_turns = 0,
+    --         game_id = gameId  -- Store the ID with the history
+    --     }
+     end
+    -- Events.GameCoreEventPublishComplete.Add(CheckRestartTimer)
+    -- coroutine.resume(RestartOperation)
 end
 -- Handle team victory events
 function OnTeamVictory(team, victory, eventID)
