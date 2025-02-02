@@ -558,7 +558,200 @@ function ValidateProbabilityDistribution(probs, name)
     return true
 end
 
+function ValidateTrainingResults(training_stats, final_batch, policy_outputs)
+    print("\n=== TRAINING RESULTS VALIDATION ===")
+    
+    -- Validate training statistics
+    print("\nTraining Statistics:")
+    if not training_stats then
+        print("ERROR: No training statistics found")
+        return false
+    end
+    
+    -- Check each metric array
+    local metric_names = {"policy_losses", "value_losses", "entropies", "ratios"}
+    for _, name in ipairs(metric_names) do
+        local metrics = training_stats[name]
+        print(string.format("\n%s:", name))
+        if not metrics then
+            print("ERROR: Missing metric array")
+            return false
+        end
+        print(string.format("- Number of epochs: %d", #metrics))
+        if #metrics > 0 then
+            print(string.format("- First value: %.4f", metrics[1]))
+            print(string.format("- Last value: %.4f", metrics[#metrics]))
+            
+            -- Check for reasonable values
+            local min_val = math.huge
+            local max_val = -math.huge
+            for _, val in ipairs(metrics) do
+                min_val = math.min(min_val, val)
+                max_val = math.max(max_val, val)
+            end
+            print(string.format("- Range: [%.4f, %.4f]", min_val, max_val))
+        end
+    end
 
+    -- Validate final batch
+    print("\nFinal Batch Structure:")
+    if not final_batch then
+        print("ERROR: No final batch found")
+        return false
+    end
+    
+    -- Check matrix dimensions
+    local expected_matrices = {
+        {name = "states", rows = "batch_size", cols = STATE_EMBED_SIZE},
+        {name = "next_states", rows = "batch_size", cols = STATE_EMBED_SIZE},
+        {name = "advantages", rows = "batch_size", cols = 1},
+        {name = "returns", rows = "batch_size", cols = 1},
+        {name = "old_action_probs", rows = "batch_size", cols = #ACTION_TYPES},
+        {name = "value_estimates", rows = "batch_size", cols = 1}
+    }
+    
+    for _, matrix_info in ipairs(expected_matrices) do
+        local mtx = final_batch[matrix_info.name]
+        print(string.format("\n%s matrix:", matrix_info.name))
+        if not mtx or not mtx.size then
+            print("ERROR: Invalid matrix")
+            return false
+        end
+        local rows, cols = mtx:size()[1], mtx:size()[2]
+        print(string.format("- Dimensions: %d x %d", rows, cols))
+        
+        -- Print sample values
+        if rows > 0 and cols > 0 then
+            print("- Sample values:")
+            for i = 1, math.min(3, rows) do
+                for j = 1, math.min(3, cols) do
+                    print(string.format("  [%d,%d]: %.4f", i, j, mtx:getelement(i, j)))
+                end
+            end
+        end
+    end
+
+    -- Validate policy outputs
+    print("\nPolicy Outputs:")
+    if not policy_outputs then
+        print("ERROR: No policy outputs found")
+        return false
+    end
+    
+    -- Check action selections
+    print("\nSelected Actions:")
+    if policy_outputs.actions then
+        print(string.format("- Number of actions: %d", #policy_outputs.actions))
+        if #policy_outputs.actions > 0 then
+            print("- First action:")
+            print(string.format("  Type: %s", policy_outputs.actions[1].type))
+            print("  Parameters:", type(policy_outputs.actions[1].params))
+        end
+    end
+    
+    -- Validate old option probabilities from batch
+    print("\nOld Option Probabilities:")
+    if final_batch.old_option_probs then
+        print(string.format("- Number of option distributions: %d", #final_batch.old_option_probs))
+        if #final_batch.old_option_probs > 0 then
+            local first_options = final_batch.old_option_probs[1]
+            print("First distribution:")
+            print(string.format("- Size: %d", #first_options))
+            if #first_options > 0 then
+                print("- Sample values:")
+                for i = 1, math.min(5, #first_options) do
+                    print(string.format("  Option %d: %.4f", i, first_options[i]))
+                end
+                -- Validate sum
+                local sum = 0
+                for _, p in ipairs(first_options) do
+                    sum = sum + p
+                end
+                print(string.format("- Sum: %.4f", sum))
+            end
+        end
+    else
+        print("No old option probabilities found")
+    end
+
+    -- Check probability distributions from policy outputs
+    print("\nPolicy Output Probabilities:")
+    local probability_fields = {
+        {name = "action_probs", expected_size = #ACTION_TYPES},
+        {name = "option_probs", expected_size = nil}  -- Size varies based on available options
+    }
+    
+    for _, field in ipairs(probability_fields) do
+        local probs = policy_outputs[field.name]
+        print(string.format("\n%s:", field.name))
+        if probs then
+            print(string.format("- Number of distributions: %d", #probs))
+            if #probs > 0 then
+                local first_dist = probs[1]
+                print(string.format("- First distribution size: %d", #first_dist))
+                print("- Sample probabilities:")
+                for i = 1, math.min(5, #first_dist) do
+                    print(string.format("  %d: %.4f", i, first_dist[i]))
+                end
+                
+                -- Validate probability sum
+                local sum = 0
+                for _, p in ipairs(first_dist) do
+                    sum = sum + p
+                end
+                print(string.format("- Sum of probabilities: %.4f", sum))
+                
+                -- Check expected size if specified
+                if field.expected_size then
+                    print(string.format("- Expected size: %d", field.expected_size))
+                    if #first_dist ~= field.expected_size then
+                        print(string.format("WARNING: Size mismatch. Expected %d, got %d", 
+                            field.expected_size, #first_dist))
+                    end
+                end
+                
+                -- Check for invalid values
+                local has_invalid = false
+                for i, p in ipairs(first_dist) do
+                    if p < 0 or p > 1 then
+                        print(string.format("WARNING: Invalid probability at index %d: %.4f", i, p))
+                        has_invalid = true
+                    end
+                end
+                if not has_invalid then
+                    print("- All probabilities are valid (between 0 and 1)")
+                end
+            end
+        else
+            print("Not present in policy outputs")
+        end
+    end
+    
+    -- Validate transformer outputs used for option selection
+    print("\nTransformer Outputs (for option selection):")
+    if policy_outputs.transformer_outputs then
+        if type(policy_outputs.transformer_outputs.size) == "function" then
+            local rows, cols = policy_outputs.transformer_outputs:size()[1], policy_outputs.transformer_outputs:size()[2]
+            print(string.format("- Dimensions: %d x %d", rows, cols))
+            print(string.format("- Expected dimension: %d", TRANSFORMER_DIM))
+            
+            -- Print sample values from transformer outputs
+            if rows > 0 and cols > 0 then
+                print("- Sample values from first row:")
+                for j = 1, math.min(5, cols) do
+                    print(string.format("  [1,%d]: %.4f", j, 
+                        policy_outputs.transformer_outputs:getelement(1, j)))
+                end
+            end
+        else
+            print("ERROR: Transformer outputs not in matrix format")
+        end
+    else
+        print("No transformer outputs found")
+    end
+    
+    return true
+end
 
 
 function PPOTraining:Update(gameHistory)
@@ -702,6 +895,12 @@ function PPOTraining:Update(gameHistory)
             if not is_valid then
                 print("ERROR: Invalid batch or policy outputs, skipping batch")
             end
+
+            local validation_result = ValidateTrainingResults(
+            training_stats,
+            batch,
+            policy_outputs
+            )
 
             -- Optional: Validate specific probability distributions
             for j = 1, valid_size do
